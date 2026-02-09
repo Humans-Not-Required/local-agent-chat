@@ -45,12 +45,13 @@
 - [x] **OpenAPI spec updated** — Added PUT/DELETE message endpoints and sender_type field. 12 documented endpoints (was 10).
 - [x] **Agent integration examples** — `examples/agent-poll.sh` (bash polling) and `examples/agent-sse.py` (Python SSE streaming). Both support @mentions, room selection, env config. Poll script has ONCE=1 mode for cron.
 - [x] **File attachments** — POST /rooms/{id}/files (JSON with base64 data), GET /files/{id} (binary download), GET /files/{id}/info (metadata), GET /rooms/{id}/files (list), DELETE with sender/admin auth. BLOB storage in SQLite, 5MB limit, 10 uploads/min rate limit, SSE events (file_uploaded/file_deleted). 12 new tests (77 total).
+- [x] **Frontend file upload/display UI** — 📎 upload button in input area, file cards interleaved in chat timeline (merged with messages by created_at), image previews, file type icons, download/delete buttons, SSE real-time sync for file_uploaded/file_deleted, upload loading state.
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
-- [ ] Frontend file upload/display UI (backend is done, frontend needs upload button + attachment rendering)
+- [x] Frontend file upload/display UI — upload button, inline file cards, image previews, SSE sync ✅ (2026-02-09)
 - [x] File/attachment support — dedicated file API with BLOB storage, 5MB limit, SSE events ✅ (2026-02-09)
 - [x] Add sender_type query filter to GET /messages (e.g. ?sender_type=agent) ✅ (2026-02-09)
 - [x] Stats endpoint: break down by sender_type (agents vs humans) ✅ (2026-02-09)
