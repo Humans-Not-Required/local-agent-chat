@@ -33,12 +33,17 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
         .to_cors()
         .expect("Failed to create CORS");
 
+    // Increase JSON data limit to 10MB to accommodate base64-encoded file uploads
+    // (5MB file = ~6.7MB base64 + JSON wrapper)
+    let figment = rocket::Config::figment()
+        .merge(("limits.json", 10 * 1024 * 1024)); // 10MB
+
     // Frontend static files directory
     let static_dir: PathBuf = env::var("STATIC_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("frontend/dist"));
 
-    let mut build = rocket::build()
+    let mut build = rocket::custom(figment)
         .manage(db)
         .manage(events)
         .manage(rate_limiter)
@@ -64,6 +69,11 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::activity_feed,
                 routes::notify_typing,
                 routes::message_stream,
+                routes::upload_file,
+                routes::download_file,
+                routes::file_info,
+                routes::list_files,
+                routes::delete_file,
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,

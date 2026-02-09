@@ -106,6 +106,33 @@ pub struct ActivityResponse {
     pub since: Option<String>,
 }
 
+// --- File Attachments ---
+
+#[derive(Debug, Deserialize)]
+pub struct FileUpload {
+    pub sender: String,
+    pub filename: String,
+    #[serde(default = "default_content_type")]
+    pub content_type: String,
+    pub data: String, // base64-encoded
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FileInfo {
+    pub id: String,
+    pub room_id: String,
+    pub sender: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size: i64,
+    pub url: String,
+    pub created_at: String,
+}
+
 fn default_anonymous() -> String {
     "anonymous".to_string()
+}
+
+fn default_content_type() -> String {
+    "application/octet-stream".to_string()
 }

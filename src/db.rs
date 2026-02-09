@@ -62,6 +62,23 @@ impl Db {
         // Add sender_type column for persistent sender type tracking (agent/human)
         conn.execute_batch("ALTER TABLE messages ADD COLUMN sender_type TEXT;").ok();
 
+        // Files table for attachments
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS files (
+                id TEXT PRIMARY KEY,
+                room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                sender TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+                size INTEGER NOT NULL,
+                data BLOB NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_files_room ON files(room_id);
+            CREATE INDEX IF NOT EXISTS idx_files_sender ON files(sender);",
+        )
+        .expect("Failed to create files table");
+
         // Backfill admin_key for existing rooms that don't have one
         let mut stmt = conn
             .prepare("SELECT id FROM rooms WHERE admin_key IS NULL")

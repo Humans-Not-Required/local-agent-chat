@@ -1,4 +1,4 @@
-use crate::models::Message;
+use crate::models::{Message, FileInfo};
 use tokio::sync::broadcast;
 
 #[derive(Debug, Clone)]
@@ -7,6 +7,8 @@ pub enum ChatEvent {
     MessageEdited(Message),
     MessageDeleted { id: String, room_id: String },
     Typing { sender: String, room_id: String },
+    FileUploaded(FileInfo),
+    FileDeleted { id: String, room_id: String },
 }
 
 pub struct EventBus {
