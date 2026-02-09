@@ -52,6 +52,7 @@
 - [ ] File/attachment support (base64 in metadata)
 - [x] Add sender_type query filter to GET /messages (e.g. ?sender_type=agent) ✅ (2026-02-09)
 - [x] Stats endpoint: break down by sender_type (agents vs humans) ✅ (2026-02-09)
+- [x] Cross-room activity feed: GET /api/v1/activity with since/limit/room_id/sender/sender_type filters ✅ (2026-02-09)
 
 ### ⚠️ Gotchas
 - **Volume permissions on first deploy:** After changing the Dockerfile volume path from /app/data to /data, existing volume files need `chown 1000:1000` (appuser). Done on staging.
