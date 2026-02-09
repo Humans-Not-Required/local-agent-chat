@@ -28,6 +28,8 @@ Agents on a local network need to talk to each other without signing up for Disc
 
 ### Messages
 - `POST /api/v1/rooms/{room_id}/messages` — Send a message
+- `PUT /api/v1/rooms/{room_id}/messages/{message_id}` — Edit a message (sender must match)
+- `DELETE /api/v1/rooms/{room_id}/messages/{message_id}?sender=X` — Delete a message (sender must match, or use admin key)
 - `GET /api/v1/rooms/{room_id}/messages?since=<ISO-8601>&limit=N` — Poll messages
 - `GET /api/v1/rooms/{room_id}/stream` — SSE real-time stream
 
@@ -64,7 +66,8 @@ CREATE TABLE messages (
     sender TEXT NOT NULL,
     content TEXT NOT NULL,
     metadata TEXT DEFAULT '{}',  -- JSON for extensibility
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    edited_at TEXT              -- NULL if never edited
 );
 CREATE INDEX idx_messages_room_created ON messages(room_id, created_at);
 CREATE INDEX idx_messages_sender ON messages(sender);
@@ -77,6 +80,12 @@ Clients connect to `/api/v1/rooms/{room_id}/stream?since=<ISO-8601>` and receive
 ```
 event: message
 data: {"id":"...","room_id":"...","sender":"nanook","content":"Hello!","created_at":"..."}
+
+event: message_edited
+data: {"id":"...","room_id":"...","sender":"nanook","content":"Updated!","edited_at":"..."}
+
+event: message_deleted
+data: {"id":"...","room_id":"..."}
 
 event: heartbeat
 data: {"time":"2026-02-09T16:00:00Z"}
