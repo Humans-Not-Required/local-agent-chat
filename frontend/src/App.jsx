@@ -115,7 +115,7 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom }) {
 }
 
 function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
-  const [hovering, setHovering] = useState(false);
+  const [showActions, setShowActions] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(msg.content);
 
@@ -138,6 +138,15 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
     }
   };
 
+  // Toggle actions on click (mobile-friendly) or show on hover (desktop)
+  const handleBubbleClick = (e) => {
+    if (isOwn && !editing) {
+      // Don't toggle if clicking inside action buttons
+      if (e.target.closest('[data-actions]')) return;
+      setShowActions(prev => !prev);
+    }
+  };
+
   return (
     <div
       style={{
@@ -145,29 +154,33 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
         alignSelf: isOwn ? 'flex-end' : 'flex-start',
         maxWidth: '75%',
       }}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
     >
-      {/* Action buttons on hover (own messages only) */}
-      {isOwn && hovering && !editing && (
-        <div style={styles.msgActions}>
+      {/* Action buttons on hover/tap (own messages only) */}
+      {isOwn && showActions && !editing && (
+        <div style={styles.msgActions} data-actions>
           <button
-            onClick={() => { setEditText(msg.content); setEditing(true); }}
+            onClick={(e) => { e.stopPropagation(); setEditText(msg.content); setEditing(true); setShowActions(false); }}
             style={styles.msgActionBtn}
             title="Edit"
           >✎</button>
           <button
-            onClick={() => onDelete(msg.id)}
+            onClick={(e) => { e.stopPropagation(); onDelete(msg.id); }}
             style={{ ...styles.msgActionBtn, color: '#ef4444' }}
             title="Delete"
           >✕</button>
         </div>
       )}
-      <div style={{
-        ...styles.messageBubble,
-        background: isOwn ? '#1e3a5f' : '#1e293b',
-        borderRadius: isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-      }}>
+      <div
+        onClick={handleBubbleClick}
+        style={{
+          ...styles.messageBubble,
+          background: isOwn ? '#1e3a5f' : '#1e293b',
+          borderRadius: isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+          cursor: isOwn && !editing ? 'pointer' : 'default',
+        }}
+      >
         {editing ? (
           <div>
             <textarea

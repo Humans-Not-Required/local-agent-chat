@@ -30,10 +30,9 @@
 - [x] **SSE edit/delete events** — message_edited, message_deleted for real-time updates
 - [x] **edited_at tracking** — messages show when they were last edited
 - [x] **DB persistence verified** — messages survive container restarts ✅
+- [x] **Frontend edit/delete UI** — hover actions on own messages, inline edit mode (Save/Cancel/Enter/Esc), (edited) indicator, SSE real-time sync for message_edited + message_deleted events
 
 ### What's Next
-- [ ] Deploy latest image (edit/delete feature) — CI building, Watchtower will auto-pull
-- [ ] Update frontend to support edit/delete UI and show edited indicator
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
