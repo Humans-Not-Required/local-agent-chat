@@ -4,3 +4,5 @@
 *.db-wal
 *.db-shm
 .env
+node_modules/
+frontend/dist/

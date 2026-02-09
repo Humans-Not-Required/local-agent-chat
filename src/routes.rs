@@ -532,3 +532,16 @@ pub fn too_many_requests() -> Json<serde_json::Value> {
 pub fn not_found() -> Json<serde_json::Value> {
     Json(serde_json::json!({"error": "Not found"}))
 }
+
+// --- SPA Fallback ---
+
+#[get("/<_path..>", rank = 20)]
+pub fn spa_fallback(_path: std::path::PathBuf) -> Option<(rocket::http::ContentType, Vec<u8>)> {
+    let static_dir: std::path::PathBuf = std::env::var("STATIC_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("frontend/dist"));
+    let index_path = static_dir.join("index.html");
+    std::fs::read(&index_path)
+        .ok()
+        .map(|bytes| (rocket::http::ContentType::HTML, bytes))
+}

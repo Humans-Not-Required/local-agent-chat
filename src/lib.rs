@@ -7,8 +7,10 @@ pub mod routes;
 use db::Db;
 use events::EventBus;
 use rate_limit::RateLimiter;
+use rocket::fs::{FileServer, Options};
 use rocket_cors::CorsOptions;
 use std::env;
+use std::path::PathBuf;
 
 pub fn rocket() -> rocket::Rocket<rocket::Build> {
     let db_path = env::var("DATABASE_PATH").unwrap_or_else(|_| "data/chat.db".to_string());
@@ -29,7 +31,12 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
         .to_cors()
         .expect("Failed to create CORS");
 
-    rocket::build()
+    // Frontend static files directory
+    let static_dir: PathBuf = env::var("STATIC_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("frontend/dist"));
+
+    let mut build = rocket::build()
         .manage(db)
         .manage(events)
         .manage(rate_limiter)
@@ -54,5 +61,20 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::llms_txt_api,
                 routes::openapi_json,
             ],
-        )
+        );
+
+    // Serve frontend static files if the directory exists
+    if static_dir.is_dir() {
+        println!("📦 Serving frontend from: {}", static_dir.display());
+        build = build
+            .mount("/", FileServer::new(&static_dir, Options::Index))
+            .mount("/", rocket::routes![routes::spa_fallback]);
+    } else {
+        println!(
+            "⚠️  Frontend directory not found: {} (API-only mode)",
+            static_dir.display()
+        );
+    }
+
+    build
 }

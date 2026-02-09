@@ -1,4 +1,14 @@
-FROM rust:1.93-slim AS builder
+# Stage 1: Build frontend
+FROM node:22-slim AS frontend-builder
+
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Build backend
+FROM rust:1.93-slim AS backend-builder
 
 WORKDIR /app
 
@@ -17,23 +27,31 @@ COPY openapi.json .
 RUN find src -name '*.rs' -exec touch {} +
 RUN cargo build --release
 
-# Runtime stage
+# Stage 3: Runtime
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/local-agent-chat /usr/local/bin/local-agent-chat
+RUN useradd -m -s /bin/bash appuser
+WORKDIR /app
+
+COPY --from=backend-builder /app/target/release/local-agent-chat /app/local-agent-chat
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # Create data directory
-RUN mkdir -p /data
+RUN mkdir -p /app/data && chown appuser:appuser /app/data
+VOLUME ["/app/data"]
 
-ENV DATABASE_PATH=/data/chat.db
+ENV DATABASE_PATH=/app/data/chat.db
 ENV ROCKET_ADDRESS=0.0.0.0
 ENV ROCKET_PORT=8000
+ENV STATIC_DIR=/app/frontend/dist
 
+USER appuser
 EXPOSE 8000
 
-VOLUME ["/data"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:8000/api/v1/health || exit 1
 
-CMD ["local-agent-chat"]
+CMD ["./local-agent-chat"]
