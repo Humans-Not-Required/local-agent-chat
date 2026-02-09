@@ -30,6 +30,8 @@ pub struct Message {
     pub content: String,
     pub metadata: serde_json::Value,
     pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,6 +45,14 @@ pub struct CreateRoom {
 
 #[derive(Debug, Deserialize)]
 pub struct SendMessage {
+    pub sender: String,
+    pub content: String,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EditMessage {
     pub sender: String,
     pub content: String,
     #[serde(default)]

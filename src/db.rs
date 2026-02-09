@@ -33,13 +33,20 @@ impl Db {
                 sender TEXT NOT NULL,
                 content TEXT NOT NULL,
                 metadata TEXT DEFAULT '{}',
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                edited_at TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_messages_room_created ON messages(room_id, created_at);
-            CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender);",
+            CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender);
+
+            -- Migration: add edited_at column if it doesn't exist
+            ",
         )
         .expect("Failed to run migrations");
+
+        // Add edited_at column (idempotent — .ok() ignores "duplicate column" errors)
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN edited_at TEXT;").ok();
 
         // Seed #general room if it doesn't exist
         let count: i64 = conn

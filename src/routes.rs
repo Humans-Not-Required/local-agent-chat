@@ -6,7 +6,7 @@ use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::stream::{Event, EventStream};
 use rocket::serde::json::Json;
-use rocket::{State, get, post, delete};
+use rocket::{State, get, post, put, delete};
 use rusqlite::params;
 use tokio::time::{Duration, interval};
 
@@ -304,12 +304,183 @@ pub fn send_message(
         content,
         metadata,
         created_at: now,
+        edited_at: None,
     };
 
     // Publish event for SSE
     events.publish(ChatEvent::NewMessage(msg.clone()));
 
     Ok(Json(msg))
+}
+
+// --- Edit Message ---
+
+#[put("/api/v1/rooms/<room_id>/messages/<message_id>", format = "json", data = "<body>")]
+pub fn edit_message(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    message_id: &str,
+    body: Json<EditMessage>,
+) -> Result<Json<Message>, (Status, Json<serde_json::Value>)> {
+    let sender = body.sender.trim().to_string();
+    let content = body.content.trim().to_string();
+
+    if sender.is_empty() || sender.len() > 100 {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "Sender must be 1-100 characters"})),
+        ));
+    }
+    if content.is_empty() || content.len() > 10_000 {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "Content must be 1-10000 characters"})),
+        ));
+    }
+
+    let conn = db.conn.lock().unwrap();
+
+    // Fetch existing message
+    let existing_sender: String = conn
+        .query_row(
+            "SELECT sender FROM messages WHERE id = ?1 AND room_id = ?2",
+            params![message_id, room_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Message not found"})),
+            )
+        })?;
+
+    // Verify sender matches (trust-based identity)
+    if existing_sender != sender {
+        return Err((
+            Status::Forbidden,
+            Json(serde_json::json!({"error": "Only the original sender can edit this message"})),
+        ));
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let metadata = body.metadata.clone();
+
+    // Update content and edited_at; optionally update metadata
+    if let Some(ref meta) = metadata {
+        conn.execute(
+            "UPDATE messages SET content = ?1, metadata = ?2, edited_at = ?3 WHERE id = ?4",
+            params![&content, serde_json::to_string(meta).unwrap(), &now, message_id],
+        )
+        .map_err(|e| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+        })?;
+    } else {
+        conn.execute(
+            "UPDATE messages SET content = ?1, edited_at = ?2 WHERE id = ?3",
+            params![&content, &now, message_id],
+        )
+        .map_err(|e| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+        })?;
+    }
+
+    // Fetch the updated message
+    let msg = conn
+        .query_row(
+            "SELECT id, room_id, sender, content, metadata, created_at, edited_at FROM messages WHERE id = ?1",
+            params![message_id],
+            |row| {
+                let metadata_str: String = row.get(4)?;
+                Ok(Message {
+                    id: row.get(0)?,
+                    room_id: row.get(1)?,
+                    sender: row.get(2)?,
+                    content: row.get(3)?,
+                    metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({})),
+                    created_at: row.get(5)?,
+                    edited_at: row.get(6)?,
+                })
+            },
+        )
+        .map_err(|e| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+        })?;
+
+    events.publish(ChatEvent::MessageEdited(msg.clone()));
+
+    Ok(Json(msg))
+}
+
+// --- Delete Message ---
+
+#[delete("/api/v1/rooms/<room_id>/messages/<message_id>?<sender>")]
+pub fn delete_message(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    message_id: &str,
+    sender: Option<&str>,
+    admin: Option<AdminKey>,
+) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Fetch existing message
+    let existing_sender: String = conn
+        .query_row(
+            "SELECT sender FROM messages WHERE id = ?1 AND room_id = ?2",
+            params![message_id, room_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Message not found"})),
+            )
+        })?;
+
+    // Admin can delete any message; otherwise sender must match
+    if admin.is_none() {
+        let sender = sender.ok_or_else(|| {
+            (
+                Status::BadRequest,
+                Json(serde_json::json!({"error": "sender query parameter required (or use admin key)"})),
+            )
+        })?;
+        if sender != existing_sender {
+            return Err((
+                Status::Forbidden,
+                Json(serde_json::json!({"error": "Only the original sender can delete this message"})),
+            ));
+        }
+    }
+
+    conn.execute(
+        "DELETE FROM messages WHERE id = ?1 AND room_id = ?2",
+        params![message_id, room_id],
+    )
+    .map_err(|e| {
+        (
+            Status::InternalServerError,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
+
+    events.publish(ChatEvent::MessageDeleted {
+        id: message_id.to_string(),
+        room_id: room_id.to_string(),
+    });
+
+    Ok(Json(serde_json::json!({"deleted": true})))
 }
 
 #[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>")]
@@ -342,7 +513,7 @@ pub fn get_messages(
 
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
-    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at FROM messages WHERE room_id = ?1");
+    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at, edited_at FROM messages WHERE room_id = ?1");
     let mut param_values: Vec<String> = vec![room_id.to_string()];
     let mut idx = 2;
 
@@ -387,6 +558,7 @@ pub fn get_messages(
                 content: row.get(3)?,
                 metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({})),
                 created_at: row.get(5)?,
+                edited_at: row.get(6)?,
             })
         })
         .map_err(|e| {
@@ -418,7 +590,7 @@ pub fn message_stream(
         let conn = db.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT id, room_id, sender, content, metadata, created_at FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY created_at ASC LIMIT 100",
+                "SELECT id, room_id, sender, content, metadata, created_at, edited_at FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY created_at ASC LIMIT 100",
             )
             .ok();
         if let Some(ref mut s) = stmt {
@@ -432,6 +604,7 @@ pub fn message_stream(
                     metadata: serde_json::from_str(&metadata_str)
                         .unwrap_or(serde_json::json!({})),
                     created_at: row.get(5)?,
+                    edited_at: row.get(6)?,
                 })
             })
             .ok()
@@ -458,6 +631,12 @@ pub fn message_stream(
                     match msg {
                         Ok(ChatEvent::NewMessage(m)) if m.room_id == room_id => {
                             yield Event::json(&m).event("message");
+                        }
+                        Ok(ChatEvent::MessageEdited(m)) if m.room_id == room_id => {
+                            yield Event::json(&m).event("message_edited");
+                        }
+                        Ok(ChatEvent::MessageDeleted { ref id, room_id: ref rid }) if *rid == room_id => {
+                            yield Event::json(&serde_json::json!({"id": id, "room_id": rid})).event("message_deleted");
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
@@ -506,8 +685,10 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 
 ## Messages
 - POST /api/v1/rooms/{id}/messages — send message (body: {"sender": "...", "content": "..."})
+- PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
+- DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
 - GET /api/v1/rooms/{id}/messages?since=&limit=&before=&sender= — poll messages
-- GET /api/v1/rooms/{id}/stream?since= — SSE real-time stream
+- GET /api/v1/rooms/{id}/stream?since= — SSE real-time stream (events: message, message_edited, message_deleted)
 
 ## System
 - GET /api/v1/health — health check

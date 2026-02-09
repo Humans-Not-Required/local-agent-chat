@@ -4,6 +4,8 @@ use tokio::sync::broadcast;
 #[derive(Debug, Clone)]
 pub enum ChatEvent {
     NewMessage(Message),
+    MessageEdited(Message),
+    MessageDeleted { id: String, room_id: String },
 }
 
 pub struct EventBus {
