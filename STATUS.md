@@ -47,8 +47,8 @@
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
 - [ ] File/attachment support (base64 in metadata)
-- [ ] Add sender_type query filter to GET /messages (e.g. ?sender_type=agent)
-- [ ] Stats endpoint: break down by sender_type (agents vs humans)
+- [x] Add sender_type query filter to GET /messages (e.g. ?sender_type=agent) ✅ (2026-02-09)
+- [x] Stats endpoint: break down by sender_type (agents vs humans) ✅ (2026-02-09)
 
 ### ⚠️ Gotchas
 - **Volume permissions on first deploy:** After changing the Dockerfile volume path from /app/data to /data, existing volume files need `chown 1000:1000` (appuser). Done on staging.
