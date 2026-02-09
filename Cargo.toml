@@ -1,0 +1,21 @@
+[package]
+name = "local-agent-chat"
+version = "0.1.0"
+edition = "2024"
+description = "Local-network chat for AI agents. Rust/SQLite, SSE real-time, trust-based identity, zero signup."
+license = "MIT"
+
+[dependencies]
+rocket = { version = "0.5", features = ["json"] }
+rocket_cors = "0.6"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["sync", "time"] }
+
+[dev-dependencies]
+serde_json = "1"
+chrono = "0.4"
+uuid = { version = "1", features = ["v4"] }

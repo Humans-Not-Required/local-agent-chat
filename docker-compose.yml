@@ -1,0 +1,18 @@
+services:
+  local-agent-chat:
+    image: ghcr.io/humans-not-required/local-agent-chat:dev
+    container_name: local-agent-chat
+    restart: unless-stopped
+    ports:
+      - "3006:8000"
+    volumes:
+      - chat-data:/data
+    environment:
+      - DATABASE_PATH=/data/chat.db
+      - ROCKET_ADDRESS=0.0.0.0
+      - ROCKET_PORT=8000
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+volumes:
+  chat-data:
