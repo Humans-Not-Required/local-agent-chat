@@ -32,7 +32,8 @@
 - [ ] Message threading (reply_to field)
 
 ### ⚠️ Gotchas
-- GitHub repo creation failing (500 error) — may need Jordan to create repo manually, or retry later
+- **GitHub Actions currently failing** for this repo because GitHub returns HTTP 500 during `actions/checkout` fetch (3 retries). This blocks ghcr.io image builds + staging deploy until GitHub stops 500ing.
+- GitHub org repo creation intermittently 500s (workaround used: create under nanookclaw, transfer to org)
 - No frontend yet — API-only MVP
 - Admin key is any Bearer token currently (no validation) — fine for LAN trust model
 
