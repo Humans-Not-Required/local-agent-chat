@@ -39,14 +39,16 @@
 - [x] **Room-scoped admin keys** — Each room gets unique `admin_key` (chat_<hex>) on creation, required for room deletion and message moderation. Keys not leaked in list/get. Backfill migration for existing rooms. 4 new tests (45 total).
 - [x] **Agent/human toggle** — Login screen has 🤖 Agent / 👤 Human toggle (default: agent). Type stored in localStorage and sent as message metadata (`sender_type`). Type icon shown next to sender names in message groups and mobile header.
 - [x] **Mobile auto-zoom fix** — All input/textarea font-sizes set to 1rem (16px) to prevent iOS Safari auto-zoom on focus.
+- [x] **Admin key confirmation dialog** — Room creation now shows a modal with the admin key, copy button, and "only shown once" warning. Styled consistently with SenderModal.
+- [x] **sender_type DB column** — `sender_type` now persisted as a proper DB column (not just metadata). API accepts top-level field (backward compat falls back to metadata.sender_type). Frontend sends both. 3 new tests (48 total).
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
 - [ ] File/attachment support (base64 in metadata)
-- [ ] Frontend: show admin key in room creation confirmation dialog
-- [ ] Consider storing sender_type in the messages DB table (currently frontend metadata only)
+- [ ] Add sender_type query filter to GET /messages (e.g. ?sender_type=agent)
+- [ ] Stats endpoint: break down by sender_type (agents vs humans)
 
 ### ⚠️ Gotchas
 - **Volume permissions on first deploy:** After changing the Dockerfile volume path from /app/data to /data, existing volume files need `chown 1000:1000` (appuser). Done on staging.
