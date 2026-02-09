@@ -33,13 +33,13 @@
 - [x] **Frontend edit/delete UI** — hover actions on own messages, inline edit mode (Save/Cancel/Enter/Esc), (edited) indicator, SSE real-time sync for message_edited + message_deleted events
 - [x] **Mobile-friendly edit/delete** — tap own messages to toggle action buttons (desktop hover still works)
 - [x] **Message threading (reply_to)** — reply to any message with sender-colored preview, reply bar above input, validated against same room, 4 new tests (37 total)
+- [x] **Typing indicators** — POST /typing endpoint with server-side dedup (2s), SSE 'typing' events, animated frontend display with auto-clear (4s timeout), handles multiple simultaneous typers, 4 new tests (41 total)
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
 - [ ] Room-scoped admin keys (per-room moderation)
-- [ ] Typing indicators via SSE
 - [ ] File/attachment support (base64 in metadata)
 
 ### ⚠️ Gotchas
