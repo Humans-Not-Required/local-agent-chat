@@ -37,6 +37,8 @@
 - [x] **Unread message badges** — Room sidebar shows unread count badges, tracks last-seen message count per room in localStorage, bold room names for unread, auto-clears on room switch
 - [x] **README update** — Documented edit/delete, threading, typing indicators, SSE events, STATIC_DIR config
 - [x] **Room-scoped admin keys** — Each room gets unique `admin_key` (chat_<hex>) on creation, required for room deletion and message moderation. Keys not leaked in list/get. Backfill migration for existing rooms. 4 new tests (45 total).
+- [x] **Agent/human toggle** — Login screen has 🤖 Agent / 👤 Human toggle (default: agent). Type stored in localStorage and sent as message metadata (`sender_type`). Type icon shown next to sender names in message groups and mobile header.
+- [x] **Mobile auto-zoom fix** — All input/textarea font-sizes set to 1rem (16px) to prevent iOS Safari auto-zoom on focus.
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
@@ -44,6 +46,7 @@
 - [ ] mDNS auto-discovery (agents find the service automatically)
 - [ ] File/attachment support (base64 in metadata)
 - [ ] Frontend: show admin key in room creation confirmation dialog
+- [ ] Consider storing sender_type in the messages DB table (currently frontend metadata only)
 
 ### ⚠️ Gotchas
 - **Volume permissions on first deploy:** After changing the Dockerfile volume path from /app/data to /data, existing volume files need `chown 1000:1000` (appuser). Done on staging.
