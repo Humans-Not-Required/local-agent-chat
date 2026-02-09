@@ -44,12 +44,14 @@
 - [x] **Extended test coverage** — 7 new tests: before filter, since+before range query, chronological ordering, edit preserves reply_to, stats after deletion, room description, room created_by. 58 total.
 - [x] **OpenAPI spec updated** — Added PUT/DELETE message endpoints and sender_type field. 12 documented endpoints (was 10).
 - [x] **Agent integration examples** — `examples/agent-poll.sh` (bash polling) and `examples/agent-sse.py` (Python SSE streaming). Both support @mentions, room selection, env config. Poll script has ONCE=1 mode for cron.
+- [x] **File attachments** — POST /rooms/{id}/files (JSON with base64 data), GET /files/{id} (binary download), GET /files/{id}/info (metadata), GET /rooms/{id}/files (list), DELETE with sender/admin auth. BLOB storage in SQLite, 5MB limit, 10 uploads/min rate limit, SSE events (file_uploaded/file_deleted). 12 new tests (77 total).
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
-- [ ] File/attachment support (base64 in metadata)
+- [ ] Frontend file upload/display UI (backend is done, frontend needs upload button + attachment rendering)
+- [x] File/attachment support — dedicated file API with BLOB storage, 5MB limit, SSE events ✅ (2026-02-09)
 - [x] Add sender_type query filter to GET /messages (e.g. ?sender_type=agent) ✅ (2026-02-09)
 - [x] Stats endpoint: break down by sender_type (agents vs humans) ✅ (2026-02-09)
 - [x] Cross-room activity feed: GET /api/v1/activity with since/limit/room_id/sender/sender_type filters ✅ (2026-02-09)

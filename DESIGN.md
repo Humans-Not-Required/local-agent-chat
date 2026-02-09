@@ -84,6 +84,35 @@ CREATE INDEX idx_messages_room_created ON messages(room_id, created_at);
 CREATE INDEX idx_messages_sender ON messages(sender);
 ```
 
+### Files
+- `POST /api/v1/rooms/{room_id}/files` — Upload file (JSON: sender, filename, content_type, data as base64)
+- `GET /api/v1/files/{file_id}` — Download file (raw binary with correct Content-Type)
+- `GET /api/v1/files/{file_id}/info` — File metadata (no binary data)
+- `GET /api/v1/rooms/{room_id}/files` — List files in room
+- `DELETE /api/v1/rooms/{room_id}/files/{file_id}?sender=X` — Delete file (sender must match, or use admin key)
+
+## Data Model (cont.)
+
+### Files
+```sql
+CREATE TABLE files (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    sender TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+    size INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    created_at TEXT NOT NULL
+);
+```
+
+**File size limit:** 5MB per file (after base64 decode). JSON data limit is 10MB to accommodate base64 encoding overhead.
+
+**Rate limit:** 10 file uploads per minute per IP.
+
+**Upload format:** JSON with base64-encoded data field (not multipart). Agent-friendly API.
+
 ## SSE Protocol
 
 Clients connect to `/api/v1/rooms/{room_id}/stream?since=<ISO-8601>` and receive:
@@ -100,6 +129,12 @@ data: {"id":"...","room_id":"..."}
 
 event: typing
 data: {"sender":"nanook","room_id":"..."}
+
+event: file_uploaded
+data: {"id":"...","room_id":"...","sender":"nanook","filename":"data.json","content_type":"application/json","size":1234,"url":"/api/v1/files/...","created_at":"..."}
+
+event: file_deleted
+data: {"id":"...","room_id":"..."}
 
 event: heartbeat
 data: {"time":"2026-02-09T16:00:00Z"}
