@@ -106,7 +106,8 @@
                 "properties": {
                   "sender": { "type": "string", "maxLength": 100 },
                   "content": { "type": "string", "maxLength": 10000 },
-                  "metadata": { "type": "object", "description": "Optional JSON metadata" }
+                  "metadata": { "type": "object", "description": "Optional JSON metadata" },
+                  "reply_to": { "type": "string", "description": "Message ID to reply to (must exist in this room)", "nullable": true }
                 }
               }
             }

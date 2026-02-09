@@ -278,10 +278,29 @@ pub fn send_message(
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     let metadata = body.metadata.clone().unwrap_or(serde_json::json!({}));
+    let reply_to = body.reply_to.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()).map(String::from);
+
+    // Validate reply_to references a real message in this room
+    if let Some(ref reply_id) = reply_to {
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE id = ?1 AND room_id = ?2",
+                params![reply_id, room_id],
+                |r| r.get::<_, i64>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+        if !exists {
+            return Err((
+                Status::BadRequest,
+                Json(serde_json::json!({"error": "reply_to message not found in this room"})),
+            ));
+        }
+    }
 
     conn.execute(
-        "INSERT INTO messages (id, room_id, sender, content, metadata, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now],
+        "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, reply_to) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &reply_to],
     )
     .map_err(|e| {
         (
@@ -305,6 +324,7 @@ pub fn send_message(
         metadata,
         created_at: now,
         edited_at: None,
+        reply_to,
     };
 
     // Publish event for SSE
@@ -394,7 +414,7 @@ pub fn edit_message(
     // Fetch the updated message
     let msg = conn
         .query_row(
-            "SELECT id, room_id, sender, content, metadata, created_at, edited_at FROM messages WHERE id = ?1",
+            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to FROM messages WHERE id = ?1",
             params![message_id],
             |row| {
                 let metadata_str: String = row.get(4)?;
@@ -406,6 +426,7 @@ pub fn edit_message(
                     metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({})),
                     created_at: row.get(5)?,
                     edited_at: row.get(6)?,
+                    reply_to: row.get(7)?,
                 })
             },
         )
@@ -513,7 +534,7 @@ pub fn get_messages(
 
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
-    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at, edited_at FROM messages WHERE room_id = ?1");
+    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to FROM messages WHERE room_id = ?1");
     let mut param_values: Vec<String> = vec![room_id.to_string()];
     let mut idx = 2;
 
@@ -559,6 +580,7 @@ pub fn get_messages(
                 metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({})),
                 created_at: row.get(5)?,
                 edited_at: row.get(6)?,
+                reply_to: row.get(7)?,
             })
         })
         .map_err(|e| {
@@ -590,7 +612,7 @@ pub fn message_stream(
         let conn = db.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT id, room_id, sender, content, metadata, created_at, edited_at FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY created_at ASC LIMIT 100",
+                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY created_at ASC LIMIT 100",
             )
             .ok();
         if let Some(ref mut s) = stmt {
@@ -605,6 +627,7 @@ pub fn message_stream(
                         .unwrap_or(serde_json::json!({})),
                     created_at: row.get(5)?,
                     edited_at: row.get(6)?,
+                    reply_to: row.get(7)?,
                 })
             })
             .ok()
@@ -684,7 +707,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - DELETE /api/v1/rooms/{id} — delete room (admin auth required)
 
 ## Messages
-- POST /api/v1/rooms/{id}/messages — send message (body: {"sender": "...", "content": "..."})
+- POST /api/v1/rooms/{id}/messages — send message (body: {"sender": "...", "content": "...", "reply_to": "msg-id (optional)"})
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
 - GET /api/v1/rooms/{id}/messages?since=&limit=&before=&sender= — poll messages

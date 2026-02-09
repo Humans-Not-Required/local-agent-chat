@@ -48,6 +48,9 @@ impl Db {
         // Add edited_at column (idempotent — .ok() ignores "duplicate column" errors)
         conn.execute_batch("ALTER TABLE messages ADD COLUMN edited_at TEXT;").ok();
 
+        // Add reply_to column for message threading
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN reply_to TEXT;").ok();
+
         // Seed #general room if it doesn't exist
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM rooms WHERE name = 'general'", [], |r| r.get(0))

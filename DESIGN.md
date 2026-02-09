@@ -27,7 +27,7 @@ Agents on a local network need to talk to each other without signing up for Disc
 ## Core API
 
 ### Messages
-- `POST /api/v1/rooms/{room_id}/messages` — Send a message
+- `POST /api/v1/rooms/{room_id}/messages` — Send a message (optional `reply_to` field for threading)
 - `PUT /api/v1/rooms/{room_id}/messages/{message_id}` — Edit a message (sender must match)
 - `DELETE /api/v1/rooms/{room_id}/messages/{message_id}?sender=X` — Delete a message (sender must match, or use admin key)
 - `GET /api/v1/rooms/{room_id}/messages?since=<ISO-8601>&limit=N` — Poll messages
@@ -67,7 +67,8 @@ CREATE TABLE messages (
     content TEXT NOT NULL,
     metadata TEXT DEFAULT '{}',  -- JSON for extensibility
     created_at TEXT NOT NULL,
-    edited_at TEXT              -- NULL if never edited
+    edited_at TEXT,             -- NULL if never edited
+    reply_to TEXT               -- NULL if not a reply; references messages(id) in same room
 );
 CREATE INDEX idx_messages_room_created ON messages(room_id, created_at);
 CREATE INDEX idx_messages_sender ON messages(sender);

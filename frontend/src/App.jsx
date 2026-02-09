@@ -114,7 +114,24 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom }) {
   );
 }
 
-function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
+function ReplyPreview({ replyToId, messages, style: extraStyle }) {
+  if (!replyToId) return null;
+  const original = messages.find(m => m.id === replyToId);
+  if (!original) return null;
+
+  const preview = original.content.length > 80 ? original.content.slice(0, 80) + '…' : original.content;
+  return (
+    <div style={{ ...styles.replyPreview, ...extraStyle }}>
+      <div style={{ width: 3, background: senderColor(original.sender), borderRadius: 2, flexShrink: 0 }} />
+      <div style={{ overflow: 'hidden' }}>
+        <div style={{ fontSize: '0.7rem', fontWeight: 600, color: senderColor(original.sender) }}>{original.sender}</div>
+        <div style={{ fontSize: '0.75rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{preview}</div>
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
   const [showActions, setShowActions] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(msg.content);
@@ -140,7 +157,7 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
 
   // Toggle actions on click (mobile-friendly) or show on hover (desktop)
   const handleBubbleClick = (e) => {
-    if (isOwn && !editing) {
+    if (!editing) {
       // Don't toggle if clicking inside action buttons
       if (e.target.closest('[data-actions]')) return;
       setShowActions(prev => !prev);
@@ -157,19 +174,28 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      {/* Action buttons on hover/tap (own messages only) */}
-      {isOwn && showActions && !editing && (
+      {/* Action buttons on hover/tap */}
+      {showActions && !editing && (
         <div style={styles.msgActions} data-actions>
           <button
-            onClick={(e) => { e.stopPropagation(); setEditText(msg.content); setEditing(true); setShowActions(false); }}
+            onClick={(e) => { e.stopPropagation(); onReply(msg); setShowActions(false); }}
             style={styles.msgActionBtn}
-            title="Edit"
-          >✎</button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(msg.id); }}
-            style={{ ...styles.msgActionBtn, color: '#ef4444' }}
-            title="Delete"
-          >✕</button>
+            title="Reply"
+          >↩</button>
+          {isOwn && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditText(msg.content); setEditing(true); setShowActions(false); }}
+                style={styles.msgActionBtn}
+                title="Edit"
+              >✎</button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(msg.id); }}
+                style={{ ...styles.msgActionBtn, color: '#ef4444' }}
+                title="Delete"
+              >✕</button>
+            </>
+          )}
         </div>
       )}
       <div
@@ -178,7 +204,7 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
           ...styles.messageBubble,
           background: isOwn ? '#1e3a5f' : '#1e293b',
           borderRadius: isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-          cursor: isOwn && !editing ? 'pointer' : 'default',
+          cursor: !editing ? 'pointer' : 'default',
         }}
       >
         {editing ? (
@@ -198,6 +224,7 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
           </div>
         ) : (
           <>
+            {msg.reply_to && <ReplyPreview replyToId={msg.reply_to} messages={allMessages} />}
             <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</div>
             <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
               {msg.edited_at && <span style={{ fontStyle: 'italic' }}>(edited)</span>}
@@ -210,7 +237,7 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
   );
 }
 
-function MessageGroup({ messages, isOwn, onEdit, onDelete }) {
+function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, allMessages }) {
   const sender = messages[0].sender;
   const color = senderColor(sender);
 
@@ -226,6 +253,8 @@ function MessageGroup({ messages, isOwn, onEdit, onDelete }) {
           isOwn={isOwn}
           onEdit={onEdit}
           onDelete={onDelete}
+          onReply={onReply}
+          allMessages={allMessages}
         />
       ))}
     </div>
@@ -244,9 +273,16 @@ function DateSeparator({ date }) {
 
 function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessage, loading, connected }) {
   const [text, setText] = useState('');
+  const [replyTo, setReplyTo] = useState(null); // { id, sender, content }
   const messagesEndRef = useRef(null);
   const containerRef = useRef(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const inputRef = useRef(null);
+
+  // Clear reply state when room changes
+  useEffect(() => {
+    setReplyTo(null);
+  }, [room?.id]);
 
   useEffect(() => {
     if (autoScroll) {
@@ -264,14 +300,23 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!text.trim()) return;
-    onSend(text.trim());
+    onSend(text.trim(), replyTo?.id || null);
     setText('');
+    setReplyTo(null);
+  };
+
+  const handleReply = (msg) => {
+    setReplyTo({ id: msg.id, sender: msg.sender, content: msg.content });
+    inputRef.current?.focus();
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
+    }
+    if (e.key === 'Escape' && replyTo) {
+      setReplyTo(null);
     }
   };
 
@@ -354,6 +399,8 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
               isOwn={item.sender === sender}
               onEdit={onEditMessage}
               onDelete={onDeleteMessage}
+              onReply={handleReply}
+              allMessages={messages}
             />
           );
         })}
@@ -373,9 +420,26 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
         </button>
       )}
 
+      {/* Reply bar */}
+      {replyTo && (
+        <div style={styles.replyBar}>
+          <div style={{ width: 3, background: senderColor(replyTo.sender), borderRadius: 2, flexShrink: 0 }} />
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: senderColor(replyTo.sender) }}>
+              Replying to {replyTo.sender}
+            </span>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {replyTo.content.length > 100 ? replyTo.content.slice(0, 100) + '…' : replyTo.content}
+            </div>
+          </div>
+          <button onClick={() => setReplyTo(null)} style={styles.replyCloseBtn}>✕</button>
+        </div>
+      )}
+
       {/* Input */}
       <form onSubmit={handleSubmit} style={styles.inputArea}>
         <textarea
+          ref={inputRef}
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -585,13 +649,15 @@ export default function App() {
     } catch (e) { /* ignore */ }
   };
 
-  const handleSend = async (content) => {
+  const handleSend = async (content, replyToId) => {
     if (!activeRoom) return;
     try {
+      const body = { sender, content };
+      if (replyToId) body.reply_to = replyToId;
       const res = await fetch(`${API}/rooms/${activeRoom.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sender, content }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         // SSE will pick up the message
@@ -905,6 +971,33 @@ const styles = {
     padding: '4px 12px',
     fontSize: '0.75rem',
     cursor: 'pointer',
+  },
+  replyPreview: {
+    display: 'flex',
+    gap: 8,
+    padding: '6px 8px',
+    marginBottom: 6,
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: 6,
+    maxWidth: '100%',
+    overflow: 'hidden',
+  },
+  replyBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '8px 16px',
+    background: '#1e293b',
+    borderTop: '1px solid #334155',
+  },
+  replyCloseBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#64748b',
+    cursor: 'pointer',
+    fontSize: '0.9rem',
+    padding: '2px 6px',
+    flexShrink: 0,
   },
   iconBtn: {
     background: 'none',
