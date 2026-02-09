@@ -73,6 +73,7 @@ pub struct MessageQuery {
     pub limit: Option<i64>,
     pub before: Option<String>,
     pub sender: Option<String>,
+    pub sender_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

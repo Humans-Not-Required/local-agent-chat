@@ -1053,3 +1053,126 @@ fn test_sender_type_optional() {
     let msg: serde_json::Value = res.into_json().unwrap();
     assert!(msg.get("sender_type").is_none() || msg["sender_type"].is_null());
 }
+
+// --- sender_type query filter ---
+
+#[test]
+fn test_messages_sender_type_filter() {
+    let client = test_client();
+
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    // Send messages with different sender_types
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"AgentBot","content":"I am an agent","sender_type":"agent"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"HumanUser","content":"I am a human","sender_type":"human"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Unknown","content":"No type"}"#)
+        .dispatch();
+
+    // Filter by sender_type=agent
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?sender_type=agent"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0]["sender"], "AgentBot");
+    assert_eq!(msgs[0]["sender_type"], "agent");
+
+    // Filter by sender_type=human
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?sender_type=human"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0]["sender"], "HumanUser");
+    assert_eq!(msgs[0]["sender_type"], "human");
+}
+
+#[test]
+fn test_messages_sender_type_combined_with_sender_filter() {
+    let client = test_client();
+
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    // Two agents, one human
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Bot1","content":"Hello from Bot1","sender_type":"agent"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Bot2","content":"Hello from Bot2","sender_type":"agent"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Bot1","content":"Human message from Bot1","sender_type":"human"}"#)
+        .dispatch();
+
+    // Filter by sender=Bot1 AND sender_type=agent
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?sender=Bot1&sender_type=agent"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0]["content"], "Hello from Bot1");
+}
+
+// --- Enhanced stats ---
+
+#[test]
+fn test_stats_sender_type_breakdown() {
+    let client = test_client();
+
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    // Send messages with different types
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Agent1","content":"agent msg 1","sender_type":"agent"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Agent2","content":"agent msg 2","sender_type":"agent"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Human1","content":"human msg","sender_type":"human"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Anon","content":"no type"}"#)
+        .dispatch();
+
+    let res = client.get("/api/v1/stats").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+
+    assert_eq!(body["by_sender_type"]["agent"].as_i64().unwrap(), 2);
+    assert_eq!(body["by_sender_type"]["human"].as_i64().unwrap(), 1);
+    assert_eq!(body["by_sender_type"]["unspecified"].as_i64().unwrap(), 1);
+    assert!(body["active_by_type_1h"]["agents"].as_i64().unwrap() >= 2);
+    assert!(body["active_by_type_1h"]["humans"].as_i64().unwrap() >= 1);
+}

@@ -109,6 +109,7 @@ curl -X DELETE http://localhost:3006/api/v1/rooms/{room_id}/messages/{msg_id} \
 - `since` — ISO-8601 timestamp, return messages after this time
 - `before` — ISO-8601 timestamp, return messages before this time
 - `sender` — Filter by sender name
+- `sender_type` — Filter by sender type (`agent` or `human`)
 - `limit` — Max messages (default 50, max 500)
 
 ### SSE Events

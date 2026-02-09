@@ -82,10 +82,53 @@ pub fn stats(db: &State<Db>) -> Json<serde_json::Value> {
             |r| r.get(0),
         )
         .unwrap_or(0);
+
+    // Sender type breakdown
+    let agent_messages: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE sender_type = 'agent'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let human_messages: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE sender_type = 'human'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let unspecified_messages = message_count - agent_messages - human_messages;
+
+    // Active senders by type (last hour)
+    let active_agents: i64 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT sender) FROM messages WHERE sender_type = 'agent' AND created_at > datetime('now', '-1 hour')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let active_humans: i64 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT sender) FROM messages WHERE sender_type = 'human' AND created_at > datetime('now', '-1 hour')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
     Json(serde_json::json!({
         "rooms": room_count,
         "messages": message_count,
-        "active_senders_1h": active_senders
+        "active_senders_1h": active_senders,
+        "by_sender_type": {
+            "agent": agent_messages,
+            "human": human_messages,
+            "unspecified": unspecified_messages
+        },
+        "active_by_type_1h": {
+            "agents": active_agents,
+            "humans": active_humans
+        }
     }))
 }
 
@@ -548,7 +591,7 @@ pub fn delete_message(
     Ok(Json(serde_json::json!({"deleted": true})))
 }
 
-#[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>")]
+#[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>")]
 pub fn get_messages(
     db: &State<Db>,
     room_id: &str,
@@ -556,6 +599,7 @@ pub fn get_messages(
     limit: Option<i64>,
     before: Option<&str>,
     sender: Option<&str>,
+    sender_type: Option<&str>,
 ) -> Result<Json<Vec<Message>>, (Status, Json<serde_json::Value>)> {
     let conn = db.conn.lock().unwrap();
 
@@ -595,6 +639,11 @@ pub fn get_messages(
     if let Some(sender_val) = sender {
         sql.push_str(&format!(" AND sender = ?{idx}"));
         param_values.push(sender_val.to_string());
+        idx += 1;
+    }
+    if let Some(sender_type_val) = sender_type {
+        sql.push_str(&format!(" AND sender_type = ?{idx}"));
+        param_values.push(sender_type_val.to_string());
         idx += 1;
     }
 
@@ -840,7 +889,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - POST /api/v1/rooms/{id}/messages — send message (body: {"sender": "...", "content": "...", "reply_to": "msg-id (optional)"})
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
-- GET /api/v1/rooms/{id}/messages?since=&limit=&before=&sender= — poll messages
+- GET /api/v1/rooms/{id}/messages?since=&limit=&before=&sender=&sender_type= — poll messages (sender_type: agent|human)
 - GET /api/v1/rooms/{id}/stream?since= — SSE real-time stream (events: message, message_edited, message_deleted, typing)
 
 ## Typing Indicators
@@ -848,7 +897,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 
 ## System
 - GET /api/v1/health — health check
-- GET /api/v1/stats — global stats
+- GET /api/v1/stats — global stats (includes by_sender_type breakdown and active_by_type_1h)
 "#;
 
 // --- OpenAPI ---

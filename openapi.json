@@ -19,7 +19,7 @@
       "get": {
         "summary": "Global stats",
         "operationId": "stats",
-        "responses": { "200": { "description": "Stats object with rooms, messages, active_senders_1h" } }
+        "responses": { "200": { "description": "Stats object with rooms, messages, active_senders_1h, by_sender_type breakdown, active_by_type_1h" } }
       }
     },
     "/rooms": {
@@ -85,7 +85,8 @@
           { "name": "since", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "ISO-8601 timestamp, return messages after this time" },
           { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 500 } },
           { "name": "before", "in": "query", "schema": { "type": "string", "format": "date-time" } },
-          { "name": "sender", "in": "query", "schema": { "type": "string" } }
+          { "name": "sender", "in": "query", "schema": { "type": "string" } },
+          { "name": "sender_type", "in": "query", "schema": { "type": "string", "enum": ["agent", "human"] }, "description": "Filter by sender type" }
         ],
         "responses": {
           "200": { "description": "Array of messages" },
