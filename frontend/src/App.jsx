@@ -271,7 +271,31 @@ function DateSeparator({ date }) {
   );
 }
 
-function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessage, loading, connected }) {
+function TypingIndicator({ typingUsers }) {
+  if (typingUsers.length === 0) return null;
+
+  let text;
+  if (typingUsers.length === 1) {
+    text = `${typingUsers[0]} is typing`;
+  } else if (typingUsers.length === 2) {
+    text = `${typingUsers[0]} and ${typingUsers[1]} are typing`;
+  } else {
+    text = `${typingUsers[0]} and ${typingUsers.length - 1} others are typing`;
+  }
+
+  return (
+    <div style={styles.typingIndicator}>
+      <span style={styles.typingDots}>
+        <span style={styles.typingDot}>•</span>
+        <span style={{ ...styles.typingDot, animationDelay: '0.2s' }}>•</span>
+        <span style={{ ...styles.typingDot, animationDelay: '0.4s' }}>•</span>
+      </span>
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessage, onTyping, typingUsers, loading, connected }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null); // { id, sender, content }
   const messagesEndRef = useRef(null);
@@ -308,6 +332,13 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
   const handleReply = (msg) => {
     setReplyTo({ id: msg.id, sender: msg.sender, content: msg.content });
     inputRef.current?.focus();
+  };
+
+  const handleTextChange = (e) => {
+    setText(e.target.value);
+    if (e.target.value.trim()) {
+      onTyping();
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -407,6 +438,9 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Typing indicator */}
+      <TypingIndicator typingUsers={typingUsers} />
+
       {/* Scroll to bottom button */}
       {!autoScroll && (
         <button
@@ -441,7 +475,7 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
         <textarea
           ref={inputRef}
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={handleTextChange}
           onKeyDown={handleKeyDown}
           placeholder={`Message #${room.name}...`}
           rows={1}
@@ -507,8 +541,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [showSidebar, setShowSidebar] = useState(window.innerWidth > 768);
+  const [typingUsers, setTypingUsers] = useState([]); // names of users currently typing
   const eventSourceRef = useRef(null);
   const lastMsgTimeRef = useRef(null);
+  const typingTimeoutsRef = useRef({}); // sender -> timeout id
+  const lastTypingSentRef = useRef(0); // timestamp of last typing notification sent
 
   // Fetch rooms
   const fetchRooms = useCallback(async () => {
@@ -557,6 +594,12 @@ export default function App() {
           lastMsgTimeRef.current = msg.created_at;
           return [...prev, msg];
         });
+        // Clear typing indicator when a message arrives from that sender
+        setTypingUsers(prev => prev.filter(s => s !== msg.sender));
+        if (typingTimeoutsRef.current[msg.sender]) {
+          clearTimeout(typingTimeoutsRef.current[msg.sender]);
+          delete typingTimeoutsRef.current[msg.sender];
+        }
       } catch (err) { /* ignore */ }
     });
 
@@ -571,6 +614,31 @@ export default function App() {
       try {
         const { id } = JSON.parse(e.data);
         setMessages(prev => prev.filter(m => m.id !== id));
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('typing', (e) => {
+      try {
+        const { sender: typingSender } = JSON.parse(e.data);
+        // Don't show our own typing indicator
+        if (typingSender === sender) return;
+
+        // Add to typing users
+        setTypingUsers(prev => {
+          if (prev.includes(typingSender)) return prev;
+          return [...prev, typingSender];
+        });
+
+        // Clear existing timeout for this sender
+        if (typingTimeoutsRef.current[typingSender]) {
+          clearTimeout(typingTimeoutsRef.current[typingSender]);
+        }
+
+        // Remove after 4 seconds of no typing events
+        typingTimeoutsRef.current[typingSender] = setTimeout(() => {
+          setTypingUsers(prev => prev.filter(s => s !== typingSender));
+          delete typingTimeoutsRef.current[typingSender];
+        }, 4000);
       } catch (err) { /* ignore */ }
     });
 
@@ -605,6 +673,10 @@ export default function App() {
   useEffect(() => {
     if (!activeRoom) return;
     lastMsgTimeRef.current = null;
+    setTypingUsers([]);
+    // Clear all typing timeouts
+    Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
+    typingTimeoutsRef.current = {};
     fetchMessages(activeRoom.id).then(() => {
       connectSSE(activeRoom.id);
     });
@@ -623,6 +695,22 @@ export default function App() {
     window.addEventListener('resize', handle);
     return () => window.removeEventListener('resize', handle);
   }, []);
+
+  const handleTyping = useCallback(async () => {
+    if (!activeRoom) return;
+    // Debounce: only send every 3 seconds
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 3000) return;
+    lastTypingSentRef.current = now;
+
+    try {
+      await fetch(`${API}/rooms/${activeRoom.id}/typing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender }),
+      });
+    } catch (e) { /* ignore */ }
+  }, [activeRoom?.id, sender]);
 
   const handleSetSender = (name) => {
     localStorage.setItem('chat-sender', name);
@@ -740,6 +828,8 @@ export default function App() {
           onSend={handleSend}
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
+          onTyping={handleTyping}
+          typingUsers={typingUsers}
           loading={loading}
           connected={connected}
         />
@@ -999,6 +1089,26 @@ const styles = {
     padding: '2px 6px',
     flexShrink: 0,
   },
+  typingIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '4px 16px',
+    fontSize: '0.75rem',
+    color: '#64748b',
+    fontStyle: 'italic',
+    minHeight: 0,
+  },
+  typingDots: {
+    display: 'inline-flex',
+    gap: 1,
+  },
+  typingDot: {
+    display: 'inline-block',
+    animation: 'typingBounce 1.2s ease-in-out infinite',
+    fontSize: '1rem',
+    lineHeight: 1,
+  },
   iconBtn: {
     background: 'none',
     border: '1px solid #334155',
@@ -1035,6 +1145,10 @@ if (typeof window !== 'undefined') {
     @media (max-width: 768px) {
       .chat-mobile-header { display: flex !important; }
       .chat-sidebar { position: fixed; left: 0; top: 45px; bottom: 0; z-index: 50; width: 260px; }
+    }
+    @keyframes typingBounce {
+      0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+      30% { opacity: 1; transform: translateY(-3px); }
     }
   `;
   document.head.appendChild(style);

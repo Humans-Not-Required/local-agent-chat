@@ -807,3 +807,75 @@ fn test_reply_to_null_is_optional() {
     let msg: serde_json::Value = res.into_json().unwrap();
     assert!(msg.get("reply_to").is_none() || msg["reply_to"].is_null());
 }
+
+// --- Typing Indicators ---
+
+#[test]
+fn test_typing_notification() {
+    let client = test_client();
+
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/typing"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Nanook"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["ok"], true);
+}
+
+#[test]
+fn test_typing_nonexistent_room() {
+    let client = test_client();
+
+    let res = client
+        .post("/api/v1/rooms/nonexistent-room-id/typing")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Nanook"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+}
+
+#[test]
+fn test_typing_empty_sender() {
+    let client = test_client();
+
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/typing"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":""}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_typing_dedup() {
+    let client = test_client();
+
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    // First call should succeed
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/typing"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"SpamBot"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // Second call within 2s should also return ok (deduped silently)
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/typing"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"SpamBot"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["ok"], true);
+}

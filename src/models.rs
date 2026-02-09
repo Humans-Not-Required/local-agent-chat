@@ -71,6 +71,11 @@ pub struct MessageQuery {
     pub sender: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TypingNotification {
+    pub sender: String,
+}
+
 fn default_anonymous() -> String {
     "anonymous".to_string()
 }

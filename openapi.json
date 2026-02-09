@@ -120,6 +120,33 @@
         }
       }
     },
+    "/rooms/{room_id}/typing": {
+      "post": {
+        "summary": "Send typing indicator",
+        "operationId": "notifyTyping",
+        "description": "Notify other users that a sender is currently typing. Ephemeral — not stored in DB. Server-side dedup (2s per sender per room).",
+        "parameters": [{ "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sender"],
+                "properties": {
+                  "sender": { "type": "string", "maxLength": 100 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Typing notification sent (or deduped)" },
+          "400": { "description": "Invalid sender" },
+          "404": { "description": "Room not found" }
+        }
+      }
+    },
     "/rooms/{room_id}/stream": {
       "get": {
         "summary": "Real-time message stream (SSE)",
@@ -129,7 +156,7 @@
           { "name": "since", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "Replay messages after this timestamp" }
         ],
         "responses": {
-          "200": { "description": "SSE stream with message and heartbeat events" }
+          "200": { "description": "SSE stream with events: message, message_edited, message_deleted, typing, heartbeat" }
         }
       }
     }

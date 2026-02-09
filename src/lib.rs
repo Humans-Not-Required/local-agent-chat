@@ -7,6 +7,7 @@ pub mod routes;
 use db::Db;
 use events::EventBus;
 use rate_limit::RateLimiter;
+use routes::TypingTracker;
 use rocket::fs::{FileServer, Options};
 use rocket_cors::CorsOptions;
 use std::env;
@@ -26,6 +27,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
     let db = Db::new(db_path);
     let events = EventBus::new();
     let rate_limiter = RateLimiter::new();
+    let typing_tracker = TypingTracker::default();
 
     let cors = CorsOptions::default()
         .to_cors()
@@ -40,6 +42,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
         .manage(db)
         .manage(events)
         .manage(rate_limiter)
+        .manage(typing_tracker)
         .attach(cors)
         .register(
             "/",
@@ -58,6 +61,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::edit_message,
                 routes::delete_message,
                 routes::get_messages,
+                routes::notify_typing,
                 routes::message_stream,
                 routes::llms_txt_root,
                 routes::llms_txt_api,

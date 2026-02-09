@@ -6,6 +6,7 @@ pub enum ChatEvent {
     NewMessage(Message),
     MessageEdited(Message),
     MessageDeleted { id: String, room_id: String },
+    Typing { sender: String, room_id: String },
 }
 
 pub struct EventBus {

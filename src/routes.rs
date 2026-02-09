@@ -7,6 +7,8 @@ use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::stream::{Event, EventStream};
 use rocket::serde::json::Json;
 use rocket::{State, get, post, put, delete};
+use std::collections::HashMap;
+use std::sync::Mutex as StdMutex;
 use rusqlite::params;
 use tokio::time::{Duration, interval};
 
@@ -595,6 +597,85 @@ pub fn get_messages(
     Ok(Json(messages))
 }
 
+// --- Typing Indicator ---
+
+/// In-memory dedup: tracks last typing notification per (room, sender) to avoid spam.
+/// Key: "room_id:sender", Value: timestamp (seconds since epoch).
+pub struct TypingTracker {
+    pub last_typing: StdMutex<HashMap<String, u64>>,
+}
+
+impl Default for TypingTracker {
+    fn default() -> Self {
+        Self {
+            last_typing: StdMutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[post("/api/v1/rooms/<room_id>/typing", format = "json", data = "<body>")]
+pub fn notify_typing(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    typing_tracker: &State<TypingTracker>,
+    room_id: &str,
+    body: Json<TypingNotification>,
+) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+    let sender = body.sender.trim().to_string();
+    if sender.is_empty() || sender.len() > 100 {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "Sender must be 1-100 characters"})),
+        ));
+    }
+
+    // Verify room exists
+    let conn = db.conn.lock().unwrap();
+    let room_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|c| c > 0)
+        .unwrap_or(false);
+
+    if !room_exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Room not found"})),
+        ));
+    }
+    drop(conn);
+
+    // Dedup: only publish if last typing notification was >2 seconds ago
+    let key = format!("{}:{}", room_id, sender);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    {
+        let mut tracker = typing_tracker.last_typing.lock().unwrap();
+        if let Some(&last) = tracker.get(&key)
+            && now - last < 2
+        {
+            return Ok(Json(serde_json::json!({"ok": true})));
+        }
+        tracker.insert(key, now);
+
+        // Prune old entries (>30s) to prevent memory leak
+        tracker.retain(|_, &mut ts| now - ts < 30);
+    }
+
+    events.publish(ChatEvent::Typing {
+        sender,
+        room_id: room_id.to_string(),
+    });
+
+    Ok(Json(serde_json::json!({"ok": true})))
+}
+
 // --- SSE Stream ---
 
 #[get("/api/v1/rooms/<room_id>/stream?<since>")]
@@ -661,6 +742,9 @@ pub fn message_stream(
                         Ok(ChatEvent::MessageDeleted { ref id, room_id: ref rid }) if *rid == room_id => {
                             yield Event::json(&serde_json::json!({"id": id, "room_id": rid})).event("message_deleted");
                         }
+                        Ok(ChatEvent::Typing { ref sender, room_id: ref rid }) if *rid == room_id => {
+                            yield Event::json(&serde_json::json!({"sender": sender, "room_id": rid})).event("typing");
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
                     }
@@ -711,7 +795,10 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
 - GET /api/v1/rooms/{id}/messages?since=&limit=&before=&sender= — poll messages
-- GET /api/v1/rooms/{id}/stream?since= — SSE real-time stream (events: message, message_edited, message_deleted)
+- GET /api/v1/rooms/{id}/stream?since= — SSE real-time stream (events: message, message_edited, message_deleted, typing)
+
+## Typing Indicators
+- POST /api/v1/rooms/{id}/typing — notify typing (body: {"sender": "..."}). Ephemeral, not stored. Deduped server-side (2s per sender).
 
 ## System
 - GET /api/v1/health — health check
