@@ -108,7 +108,8 @@
                   "sender": { "type": "string", "maxLength": 100 },
                   "content": { "type": "string", "maxLength": 10000 },
                   "metadata": { "type": "object", "description": "Optional JSON metadata" },
-                  "reply_to": { "type": "string", "description": "Message ID to reply to (must exist in this room)", "nullable": true }
+                  "reply_to": { "type": "string", "description": "Message ID to reply to (must exist in this room)", "nullable": true },
+                  "sender_type": { "type": "string", "enum": ["agent", "human"], "description": "Sender type (persisted in DB). Falls back to metadata.sender_type for backward compatibility", "nullable": true }
                 }
               }
             }
@@ -118,6 +119,54 @@
           "200": { "description": "Message sent" },
           "404": { "description": "Room not found" },
           "429": { "description": "Rate limited" }
+        }
+      }
+    },
+    "/rooms/{room_id}/messages/{message_id}": {
+      "put": {
+        "summary": "Edit a message",
+        "operationId": "editMessage",
+        "description": "Edit a message's content. Sender must match the original sender.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "message_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sender", "content"],
+                "properties": {
+                  "sender": { "type": "string", "maxLength": 100, "description": "Must match original message sender" },
+                  "content": { "type": "string", "maxLength": 10000 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Message edited (includes edited_at timestamp)" },
+          "400": { "description": "Invalid sender or content" },
+          "403": { "description": "Sender does not match original message" },
+          "404": { "description": "Message not found" }
+        }
+      },
+      "delete": {
+        "summary": "Delete a message",
+        "operationId": "deleteMessage",
+        "description": "Delete a message. Sender query param must match, or provide room admin key for moderation.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "message_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "sender", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Must match original sender (unless admin key is provided)" }
+        ],
+        "security": [{ "adminKey": [] }, {}],
+        "responses": {
+          "200": { "description": "Message deleted" },
+          "403": { "description": "Sender mismatch and no valid admin key" },
+          "404": { "description": "Message not found" }
         }
       }
     },
@@ -167,7 +216,7 @@
       "adminKey": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Admin key for room deletion"
+        "description": "Per-room admin key (format: chat_<hex>). Returned only on room creation. Required for room deletion and message moderation."
       }
     }
   }

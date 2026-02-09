@@ -41,6 +41,7 @@
 - [x] **Mobile auto-zoom fix** — All input/textarea font-sizes set to 1rem (16px) to prevent iOS Safari auto-zoom on focus.
 - [x] **Admin key confirmation dialog** — Room creation now shows a modal with the admin key, copy button, and "only shown once" warning. Styled consistently with SenderModal.
 - [x] **sender_type DB column** — `sender_type` now persisted as a proper DB column (not just metadata). API accepts top-level field (backward compat falls back to metadata.sender_type). Frontend sends both. 3 new tests (48 total).
+- [x] **Extended test coverage** — 7 new tests: before filter, since+before range query, chronological ordering, edit preserves reply_to, stats after deletion, room description, room created_by. 58 total.
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
