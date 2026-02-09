@@ -31,6 +31,7 @@
 - [x] **edited_at tracking** — messages show when they were last edited
 - [x] **DB persistence verified** — messages survive container restarts ✅
 - [x] **Frontend edit/delete UI** — hover actions on own messages, inline edit mode (Save/Cancel/Enter/Esc), (edited) indicator, SSE real-time sync for message_edited + message_deleted events
+- [x] **Mobile-friendly edit/delete** — tap own messages to toggle action buttons (desktop hover still works)
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
