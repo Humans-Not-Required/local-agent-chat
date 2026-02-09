@@ -250,11 +250,13 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
 function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, allMessages }) {
   const sender = messages[0].sender;
   const color = senderColor(sender);
+  const msgType = messages[0].metadata?.sender_type;
+  const typeIcon = msgType === 'human' ? '👤' : msgType === 'agent' ? '🤖' : '';
 
   return (
     <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
       <div style={{ fontSize: '0.8rem', fontWeight: 600, color, marginBottom: 4, paddingLeft: isOwn ? 0 : 4, paddingRight: isOwn ? 4 : 0 }}>
-        {sender}
+        {typeIcon && <span style={{ marginRight: 4 }}>{typeIcon}</span>}{sender}
       </div>
       {messages.map(msg => (
         <MessageBubble
@@ -504,11 +506,12 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
 
 function SenderModal({ onSet }) {
   const [name, setName] = useState('');
+  const [senderType, setSenderType] = useState('agent'); // 'agent' or 'human'
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (name.trim()) {
-      onSet(name.trim());
+      onSet(name.trim(), senderType);
     }
   };
 
@@ -524,10 +527,34 @@ function SenderModal({ onSet }) {
           <input
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Your name (e.g. Nanook, GPT-4, Human)"
-            style={{ ...styles.input, marginBottom: 12 }}
+            placeholder="Your name (e.g. Nanook, GPT-4, Alice)"
+            style={{ ...styles.input, marginBottom: 14 }}
             autoFocus
           />
+          <div style={styles.senderTypeToggle}>
+            <button
+              type="button"
+              onClick={() => setSenderType('agent')}
+              style={{
+                ...styles.toggleBtn,
+                background: senderType === 'agent' ? '#3b82f6' : '#334155',
+                color: senderType === 'agent' ? '#fff' : '#94a3b8',
+              }}
+            >
+              🤖 Agent
+            </button>
+            <button
+              type="button"
+              onClick={() => setSenderType('human')}
+              style={{
+                ...styles.toggleBtn,
+                background: senderType === 'human' ? '#3b82f6' : '#334155',
+                color: senderType === 'human' ? '#fff' : '#94a3b8',
+              }}
+            >
+              👤 Human
+            </button>
+          </div>
           <button type="submit" disabled={!name.trim()} style={{
             ...styles.btnPrimary,
             width: '100%',
@@ -545,6 +572,7 @@ function SenderModal({ onSet }) {
 
 export default function App() {
   const [sender, setSender] = useState(() => localStorage.getItem('chat-sender') || '');
+  const [senderType, setSenderType] = useState(() => localStorage.getItem('chat-sender-type') || 'agent');
   const [rooms, setRooms] = useState([]);
   const [activeRoom, setActiveRoom] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -747,9 +775,11 @@ export default function App() {
     } catch (e) { /* ignore */ }
   }, [activeRoom?.id, sender]);
 
-  const handleSetSender = (name) => {
+  const handleSetSender = (name, type) => {
     localStorage.setItem('chat-sender', name);
+    localStorage.setItem('chat-sender-type', type || 'agent');
     setSender(name);
+    setSenderType(type || 'agent');
   };
 
   // Mark a room as read (update last-seen count)
@@ -791,7 +821,7 @@ export default function App() {
   const handleSend = async (content, replyToId) => {
     if (!activeRoom) return;
     try {
-      const body = { sender, content };
+      const body = { sender, content, metadata: { sender_type: senderType } };
       if (replyToId) body.reply_to = replyToId;
       const res = await fetch(`${API}/rooms/${activeRoom.id}/messages`, {
         method: 'POST',
@@ -849,11 +879,15 @@ export default function App() {
           {activeRoom ? `#${activeRoom.name}` : 'Local Agent Chat'}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: '0.8rem', color: senderColor(sender) }}>{sender}</span>
+          <span style={{ fontSize: '0.8rem', color: senderColor(sender) }}>
+            {senderType === 'human' ? '👤' : '🤖'} {sender}
+          </span>
           <button
             onClick={() => {
               localStorage.removeItem('chat-sender');
+              localStorage.removeItem('chat-sender-type');
               setSender('');
+              setSenderType('agent');
             }}
             style={{ ...styles.iconBtn, fontSize: '0.75rem' }}
             title="Change name"
@@ -1001,7 +1035,7 @@ const styles = {
     borderRadius: 8,
     padding: '10px 14px',
     color: '#e2e8f0',
-    fontSize: '0.9rem',
+    fontSize: '1rem',
     resize: 'none',
     fontFamily: 'inherit',
     lineHeight: 1.5,
@@ -1038,7 +1072,7 @@ const styles = {
     borderRadius: 6,
     padding: '8px 12px',
     color: '#e2e8f0',
-    fontSize: '0.85rem',
+    fontSize: '1rem',
     width: '100%',
   },
   btnPrimary: {
@@ -1090,7 +1124,7 @@ const styles = {
     borderRadius: 6,
     padding: '6px 10px',
     color: '#e2e8f0',
-    fontSize: '0.9rem',
+    fontSize: '1rem',
     resize: 'none',
     fontFamily: 'inherit',
     lineHeight: 1.5,
@@ -1172,6 +1206,23 @@ const styles = {
     textAlign: 'center',
     lineHeight: '16px',
     flexShrink: 0,
+  },
+  senderTypeToggle: {
+    display: 'flex',
+    gap: 0,
+    marginBottom: 14,
+    borderRadius: 8,
+    overflow: 'hidden',
+    border: '1px solid #334155',
+  },
+  toggleBtn: {
+    flex: 1,
+    padding: '10px 16px',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    transition: 'background 0.15s, color 0.15s',
   },
   iconBtn: {
     background: 'none',
