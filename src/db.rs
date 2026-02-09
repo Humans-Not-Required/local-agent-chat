@@ -59,6 +59,9 @@ impl Db {
         // Add admin_key column for room-scoped admin keys
         conn.execute_batch("ALTER TABLE rooms ADD COLUMN admin_key TEXT;").ok();
 
+        // Add sender_type column for persistent sender type tracking (agent/human)
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN sender_type TEXT;").ok();
+
         // Backfill admin_key for existing rooms that don't have one
         let mut stmt = conn
             .prepare("SELECT id FROM rooms WHERE admin_key IS NULL")

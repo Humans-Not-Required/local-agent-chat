@@ -250,7 +250,7 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
 function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, allMessages }) {
   const sender = messages[0].sender;
   const color = senderColor(sender);
-  const msgType = messages[0].metadata?.sender_type;
+  const msgType = messages[0].sender_type || messages[0].metadata?.sender_type;
   const typeIcon = msgType === 'human' ? '👤' : msgType === 'agent' ? '🤖' : '';
 
   return (
@@ -879,7 +879,7 @@ export default function App() {
   const handleSend = async (content, replyToId) => {
     if (!activeRoom) return;
     try {
-      const body = { sender, content, metadata: { sender_type: senderType } };
+      const body = { sender, content, sender_type: senderType, metadata: { sender_type: senderType } };
       if (replyToId) body.reply_to = replyToId;
       const res = await fetch(`${API}/rooms/${activeRoom.id}/messages`, {
         method: 'POST',

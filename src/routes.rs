@@ -303,6 +303,10 @@ pub fn send_message(
     let metadata = body.metadata.clone().unwrap_or(serde_json::json!({}));
     let reply_to = body.reply_to.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()).map(String::from);
 
+    // Resolve sender_type: top-level field takes priority, fall back to metadata.sender_type
+    let sender_type = body.sender_type.clone()
+        .or_else(|| metadata.get("sender_type").and_then(|v| v.as_str()).map(String::from));
+
     // Validate reply_to references a real message in this room
     if let Some(ref reply_id) = reply_to {
         let exists: bool = conn
@@ -322,8 +326,8 @@ pub fn send_message(
     }
 
     conn.execute(
-        "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, reply_to) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &reply_to],
+        "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, reply_to, sender_type) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &reply_to, &sender_type],
     )
     .map_err(|e| {
         (
@@ -348,6 +352,7 @@ pub fn send_message(
         created_at: now,
         edited_at: None,
         reply_to,
+        sender_type,
     };
 
     // Publish event for SSE
@@ -437,7 +442,7 @@ pub fn edit_message(
     // Fetch the updated message
     let msg = conn
         .query_row(
-            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to FROM messages WHERE id = ?1",
+            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type FROM messages WHERE id = ?1",
             params![message_id],
             |row| {
                 let metadata_str: String = row.get(4)?;
@@ -450,6 +455,7 @@ pub fn edit_message(
                     created_at: row.get(5)?,
                     edited_at: row.get(6)?,
                     reply_to: row.get(7)?,
+                    sender_type: row.get(8)?,
                 })
             },
         )
@@ -572,7 +578,7 @@ pub fn get_messages(
 
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
-    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to FROM messages WHERE room_id = ?1");
+    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type FROM messages WHERE room_id = ?1");
     let mut param_values: Vec<String> = vec![room_id.to_string()];
     let mut idx = 2;
 
@@ -619,6 +625,7 @@ pub fn get_messages(
                 created_at: row.get(5)?,
                 edited_at: row.get(6)?,
                 reply_to: row.get(7)?,
+                sender_type: row.get(8)?,
             })
         })
         .map_err(|e| {
@@ -729,7 +736,7 @@ pub fn message_stream(
         let conn = db.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY created_at ASC LIMIT 100",
+                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY created_at ASC LIMIT 100",
             )
             .ok();
         if let Some(ref mut s) = stmt {
@@ -745,6 +752,7 @@ pub fn message_stream(
                     created_at: row.get(5)?,
                     edited_at: row.get(6)?,
                     reply_to: row.get(7)?,
+                    sender_type: row.get(8)?,
                 })
             })
             .ok()

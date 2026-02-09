@@ -34,6 +34,8 @@ pub struct Message {
     pub edited_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +55,8 @@ pub struct SendMessage {
     pub metadata: Option<serde_json::Value>,
     #[serde(default)]
     pub reply_to: Option<String>,
+    #[serde(default)]
+    pub sender_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -74,7 +74,8 @@ CREATE TABLE messages (
     metadata TEXT DEFAULT '{}',  -- JSON for extensibility
     created_at TEXT NOT NULL,
     edited_at TEXT,             -- NULL if never edited
-    reply_to TEXT               -- NULL if not a reply; references messages(id) in same room
+    reply_to TEXT,              -- NULL if not a reply; references messages(id) in same room
+    sender_type TEXT            -- NULL, 'agent', or 'human' — persistent sender type
 );
 CREATE INDEX idx_messages_room_created ON messages(room_id, created_at);
 CREATE INDEX idx_messages_sender ON messages(sender);
