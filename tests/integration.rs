@@ -1176,3 +1176,271 @@ fn test_stats_sender_type_breakdown() {
     assert!(body["active_by_type_1h"]["agents"].as_i64().unwrap() >= 2);
     assert!(body["active_by_type_1h"]["humans"].as_i64().unwrap() >= 1);
 }
+
+// --- Before filter ---
+
+#[test]
+fn test_messages_before_filter() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "before-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send first message
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "a", "content": "First"}"#)
+        .dispatch();
+
+    // Small delay to ensure ordering
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    // Record timestamp between messages
+    let ts = chrono::Utc::now().to_rfc3339();
+
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    // Send second message
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "b", "content": "Second"}"#)
+        .dispatch();
+
+    // Get messages before timestamp — should only get the first
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?before={ts}"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0]["content"], "First");
+}
+
+#[test]
+fn test_messages_since_and_before_range() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "range-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send three messages with timestamps between them
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "a", "content": "First"}"#)
+        .dispatch();
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    let ts_start = chrono::Utc::now().to_rfc3339();
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "b", "content": "Middle"}"#)
+        .dispatch();
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    let ts_end = chrono::Utc::now().to_rfc3339();
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "c", "content": "Last"}"#)
+        .dispatch();
+
+    // Range query: should only get the middle message
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?since={ts_start}&before={ts_end}"
+        ))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0]["content"], "Middle");
+}
+
+// --- Message ordering ---
+
+#[test]
+fn test_messages_returned_in_chronological_order() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "order-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send messages in order
+    for i in 1..=5 {
+        client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "Message {i}"}}"#))
+            .dispatch();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 5);
+    for i in 0..5 {
+        assert_eq!(msgs[i]["content"], format!("Message {}", i + 1));
+    }
+}
+
+// --- Edit preserves reply_to ---
+
+#[test]
+fn test_edit_message_preserves_reply_to() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "edit-reply-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send original message
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "alice", "content": "Original"}"#)
+        .dispatch();
+    let original: serde_json::Value = res.into_json().unwrap();
+    let original_id = original["id"].as_str().unwrap();
+
+    // Send reply
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(format!(
+            r#"{{"sender": "bob", "content": "Reply text", "reply_to": "{original_id}"}}"#
+        ))
+        .dispatch();
+    let reply: serde_json::Value = res.into_json().unwrap();
+    let reply_id = reply["id"].as_str().unwrap();
+    assert_eq!(reply["reply_to"], original_id);
+
+    // Edit the reply
+    let res = client
+        .put(format!("/api/v1/rooms/{room_id}/messages/{reply_id}"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "bob", "content": "Edited reply"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let edited: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(edited["content"], "Edited reply");
+    assert_eq!(edited["reply_to"], original_id); // reply_to preserved
+    assert!(edited["edited_at"].as_str().is_some()); // has edited_at
+}
+
+// --- Stats update after deletions ---
+
+#[test]
+fn test_stats_update_after_message_deletion() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "stats-delete-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+    let admin_key = room["admin_key"].as_str().unwrap();
+
+    // Send 3 messages
+    for i in 1..=3 {
+        client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "Msg {i}"}}"#))
+            .dispatch();
+    }
+
+    // Verify initial count
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}"))
+        .dispatch();
+    let room_detail: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(room_detail["message_count"].as_i64().unwrap(), 3);
+
+    // Get message IDs
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages"))
+        .dispatch();
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    let msg_id = msgs[0]["id"].as_str().unwrap();
+
+    // Delete one message using admin key
+    let res = client
+        .delete(format!("/api/v1/rooms/{room_id}/messages/{msg_id}?sender=bot"))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // Verify count decreased
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages"))
+        .dispatch();
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 2);
+}
+
+// --- Room with description ---
+
+#[test]
+fn test_create_room_with_description() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "described-room", "description": "A room for testing descriptions"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let room: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(room["name"], "described-room");
+    assert_eq!(room["description"], "A room for testing descriptions");
+
+    // Verify it shows in room detail
+    let room_id = room["id"].as_str().unwrap();
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let detail: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(detail["description"], "A room for testing descriptions");
+}
+
+// --- Room created_by ---
+
+#[test]
+fn test_create_room_with_created_by() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "owned-room", "created_by": "nanook"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let room: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(room["created_by"], "nanook");
+}
