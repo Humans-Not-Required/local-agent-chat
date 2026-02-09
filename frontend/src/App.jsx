@@ -568,6 +568,59 @@ function SenderModal({ onSet }) {
   );
 }
 
+function AdminKeyModal({ roomName, adminKey, onDismiss }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(adminKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: select text
+      const el = document.getElementById('admin-key-text');
+      if (el) {
+        el.select();
+        document.execCommand('copy');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    }
+  };
+
+  return (
+    <div style={styles.modalOverlay}>
+      <div style={styles.modal}>
+        <div style={{ fontSize: '2rem', textAlign: 'center', marginBottom: 12 }}>🔑</div>
+        <h2 style={{ fontSize: '1.1rem', fontWeight: 600, textAlign: 'center', marginBottom: 4 }}>
+          Room Created!
+        </h2>
+        <p style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 16, fontSize: '0.85rem' }}>
+          <strong style={{ color: '#e2e8f0' }}>#{roomName}</strong> is ready. Save the admin key below — it's needed to delete the room or moderate messages.
+        </p>
+        <div style={styles.adminKeyBox}>
+          <input
+            id="admin-key-text"
+            readOnly
+            value={adminKey}
+            style={styles.adminKeyInput}
+            onClick={(e) => e.target.select()}
+          />
+          <button onClick={handleCopy} style={styles.adminKeyCopyBtn}>
+            {copied ? '✓ Copied' : 'Copy'}
+          </button>
+        </div>
+        <p style={{ color: '#f59e0b', fontSize: '0.75rem', textAlign: 'center', marginTop: 10, marginBottom: 16 }}>
+          ⚠️ This key is only shown once. Store it somewhere safe.
+        </p>
+        <button onClick={onDismiss} style={{ ...styles.btnPrimary, width: '100%' }}>
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // --- Main App ---
 
 export default function App() {
@@ -577,6 +630,7 @@ export default function App() {
   const [activeRoom, setActiveRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [adminKeyInfo, setAdminKeyInfo] = useState(null); // { roomName, adminKey }
   const [connected, setConnected] = useState(false);
   const [showSidebar, setShowSidebar] = useState(window.innerWidth > 768);
   const [typingUsers, setTypingUsers] = useState([]); // names of users currently typing
@@ -814,6 +868,10 @@ export default function App() {
         const room = await res.json();
         await fetchRooms();
         setActiveRoom(room);
+        // Show admin key if returned (only shown on creation)
+        if (room.admin_key) {
+          setAdminKeyInfo({ roomName: room.name, adminKey: room.admin_key });
+        }
       }
     } catch (e) { /* ignore */ }
   };
@@ -870,6 +928,13 @@ export default function App() {
 
   return (
     <div style={styles.container}>
+      {adminKeyInfo && (
+        <AdminKeyModal
+          roomName={adminKeyInfo.roomName}
+          adminKey={adminKeyInfo.adminKey}
+          onDismiss={() => setAdminKeyInfo(null)}
+        />
+      )}
       {/* Mobile header */}
       <div style={styles.mobileHeader}>
         <button onClick={() => setShowSidebar(!showSidebar)} style={styles.iconBtn}>
@@ -1250,6 +1315,38 @@ const styles = {
     width: '90%',
     maxWidth: 400,
     border: '1px solid #334155',
+  },
+  adminKeyBox: {
+    display: 'flex',
+    gap: 8,
+    alignItems: 'center',
+    background: '#0f172a',
+    border: '1px solid #334155',
+    borderRadius: 8,
+    padding: 6,
+  },
+  adminKeyInput: {
+    flex: 1,
+    background: 'transparent',
+    border: 'none',
+    color: '#60a5fa',
+    fontSize: '0.85rem',
+    fontFamily: 'monospace',
+    padding: '6px 8px',
+    outline: 'none',
+    minWidth: 0,
+  },
+  adminKeyCopyBtn: {
+    background: '#334155',
+    color: '#e2e8f0',
+    border: 'none',
+    borderRadius: 6,
+    padding: '6px 14px',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'background 0.15s',
   },
 };
 
