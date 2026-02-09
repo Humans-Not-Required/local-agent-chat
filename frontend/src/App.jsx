@@ -45,7 +45,7 @@ function senderColor(name) {
 
 // --- Components ---
 
-function RoomList({ rooms, activeRoom, onSelect, onCreateRoom }) {
+function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -87,25 +87,35 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom }) {
         </form>
       )}
       <div style={styles.roomList}>
-        {rooms.map(room => (
-          <div
-            key={room.id}
-            onClick={() => onSelect(room)}
-            style={{
-              ...styles.roomItem,
-              background: activeRoom?.id === room.id ? '#1e293b' : 'transparent',
-              borderLeft: activeRoom?.id === room.id ? '3px solid #3b82f6' : '3px solid transparent',
-            }}
-          >
-            <div style={{ fontWeight: 500, color: activeRoom?.id === room.id ? '#f1f5f9' : '#cbd5e1' }}>
-              #{room.name}
+        {rooms.map(room => {
+          const unread = unreadCounts[room.id] || 0;
+          return (
+            <div
+              key={room.id}
+              onClick={() => onSelect(room)}
+              style={{
+                ...styles.roomItem,
+                background: activeRoom?.id === room.id ? '#1e293b' : 'transparent',
+                borderLeft: activeRoom?.id === room.id ? '3px solid #3b82f6' : '3px solid transparent',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontWeight: unread > 0 ? 700 : 500, color: activeRoom?.id === room.id ? '#f1f5f9' : unread > 0 ? '#f1f5f9' : '#cbd5e1' }}>
+                  #{room.name}
+                </div>
+                {unread > 0 && (
+                  <span style={styles.unreadBadge}>
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+                {room.message_count || 0} msgs
+                {room.last_activity && ` · ${timeAgo(room.last_activity)}`}
+              </div>
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
-              {room.message_count || 0} msgs
-              {room.last_activity && ` · ${timeAgo(room.last_activity)}`}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {rooms.length === 0 && (
           <div style={{ padding: '16px', color: '#64748b', fontSize: '0.85rem' }}>No rooms yet</div>
         )}
@@ -542,18 +552,36 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [showSidebar, setShowSidebar] = useState(window.innerWidth > 768);
   const [typingUsers, setTypingUsers] = useState([]); // names of users currently typing
+  const [unreadCounts, setUnreadCounts] = useState({}); // roomId -> unread count
   const eventSourceRef = useRef(null);
   const lastMsgTimeRef = useRef(null);
   const typingTimeoutsRef = useRef({}); // sender -> timeout id
   const lastTypingSentRef = useRef(0); // timestamp of last typing notification sent
+  const lastSeenCountsRef = useRef(null);
+  if (lastSeenCountsRef.current === null) {
+    try {
+      lastSeenCountsRef.current = JSON.parse(localStorage.getItem('chat-last-seen-counts') || '{}');
+    } catch { lastSeenCountsRef.current = {}; }
+  }
 
-  // Fetch rooms
+  // Fetch rooms and update unread counts
   const fetchRooms = useCallback(async () => {
     try {
       const res = await fetch(`${API}/rooms`);
       if (res.ok) {
         const data = await res.json();
         setRooms(data);
+        // Compute unread counts based on last-seen message counts
+        const counts = {};
+        const seen = lastSeenCountsRef.current;
+        for (const room of data) {
+          const lastSeen = seen[room.id] || 0;
+          const total = room.message_count || 0;
+          if (total > lastSeen) {
+            counts[room.id] = total - lastSeen;
+          }
+        }
+        setUnreadCounts(counts);
         return data;
       }
     } catch (e) { /* ignore */ }
@@ -594,6 +622,12 @@ export default function App() {
           lastMsgTimeRef.current = msg.created_at;
           return [...prev, msg];
         });
+        // Update last-seen count for active room (we're reading it right now)
+        const seen = lastSeenCountsRef.current;
+        seen[roomId] = (seen[roomId] || 0) + 1;
+        try {
+          localStorage.setItem('chat-last-seen-counts', JSON.stringify(seen));
+        } catch { /* ignore */ }
         // Clear typing indicator when a message arrives from that sender
         setTypingUsers(prev => prev.filter(s => s !== msg.sender));
         if (typingTimeoutsRef.current[msg.sender]) {
@@ -662,6 +696,7 @@ export default function App() {
       if (data.length > 0 && !activeRoom) {
         const general = data.find(r => r.name === 'general') || data[0];
         setActiveRoom(general);
+        markRoomRead(general);
       }
     });
     // Refresh rooms periodically
@@ -717,8 +752,24 @@ export default function App() {
     setSender(name);
   };
 
+  // Mark a room as read (update last-seen count)
+  const markRoomRead = useCallback((room) => {
+    if (!room) return;
+    const count = room.message_count || 0;
+    lastSeenCountsRef.current[room.id] = count;
+    try {
+      localStorage.setItem('chat-last-seen-counts', JSON.stringify(lastSeenCountsRef.current));
+    } catch { /* ignore */ }
+    setUnreadCounts(prev => {
+      const next = { ...prev };
+      delete next[room.id];
+      return next;
+    });
+  }, []);
+
   const handleSelectRoom = (room) => {
     setActiveRoom(room);
+    markRoomRead(room);
     if (window.innerWidth <= 768) setShowSidebar(false);
   };
 
@@ -819,6 +870,7 @@ export default function App() {
             activeRoom={activeRoom}
             onSelect={handleSelectRoom}
             onCreateRoom={handleCreateRoom}
+            unreadCounts={unreadCounts}
           />
         )}
         <ChatArea
@@ -1108,6 +1160,18 @@ const styles = {
     animation: 'typingBounce 1.2s ease-in-out infinite',
     fontSize: '1rem',
     lineHeight: 1,
+  },
+  unreadBadge: {
+    background: '#3b82f6',
+    color: '#fff',
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    borderRadius: 10,
+    padding: '1px 7px',
+    minWidth: 18,
+    textAlign: 'center',
+    lineHeight: '16px',
+    flexShrink: 0,
   },
   iconBtn: {
     background: 'none',
