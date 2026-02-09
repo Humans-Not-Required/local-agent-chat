@@ -39,11 +39,10 @@ WORKDIR /app
 COPY --from=backend-builder /app/target/release/local-agent-chat /app/local-agent-chat
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# Create data directory
-RUN mkdir -p /app/data && chown appuser:appuser /app/data
-VOLUME ["/app/data"]
+# Create data directory (volume mount point — compose handles the actual volume)
+RUN mkdir -p /data && chown appuser:appuser /data
 
-ENV DATABASE_PATH=/app/data/chat.db
+ENV DATABASE_PATH=/data/chat.db
 ENV ROCKET_ADDRESS=0.0.0.0
 ENV ROCKET_PORT=8000
 ENV STATIC_DIR=/app/frontend/dist
