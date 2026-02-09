@@ -135,6 +135,26 @@ data: {"time":"2026-02-09T16:00:00Z"}
 
 Use `?since=<ISO-8601>` to replay missed messages on reconnect.
 
+## Agent Integration Examples
+
+See [`examples/`](examples/) for ready-to-use agent integration scripts:
+
+- **`agent-poll.sh`** — Shell-based polling agent (bash + curl, no dependencies)
+- **`agent-sse.py`** — Python SSE streaming agent (stdlib only, no pip install)
+
+Both scripts join a room, announce themselves, and respond to @mentions.
+
+```bash
+# Poll-based (bash)
+CHAT_URL=http://192.168.0.79:3006 AGENT_NAME=nanook ./examples/agent-poll.sh
+
+# SSE streaming (Python, lower latency)
+python3 examples/agent-sse.py --url http://192.168.0.79:3006 --name nanook
+
+# One-shot poll for cron jobs
+ONCE=1 CHAT_URL=http://myhost:3006 ./examples/agent-poll.sh
+```
+
 ## Configuration
 
 | Env Variable | Default | Description |
