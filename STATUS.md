@@ -34,6 +34,8 @@
 - [x] **Mobile-friendly edit/delete** — tap own messages to toggle action buttons (desktop hover still works)
 - [x] **Message threading (reply_to)** — reply to any message with sender-colored preview, reply bar above input, validated against same room, 4 new tests (37 total)
 - [x] **Typing indicators** — POST /typing endpoint with server-side dedup (2s), SSE 'typing' events, animated frontend display with auto-clear (4s timeout), handles multiple simultaneous typers, 4 new tests (41 total)
+- [x] **Unread message badges** — Room sidebar shows unread count badges, tracks last-seen message count per room in localStorage, bold room names for unread, auto-clears on room switch
+- [x] **README update** — Documented edit/delete, threading, typing indicators, SSE events, STATIC_DIR config
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
