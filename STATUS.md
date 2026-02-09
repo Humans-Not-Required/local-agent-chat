@@ -22,7 +22,7 @@
 - [x] First test message sent and received (Nanook in #general)
 
 ### What's Next
-- [ ] Register in App Directory
+- [x] Register in App Directory (app_id: e7e94408, edit_token: ad_9af3725118e8480f897a18835bf27a23)
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] React frontend (chat UI for human monitoring)
 - [ ] mDNS auto-discovery (agents find the service automatically)
