@@ -283,6 +283,82 @@ function DateSeparator({ date }) {
   );
 }
 
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function FileCard({ file, isOwn, sender, onDelete }) {
+  const color = senderColor(file.sender);
+  const isImage = file.content_type && file.content_type.startsWith('image/');
+  const downloadUrl = `${API}/files/${file.id}`;
+
+  return (
+    <div style={{
+      marginBottom: 16,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: isOwn ? 'flex-end' : 'flex-start',
+    }}>
+      <div style={{ fontSize: '0.8rem', fontWeight: 600, color, marginBottom: 4, paddingLeft: isOwn ? 0 : 4, paddingRight: isOwn ? 4 : 0 }}>
+        📎 {file.sender}
+      </div>
+      <div style={{
+        ...styles.fileBubble,
+        background: isOwn ? '#1e3a5f' : '#1e293b',
+        borderRadius: isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+        maxWidth: '75%',
+        position: 'relative',
+      }}>
+        {isImage && (
+          <a href={downloadUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginBottom: 8 }}>
+            <img
+              src={downloadUrl}
+              alt={file.filename}
+              style={styles.fileImagePreview}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          </a>
+        )}
+        <div style={styles.fileInfo}>
+          <div style={styles.fileIcon}>
+            {isImage ? '🖼️' : file.content_type?.includes('pdf') ? '📕' : file.content_type?.includes('json') ? '📋' : file.content_type?.includes('text') ? '📄' : '📦'}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.85rem', color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {file.filename}
+            </div>
+            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+              {formatFileSize(file.size)}
+            </div>
+          </div>
+          <a
+            href={downloadUrl}
+            download={file.filename}
+            style={styles.fileDownloadBtn}
+            title="Download"
+          >
+            ⬇
+          </a>
+          {isOwn && (
+            <button
+              onClick={() => onDelete(file.id)}
+              style={styles.fileDeleteBtn}
+              title="Delete file"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 6, textAlign: 'right' }}>
+          {formatTime(file.created_at)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TypingIndicator({ typingUsers }) {
   if (typingUsers.length === 0) return null;
 
@@ -307,13 +383,15 @@ function TypingIndicator({ typingUsers }) {
   );
 }
 
-function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessage, onTyping, typingUsers, loading, connected }) {
+function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onTyping, typingUsers, loading, connected }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null); // { id, sender, content }
   const messagesEndRef = useRef(null);
   const containerRef = useRef(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
 
   // Clear reply state when room changes
   useEffect(() => {
@@ -363,6 +441,33 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
     }
   };
 
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File too large. Maximum size is 5 MB.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        // reader.result is data:...;base64,XXXX — extract base64 part
+        const base64 = reader.result.split(',')[1];
+        await onUploadFile(file.name, file.type || 'application/octet-stream', base64);
+        setUploading(false);
+      };
+      reader.onerror = () => setUploading(false);
+      reader.readAsDataURL(file);
+    } catch {
+      setUploading(false);
+    }
+  };
+
   if (!room) {
     return (
       <div style={styles.chatArea}>
@@ -377,24 +482,36 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
     );
   }
 
-  // Group consecutive messages by sender and date
+  // Merge messages and files into a single timeline sorted by created_at
+  const timeline = [
+    ...messages.map(m => ({ ...m, _type: 'message' })),
+    ...(files || []).map(f => ({ ...f, _type: 'file' })),
+  ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  // Group consecutive messages by sender and date, with files as group-breakers
   const grouped = [];
   let currentGroup = null;
   let currentDate = null;
 
-  for (const msg of messages) {
-    const msgDate = formatDate(msg.created_at);
-    if (msgDate !== currentDate) {
+  for (const item of timeline) {
+    const itemDate = formatDate(item.created_at);
+    if (itemDate !== currentDate) {
       if (currentGroup) grouped.push(currentGroup);
       currentGroup = null;
-      currentDate = msgDate;
-      grouped.push({ type: 'date', date: msgDate });
+      currentDate = itemDate;
+      grouped.push({ type: 'date', date: itemDate });
     }
-    if (currentGroup && currentGroup.sender === msg.sender) {
-      currentGroup.messages.push(msg);
-    } else {
+    if (item._type === 'file') {
       if (currentGroup) grouped.push(currentGroup);
-      currentGroup = { type: 'messages', sender: msg.sender, messages: [msg] };
+      currentGroup = null;
+      grouped.push({ type: 'file', file: item });
+    } else {
+      if (currentGroup && currentGroup.sender === item.sender) {
+        currentGroup.messages.push(item);
+      } else {
+        if (currentGroup) grouped.push(currentGroup);
+        currentGroup = { type: 'messages', sender: item.sender, messages: [item] };
+      }
     }
   }
   if (currentGroup) grouped.push(currentGroup);
@@ -434,6 +551,17 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
         {grouped.map((item, i) => {
           if (item.type === 'date') {
             return <DateSeparator key={`date-${i}`} date={item.date} />;
+          }
+          if (item.type === 'file') {
+            return (
+              <FileCard
+                key={`file-${item.file.id}`}
+                file={item.file}
+                isOwn={item.file.sender === sender}
+                sender={sender}
+                onDelete={onDeleteFile}
+              />
+            );
           }
           return (
             <MessageGroup
@@ -484,6 +612,24 @@ function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessa
 
       {/* Input */}
       <form onSubmit={handleSubmit} style={styles.inputArea}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          style={{
+            ...styles.fileAttachBtn,
+            opacity: uploading ? 0.5 : 1,
+          }}
+          title={uploading ? 'Uploading...' : 'Attach file (max 5 MB)'}
+        >
+          {uploading ? '⏳' : '📎'}
+        </button>
         <textarea
           ref={inputRef}
           value={text}
@@ -629,6 +775,7 @@ export default function App() {
   const [rooms, setRooms] = useState([]);
   const [activeRoom, setActiveRoom] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [adminKeyInfo, setAdminKeyInfo] = useState(null); // { roomName, adminKey }
   const [connected, setConnected] = useState(false);
@@ -686,6 +833,17 @@ export default function App() {
     setLoading(false);
   }, []);
 
+  // Fetch files for a room
+  const fetchFiles = useCallback(async (roomId) => {
+    try {
+      const res = await fetch(`${API}/rooms/${roomId}/files`);
+      if (res.ok) {
+        const data = await res.json();
+        setFiles(data);
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
   // SSE connection
   const connectSSE = useCallback((roomId) => {
     if (eventSourceRef.current) {
@@ -730,6 +888,23 @@ export default function App() {
       try {
         const { id } = JSON.parse(e.data);
         setMessages(prev => prev.filter(m => m.id !== id));
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('file_uploaded', (e) => {
+      try {
+        const file = JSON.parse(e.data);
+        setFiles(prev => {
+          if (prev.some(f => f.id === file.id)) return prev;
+          return [...prev, file];
+        });
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('file_deleted', (e) => {
+      try {
+        const { id } = JSON.parse(e.data);
+        setFiles(prev => prev.filter(f => f.id !== id));
       } catch (err) { /* ignore */ }
     });
 
@@ -786,15 +961,19 @@ export default function App() {
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load messages + SSE when room changes
+  // Load messages + files + SSE when room changes
   useEffect(() => {
     if (!activeRoom) return;
     lastMsgTimeRef.current = null;
     setTypingUsers([]);
+    setFiles([]);
     // Clear all typing timeouts
     Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
     typingTimeoutsRef.current = {};
-    fetchMessages(activeRoom.id).then(() => {
+    Promise.all([
+      fetchMessages(activeRoom.id),
+      fetchFiles(activeRoom.id),
+    ]).then(() => {
       connectSSE(activeRoom.id);
     });
     return () => {
@@ -909,6 +1088,39 @@ export default function App() {
     } catch (e) { /* ignore */ }
   };
 
+  const handleUploadFile = async (filename, contentType, base64Data) => {
+    if (!activeRoom) return;
+    try {
+      const res = await fetch(`${API}/rooms/${activeRoom.id}/files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender,
+          filename,
+          content_type: contentType,
+          data: base64Data,
+        }),
+      });
+      if (res.ok) {
+        // SSE will pick up the file_uploaded event
+        fetchRooms(); // Update room stats
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  const handleDeleteFile = async (fileId) => {
+    if (!activeRoom) return;
+    try {
+      const res = await fetch(`${API}/rooms/${activeRoom.id}/files/${fileId}?sender=${encodeURIComponent(sender)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        // Remove locally immediately (SSE will also remove)
+        setFiles(prev => prev.filter(f => f.id !== fileId));
+      }
+    } catch (e) { /* ignore */ }
+  };
+
   const handleDeleteMessage = async (messageId) => {
     if (!activeRoom) return;
     try {
@@ -975,10 +1187,13 @@ export default function App() {
         <ChatArea
           room={activeRoom}
           messages={messages}
+          files={files}
           sender={sender}
           onSend={handleSend}
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
+          onDeleteFile={handleDeleteFile}
+          onUploadFile={handleUploadFile}
           onTyping={handleTyping}
           typingUsers={typingUsers}
           loading={loading}
@@ -1347,6 +1562,63 @@ const styles = {
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     transition: 'background 0.15s',
+  },
+  fileAttachBtn: {
+    background: 'none',
+    border: '1px solid #334155',
+    borderRadius: 8,
+    color: '#e2e8f0',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontSize: '1.1rem',
+    lineHeight: 1,
+    flexShrink: 0,
+    transition: 'background 0.15s',
+  },
+  fileBubble: {
+    padding: '10px 14px',
+    lineHeight: 1.5,
+    fontSize: '0.9rem',
+  },
+  fileImagePreview: {
+    maxWidth: '100%',
+    maxHeight: 200,
+    borderRadius: 8,
+    display: 'block',
+    objectFit: 'contain',
+  },
+  fileInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+  },
+  fileIcon: {
+    fontSize: '1.5rem',
+    flexShrink: 0,
+    lineHeight: 1,
+  },
+  fileDownloadBtn: {
+    background: '#334155',
+    color: '#e2e8f0',
+    border: 'none',
+    borderRadius: 6,
+    padding: '4px 10px',
+    cursor: 'pointer',
+    fontSize: '0.85rem',
+    textDecoration: 'none',
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+  },
+  fileDeleteBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#ef4444',
+    cursor: 'pointer',
+    fontSize: '0.85rem',
+    padding: '4px 6px',
+    flexShrink: 0,
+    lineHeight: 1,
   },
 };
 
