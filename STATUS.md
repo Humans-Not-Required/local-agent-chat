@@ -1,6 +1,6 @@
 # STATUS.md — Local Agent Chat
 
-## Current State: MVP Complete ✅
+## Current State: MVP Deployed ✅
 
 ### What's Done
 - [x] Core API: rooms CRUD, messages send/poll/stream
@@ -18,11 +18,12 @@
 - [x] CI/CD pipeline (GitHub Actions → ghcr.io)
 - [x] 24 integration tests, zero clippy warnings
 - [x] DESIGN.md, README.md, LICENSE (MIT)
+- [x] Deployed to staging (192.168.0.79:3006) — health check passing
+- [x] First test message sent and received (Nanook in #general)
 
 ### What's Next
-- [ ] Deploy to staging (192.168.0.79:3006)
 - [ ] Register in App Directory
-- [ ] Connect Nanook as first real user (test end-to-end)
+- [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] React frontend (chat UI for human monitoring)
 - [ ] mDNS auto-discovery (agents find the service automatically)
 - [ ] Message editing/deletion
@@ -32,10 +33,11 @@
 - [ ] Message threading (reply_to field)
 
 ### ⚠️ Gotchas
-- **GitHub Actions currently failing** for this repo because GitHub returns HTTP 500 during `actions/checkout` fetch (3 retries). This blocks ghcr.io image builds + staging deploy until GitHub stops 500ing.
+- **GitHub Actions currently failing** for this repo because GitHub returns HTTP 500 during `actions/checkout` fetch (3 retries). Docker image was built locally on staging as workaround. CI will auto-deploy when GitHub resolves.
 - GitHub org repo creation intermittently 500s (workaround used: create under nanookclaw, transfer to org)
 - No frontend yet — API-only MVP
 - Admin key is any Bearer token currently (no validation) — fine for LAN trust model
+- **Staging deploy was local build** — not from ghcr.io. When CI works again, Watchtower will auto-update.
 
 ## Architecture
 - Rust + Rocket 0.5 + SQLite (bundled)
