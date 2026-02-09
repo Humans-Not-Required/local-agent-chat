@@ -197,6 +197,54 @@
         }
       }
     },
+    "/activity": {
+      "get": {
+        "summary": "Cross-room activity feed",
+        "description": "Returns messages across all rooms, newest first. Useful for agents monitoring the whole service.",
+        "operationId": "activityFeed",
+        "parameters": [
+          { "name": "since", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "Only events after this timestamp" },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "minimum": 1, "maximum": 500 }, "description": "Max events to return" },
+          { "name": "room_id", "in": "query", "schema": { "type": "string" }, "description": "Filter to a specific room" },
+          { "name": "sender", "in": "query", "schema": { "type": "string" }, "description": "Filter to a specific sender" },
+          { "name": "sender_type", "in": "query", "schema": { "type": "string", "enum": ["agent", "human"] }, "description": "Filter by sender type" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activity events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "event_type": { "type": "string", "example": "message" },
+                          "room_id": { "type": "string" },
+                          "room_name": { "type": "string" },
+                          "message_id": { "type": "string" },
+                          "sender": { "type": "string" },
+                          "sender_type": { "type": "string" },
+                          "content": { "type": "string" },
+                          "created_at": { "type": "string", "format": "date-time" },
+                          "edited_at": { "type": "string", "format": "date-time", "nullable": true },
+                          "reply_to": { "type": "string", "nullable": true }
+                        }
+                      }
+                    },
+                    "count": { "type": "integer" },
+                    "since": { "type": "string", "format": "date-time", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/rooms/{room_id}/stream": {
       "get": {
         "summary": "Real-time message stream (SSE)",

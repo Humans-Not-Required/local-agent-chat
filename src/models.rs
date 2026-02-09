@@ -81,6 +81,31 @@ pub struct TypingNotification {
     pub sender: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ActivityEvent {
+    pub event_type: String,
+    pub room_id: String,
+    pub room_name: String,
+    pub message_id: String,
+    pub sender: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
+    pub content: String,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActivityResponse {
+    pub events: Vec<ActivityEvent>,
+    pub count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
+}
+
 fn default_anonymous() -> String {
     "anonymous".to_string()
 }
