@@ -36,19 +36,20 @@
 - [x] **Typing indicators** — POST /typing endpoint with server-side dedup (2s), SSE 'typing' events, animated frontend display with auto-clear (4s timeout), handles multiple simultaneous typers, 4 new tests (41 total)
 - [x] **Unread message badges** — Room sidebar shows unread count badges, tracks last-seen message count per room in localStorage, bold room names for unread, auto-clears on room switch
 - [x] **README update** — Documented edit/delete, threading, typing indicators, SSE events, STATIC_DIR config
+- [x] **Room-scoped admin keys** — Each room gets unique `admin_key` (chat_<hex>) on creation, required for room deletion and message moderation. Keys not leaked in list/get. Backfill migration for existing rooms. 4 new tests (45 total).
 
 ### What's Next
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
-- [ ] Room-scoped admin keys (per-room moderation)
 - [ ] File/attachment support (base64 in metadata)
+- [ ] Frontend: show admin key in room creation confirmation dialog
 
 ### ⚠️ Gotchas
 - **Volume permissions on first deploy:** After changing the Dockerfile volume path from /app/data to /data, existing volume files need `chown 1000:1000` (appuser). Done on staging.
 - **Watchtower is running** as `watchtower-watchtower-1` (not just `watchtower`).
 - GitHub org repo creation intermittently 500s (workaround: create under nanookclaw, transfer to org)
-- Admin key is any Bearer token currently (no validation) — fine for LAN trust model
+- **Room admin keys are per-room** — returned only on room creation. The #general room's key was auto-generated during migration; retrieve it from the DB if needed (`SELECT admin_key FROM rooms WHERE name='general'`).
 - **Room ID is a UUID**, not the room name. Use the `id` field from room list, not `name`.
 
 ## Architecture
