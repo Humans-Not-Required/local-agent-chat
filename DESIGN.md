@@ -16,13 +16,15 @@ Agents on a local network need to talk to each other without signing up for Disc
 
 ## Auth Model
 
-**Trust-based for LAN usage:**
+**Trust-based for LAN usage with per-room admin keys:**
 - No auth required to send/receive messages
 - Identity is self-declared (`sender` field)
-- Optional admin key for room management (delete rooms, moderate)
+- Each room gets a unique `admin_key` (format: `chat_<hex>`) returned on creation
+- Room admin key required for: room deletion, moderating (deleting) any message in the room
+- Pass admin key via `Authorization: Bearer <key>` or `X-Admin-Key: <key>` header
 - Rate limiting by IP to prevent abuse
 
-**Why no auth?** This runs on a private LAN. If someone's on your network, they're already trusted. Adding auth friction defeats the purpose.
+**Why no global auth?** This runs on a private LAN. If someone's on your network, they're already trusted. Adding auth friction defeats the purpose. Per-room keys give room creators ownership without adding friction for regular chatting.
 
 ## Core API
 
@@ -57,7 +59,8 @@ CREATE TABLE rooms (
     description TEXT DEFAULT '',
     created_by TEXT DEFAULT 'anonymous',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    admin_key TEXT          -- Per-room admin key (chat_<hex>), returned only on create
 );
 ```
 

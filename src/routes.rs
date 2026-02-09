@@ -1,4 +1,4 @@
-use crate::db::Db;
+use crate::db::{Db, generate_admin_key};
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
 use crate::rate_limit::RateLimiter;
@@ -115,17 +115,19 @@ pub fn create_room(
 
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
+    let admin_key = generate_admin_key();
     let conn = db.conn.lock().unwrap();
 
     match conn.execute(
-        "INSERT INTO rooms (id, name, description, created_by, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![&id, &name, &body.description, &body.created_by, &now, &now],
+        "INSERT INTO rooms (id, name, description, created_by, created_at, updated_at, admin_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![&id, &name, &body.description, &body.created_by, &now, &now, &admin_key],
     ) {
         Ok(_) => Ok(Json(serde_json::json!({
             "id": id,
             "name": name,
             "description": body.description,
             "created_by": body.created_by,
+            "admin_key": admin_key,
             "created_at": now,
             "updated_at": now
         }))),
@@ -208,20 +210,39 @@ pub fn get_room(
 pub fn delete_room(
     db: &State<Db>,
     room_id: &str,
-    _admin: AdminKey,
+    admin: AdminKey,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
     let conn = db.conn.lock().unwrap();
-    let deleted = conn
-        .execute("DELETE FROM rooms WHERE id = ?1", params![room_id])
-        .unwrap_or(0);
-    if deleted > 0 {
-        Ok(Json(serde_json::json!({"deleted": true})))
-    } else {
-        Err((
-            Status::NotFound,
-            Json(serde_json::json!({"error": "Room not found"})),
-        ))
+
+    // Fetch the room's admin key
+    let stored_key: Option<String> = conn
+        .query_row(
+            "SELECT admin_key FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Room not found"})),
+            )
+        })?;
+
+    // Validate admin key matches
+    match stored_key {
+        Some(ref key) if key == &admin.0 => {}
+        _ => {
+            return Err((
+                Status::Forbidden,
+                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
+            ));
+        }
     }
+
+    conn.execute("DELETE FROM rooms WHERE id = ?1", params![room_id])
+        .unwrap_or(0);
+
+    Ok(Json(serde_json::json!({"deleted": true})))
 }
 
 // --- Messages ---
@@ -471,12 +492,27 @@ pub fn delete_message(
             )
         })?;
 
-    // Admin can delete any message; otherwise sender must match
-    if admin.is_none() {
+    // Check if admin key matches the room's admin key
+    let is_room_admin = if let Some(ref admin_key) = admin {
+        let stored_key: Option<String> = conn
+            .query_row(
+                "SELECT admin_key FROM rooms WHERE id = ?1",
+                params![room_id],
+                |r| r.get(0),
+            )
+            .ok()
+            .flatten();
+        stored_key.as_deref() == Some(&admin_key.0)
+    } else {
+        false
+    };
+
+    // Room admin can delete any message; otherwise sender must match
+    if !is_room_admin {
         let sender = sender.ok_or_else(|| {
             (
                 Status::BadRequest,
-                Json(serde_json::json!({"error": "sender query parameter required (or use admin key)"})),
+                Json(serde_json::json!({"error": "sender query parameter required (or use room admin key)"})),
             )
         })?;
         if sender != existing_sender {
@@ -780,9 +816,11 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 4. Stream real-time: GET /api/v1/rooms/{room_id}/stream (SSE)
 
 ## Auth Model
-- No auth required. Identity is self-declared via the `sender` field.
+- No auth required for sending/receiving. Identity is self-declared via the `sender` field.
 - Trust-based: designed for private LAN usage.
-- Admin key (Bearer token) required only for room deletion.
+- Room admin key returned on room creation (e.g. `chat_<hex>`).
+- Room admin key required for room deletion and moderating messages.
+- Pass via `Authorization: Bearer <key>` or `X-Admin-Key: <key>`.
 
 ## Rooms
 - POST /api/v1/rooms — create room (body: {"name": "...", "description": "..."})

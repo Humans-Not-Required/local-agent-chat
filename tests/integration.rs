@@ -142,16 +142,40 @@ fn test_delete_room_with_admin() {
         .dispatch();
     let body: serde_json::Value = res.into_json().unwrap();
     let id = body["id"].as_str().unwrap();
+    let admin_key = body["admin_key"].as_str().unwrap();
 
     let res = client
         .delete(format!("/api/v1/rooms/{id}"))
-        .header(Header::new("Authorization", "Bearer test-admin-key"))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
 
     // Verify deleted
     let res = client.get(format!("/api/v1/rooms/{id}")).dispatch();
     assert_eq!(res.status(), Status::NotFound);
+}
+
+#[test]
+fn test_delete_room_wrong_admin_key() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "wrong-key-test"}"#)
+        .dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let id = body["id"].as_str().unwrap();
+
+    // Try deleting with wrong key
+    let res = client
+        .delete(format!("/api/v1/rooms/{id}"))
+        .header(Header::new("Authorization", "Bearer wrong-key"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Forbidden);
+
+    // Room should still exist
+    let res = client.get(format!("/api/v1/rooms/{id}")).dispatch();
+    assert_eq!(res.status(), Status::Ok);
 }
 
 // --- Messages ---
@@ -400,6 +424,7 @@ fn test_delete_room_cascades_messages() {
         .dispatch();
     let room: serde_json::Value = res.into_json().unwrap();
     let room_id = room["id"].as_str().unwrap();
+    let admin_key = room["admin_key"].as_str().unwrap();
 
     // Send a message
     client
@@ -408,11 +433,12 @@ fn test_delete_room_cascades_messages() {
         .body(r#"{"sender": "bot", "content": "test"}"#)
         .dispatch();
 
-    // Delete room
-    client
+    // Delete room with proper admin key
+    let res = client
         .delete(format!("/api/v1/rooms/{room_id}"))
-        .header(Header::new("Authorization", "Bearer admin"))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
         .dispatch();
+    assert_eq!(res.status(), Status::Ok);
 
     // Messages endpoint should 404
     let res = client
@@ -639,8 +665,15 @@ fn test_delete_message_no_sender() {
 fn test_delete_message_admin_override() {
     let client = test_client();
 
-    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
-    let room_id = rooms[0]["id"].as_str().unwrap();
+    // Create a room so we get the admin_key
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "admin-msg-del-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+    let admin_key = room["admin_key"].as_str().unwrap();
 
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/messages"))
@@ -650,12 +683,80 @@ fn test_delete_message_admin_override() {
     let msg: serde_json::Value = res.into_json().unwrap();
     let msg_id = msg["id"].as_str().unwrap();
 
-    // Admin deletes without matching sender
+    // Room admin deletes without matching sender
     let res = client
         .delete(format!("/api/v1/rooms/{room_id}/messages/{msg_id}"))
-        .header(Header::new("Authorization", "Bearer some-admin-key"))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
+}
+
+#[test]
+fn test_delete_message_wrong_admin_key() {
+    let client = test_client();
+
+    // Create a room so we get the admin_key
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "wrong-admin-msg-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"Bot","content":"Should not be deleted"}"#)
+        .dispatch();
+    let msg: serde_json::Value = res.into_json().unwrap();
+    let msg_id = msg["id"].as_str().unwrap();
+
+    // Wrong admin key — should fall back to sender check, which also fails (no sender param)
+    let res = client
+        .delete(format!("/api/v1/rooms/{room_id}/messages/{msg_id}"))
+        .header(Header::new("Authorization", "Bearer wrong-key"))
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_create_room_returns_admin_key() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "key-test"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    let key = body["admin_key"].as_str().unwrap();
+    assert!(key.starts_with("chat_"), "admin_key should start with 'chat_'");
+    assert!(key.len() > 10, "admin_key should be sufficiently long");
+}
+
+#[test]
+fn test_admin_key_not_in_room_list() {
+    let client = test_client();
+    // Create a room
+    client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "no-leak-test"}"#)
+        .dispatch();
+
+    // List rooms — admin_key should NOT be present
+    let res = client.get("/api/v1/rooms").dispatch();
+    let rooms: Vec<serde_json::Value> = res.into_json().unwrap();
+    for room in &rooms {
+        assert!(room.get("admin_key").is_none(), "admin_key should not be in room list");
+    }
+
+    // Get single room — admin_key should NOT be present
+    let room_id = rooms.iter().find(|r| r["name"] == "no-leak-test").unwrap()["id"].as_str().unwrap();
+    let res = client.get(format!("/api/v1/rooms/{room_id}")).dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    assert!(room.get("admin_key").is_none(), "admin_key should not be in room detail");
 }
 
 #[test]
