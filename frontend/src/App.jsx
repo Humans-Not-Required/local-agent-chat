@@ -114,7 +114,90 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom }) {
   );
 }
 
-function MessageGroup({ messages, isOwn }) {
+function MessageBubble({ msg, isOwn, onEdit, onDelete }) {
+  const [hovering, setHovering] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(msg.content);
+
+  const handleSaveEdit = () => {
+    const trimmed = editText.trim();
+    if (trimmed && trimmed !== msg.content) {
+      onEdit(msg.id, trimmed);
+    }
+    setEditing(false);
+  };
+
+  const handleEditKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSaveEdit();
+    }
+    if (e.key === 'Escape') {
+      setEditText(msg.content);
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        alignSelf: isOwn ? 'flex-end' : 'flex-start',
+        maxWidth: '75%',
+      }}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
+      {/* Action buttons on hover (own messages only) */}
+      {isOwn && hovering && !editing && (
+        <div style={styles.msgActions}>
+          <button
+            onClick={() => { setEditText(msg.content); setEditing(true); }}
+            style={styles.msgActionBtn}
+            title="Edit"
+          >✎</button>
+          <button
+            onClick={() => onDelete(msg.id)}
+            style={{ ...styles.msgActionBtn, color: '#ef4444' }}
+            title="Delete"
+          >✕</button>
+        </div>
+      )}
+      <div style={{
+        ...styles.messageBubble,
+        background: isOwn ? '#1e3a5f' : '#1e293b',
+        borderRadius: isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+      }}>
+        {editing ? (
+          <div>
+            <textarea
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              onKeyDown={handleEditKeyDown}
+              style={styles.editInput}
+              autoFocus
+              rows={2}
+            />
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setEditText(msg.content); setEditing(false); }} style={styles.editCancelBtn}>Cancel</button>
+              <button onClick={handleSaveEdit} style={styles.editSaveBtn}>Save</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</div>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
+              {msg.edited_at && <span style={{ fontStyle: 'italic' }}>(edited)</span>}
+              {formatTime(msg.created_at)}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MessageGroup({ messages, isOwn, onEdit, onDelete }) {
   const sender = messages[0].sender;
   const color = senderColor(sender);
 
@@ -124,18 +207,13 @@ function MessageGroup({ messages, isOwn }) {
         {sender}
       </div>
       {messages.map(msg => (
-        <div key={msg.id} style={{
-          ...styles.messageBubble,
-          background: isOwn ? '#1e3a5f' : '#1e293b',
-          borderRadius: isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-          alignSelf: isOwn ? 'flex-end' : 'flex-start',
-          maxWidth: '75%',
-        }}>
-          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</div>
-          <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, textAlign: 'right' }}>
-            {formatTime(msg.created_at)}
-          </div>
-        </div>
+        <MessageBubble
+          key={msg.id}
+          msg={msg}
+          isOwn={isOwn}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
       ))}
     </div>
   );
@@ -151,7 +229,7 @@ function DateSeparator({ date }) {
   );
 }
 
-function ChatArea({ room, messages, sender, onSend, loading, connected }) {
+function ChatArea({ room, messages, sender, onSend, onEditMessage, onDeleteMessage, loading, connected }) {
   const [text, setText] = useState('');
   const messagesEndRef = useRef(null);
   const containerRef = useRef(null);
@@ -261,6 +339,8 @@ function ChatArea({ room, messages, sender, onSend, loading, connected }) {
               key={`group-${i}`}
               messages={item.messages}
               isOwn={item.sender === sender}
+              onEdit={onEditMessage}
+              onDelete={onDeleteMessage}
             />
           );
         })}
@@ -403,6 +483,20 @@ export default function App() {
       } catch (err) { /* ignore */ }
     });
 
+    es.addEventListener('message_edited', (e) => {
+      try {
+        const updated = JSON.parse(e.data);
+        setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, content: updated.content, edited_at: updated.edited_at } : m));
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('message_deleted', (e) => {
+      try {
+        const { id } = JSON.parse(e.data);
+        setMessages(prev => prev.filter(m => m.id !== id));
+      } catch (err) { /* ignore */ }
+    });
+
     es.addEventListener('heartbeat', () => {
       setConnected(true);
     });
@@ -493,6 +587,35 @@ export default function App() {
     } catch (e) { /* ignore */ }
   };
 
+  const handleEditMessage = async (messageId, newContent) => {
+    if (!activeRoom) return;
+    try {
+      const res = await fetch(`${API}/rooms/${activeRoom.id}/messages/${messageId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender, content: newContent }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        // Update locally immediately (SSE will also update but this is snappier)
+        setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, content: updated.content, edited_at: updated.edited_at } : m));
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    if (!activeRoom) return;
+    try {
+      const res = await fetch(`${API}/rooms/${activeRoom.id}/messages/${messageId}?sender=${encodeURIComponent(sender)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        // Remove locally immediately (SSE will also remove)
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+      }
+    } catch (e) { /* ignore */ }
+  };
+
   if (!sender) {
     return <SenderModal onSet={handleSetSender} />;
   }
@@ -536,6 +659,8 @@ export default function App() {
           messages={messages}
           sender={sender}
           onSend={handleSend}
+          onEditMessage={handleEditMessage}
+          onDeleteMessage={handleDeleteMessage}
           loading={loading}
           connected={connected}
         />
@@ -713,6 +838,60 @@ const styles = {
     padding: '8px 16px',
     cursor: 'pointer',
     fontSize: '0.85rem',
+  },
+  msgActions: {
+    position: 'absolute',
+    top: -4,
+    right: 0,
+    display: 'flex',
+    gap: 2,
+    background: '#1e293b',
+    border: '1px solid #334155',
+    borderRadius: 6,
+    padding: '2px 4px',
+    zIndex: 5,
+    boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+  },
+  msgActionBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    padding: '2px 6px',
+    fontSize: '0.8rem',
+    borderRadius: 4,
+    lineHeight: 1,
+  },
+  editInput: {
+    width: '100%',
+    background: '#0f172a',
+    border: '1px solid #3b82f6',
+    borderRadius: 6,
+    padding: '6px 10px',
+    color: '#e2e8f0',
+    fontSize: '0.9rem',
+    resize: 'none',
+    fontFamily: 'inherit',
+    lineHeight: 1.5,
+  },
+  editSaveBtn: {
+    background: '#3b82f6',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 4,
+    padding: '4px 12px',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  editCancelBtn: {
+    background: '#334155',
+    color: '#cbd5e1',
+    border: 'none',
+    borderRadius: 4,
+    padding: '4px 12px',
+    fontSize: '0.75rem',
+    cursor: 'pointer',
   },
   iconBtn: {
     background: 'none',
