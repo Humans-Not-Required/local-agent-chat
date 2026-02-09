@@ -12,13 +12,16 @@ use std::env;
 
 pub fn rocket() -> rocket::Rocket<rocket::Build> {
     let db_path = env::var("DATABASE_PATH").unwrap_or_else(|_| "data/chat.db".to_string());
+    rocket_with_db(&db_path)
+}
 
+pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
     // Ensure data directory exists
-    if let Some(parent) = std::path::Path::new(&db_path).parent() {
+    if let Some(parent) = std::path::Path::new(db_path).parent() {
         std::fs::create_dir_all(parent).ok();
     }
 
-    let db = Db::new(&db_path);
+    let db = Db::new(db_path);
     let events = EventBus::new();
     let rate_limiter = RateLimiter::new();
 

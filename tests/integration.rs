@@ -2,15 +2,13 @@ use rocket::http::{ContentType, Header, Status};
 use rocket::local::blocking::Client;
 
 fn test_client() -> Client {
-    // Use unique temp DB for each test
+    // Use unique temp DB for each test (avoids parallel test contention)
     let db_path = format!(
         "/tmp/chat_test_{}.db",
         uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
     );
-    // SAFETY: Tests run with --test-threads=1 or each test uses a unique DB path
-    unsafe { std::env::set_var("DATABASE_PATH", &db_path) };
 
-    let rocket = local_agent_chat::rocket();
+    let rocket = local_agent_chat::rocket_with_db(&db_path);
     Client::tracked(rocket).expect("valid rocket instance")
 }
 
