@@ -383,6 +383,61 @@ function TypingIndicator({ typingUsers }) {
   );
 }
 
+function ParticipantPanel({ roomId, onClose }) {
+  const [participants, setParticipants] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`${API}/rooms/${roomId}/participants`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (!cancelled) { setParticipants(data); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [roomId]);
+
+  return (
+    <div className="participant-panel-wrapper" style={styles.participantPanel}>
+      <div style={styles.participantHeader}>
+        <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>👥 Members ({participants.length})</span>
+        <button onClick={onClose} style={styles.iconBtn}>✕</button>
+      </div>
+      <div style={styles.participantList}>
+        {loading && <div style={{ padding: 16, color: '#64748b', fontSize: '0.85rem' }}>Loading...</div>}
+        {!loading && participants.length === 0 && (
+          <div style={{ padding: 16, color: '#64748b', fontSize: '0.85rem' }}>No messages yet</div>
+        )}
+        {participants.map(p => {
+          const color = senderColor(p.sender);
+          const typeIcon = p.sender_type === 'human' ? '👤' : p.sender_type === 'agent' ? '🤖' : '❓';
+          const isRecent = (Date.now() - new Date(p.last_seen).getTime()) < 3600000; // active in last hour
+          return (
+            <div key={p.sender} style={styles.participantItem}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: isRecent ? '#34d399' : '#475569',
+                }} />
+                <span style={{ fontSize: '1rem', flexShrink: 0 }}>{typeIcon}</span>
+                <span style={{
+                  fontWeight: 600, color, fontSize: '0.85rem',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {p.sender}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2, paddingLeft: 26 }}>
+                {p.message_count} msg{p.message_count !== 1 ? 's' : ''} · {timeAgo(p.last_seen)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onTyping, typingUsers, loading, connected }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null); // { id, sender, content }
@@ -392,10 +447,12 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
 
-  // Clear reply state when room changes
+  // Clear reply state and close participants when room changes
   useEffect(() => {
     setReplyTo(null);
+    setShowParticipants(false);
   }, [room?.id]);
 
   useEffect(() => {
@@ -527,6 +584,18 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => setShowParticipants(prev => !prev)}
+            style={{
+              ...styles.iconBtn,
+              background: showParticipants ? '#334155' : 'none',
+              fontSize: '0.9rem',
+              padding: '4px 8px',
+            }}
+            title="Members"
+          >
+            👥
+          </button>
           <div style={{
             width: 8, height: 8, borderRadius: '50%',
             background: connected ? '#34d399' : '#ef4444',
@@ -537,7 +606,8 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Messages + Participants layout */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
       <div ref={containerRef} onScroll={handleScroll} style={styles.messageContainer}>
         {loading && (
           <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Loading messages...</div>
@@ -576,6 +646,10 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
           );
         })}
         <div ref={messagesEndRef} />
+      </div>
+      {showParticipants && room && (
+        <ParticipantPanel roomId={room.id} onClose={() => setShowParticipants(false)} />
+      )}
       </div>
 
       {/* Typing indicator */}
@@ -1617,6 +1691,30 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
   },
+  participantPanel: {
+    width: 240,
+    minWidth: 240,
+    borderLeft: '1px solid #1e293b',
+    background: '#0f172a',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  participantHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px',
+    borderBottom: '1px solid #1e293b',
+  },
+  participantList: {
+    flex: 1,
+    overflowY: 'auto',
+  },
+  participantItem: {
+    padding: '8px 12px',
+    borderBottom: '1px solid rgba(30,41,59,0.5)',
+  },
   fileDeleteBtn: {
     background: 'none',
     border: 'none',
@@ -1656,6 +1754,21 @@ if (typeof window !== 'undefined') {
     }
     @media (min-width: 769px) {
       .chat-sidebar-backdrop { display: none !important; }
+    }
+    @media (max-width: 768px) {
+      .participant-panel-wrapper {
+        position: fixed !important;
+        right: 0; top: 45px; bottom: 0;
+        z-index: 50;
+        width: 260px !important;
+        min-width: 260px !important;
+        box-shadow: -4px 0 24px rgba(0,0,0,0.5);
+        animation: slideInRight 0.2s ease-out;
+      }
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
     }
     @keyframes slideIn {
       from { transform: translateX(-100%); }

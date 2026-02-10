@@ -67,6 +67,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::delete_message,
                 routes::get_messages,
                 routes::activity_feed,
+                routes::room_participants,
                 routes::notify_typing,
                 routes::message_stream,
                 routes::upload_file,

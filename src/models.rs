@@ -138,3 +138,15 @@ fn default_anonymous() -> String {
 fn default_content_type() -> String {
     "application/octet-stream".to_string()
 }
+
+// --- Room Participants ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Participant {
+    pub sender: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
+    pub message_count: i64,
+    pub first_seen: String,
+    pub last_seen: String,
+}

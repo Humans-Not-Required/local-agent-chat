@@ -2303,3 +2303,107 @@ fn test_edit_preserves_seq() {
     // Seq should be preserved (not changed)
     assert_eq!(edited["seq"].as_i64().unwrap(), original_seq);
 }
+
+// --- Room Participants ---
+
+#[test]
+fn test_participants_empty_room() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "empty-room"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let res = client.get(format!("/api/v1/rooms/{room_id}/participants")).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let participants: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(participants.len(), 0);
+}
+
+#[test]
+fn test_participants_nonexistent_room() {
+    let client = test_client();
+    let res = client.get("/api/v1/rooms/nonexistent-uuid/participants").dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+}
+
+#[test]
+fn test_participants_basic() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "test-room"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send messages from different senders
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Alice", "content": "Hello", "sender_type": "human"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Bob", "content": "Hi", "sender_type": "agent"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Alice", "content": "How are you?"}"#)
+        .dispatch();
+
+    let res = client.get(format!("/api/v1/rooms/{room_id}/participants")).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let participants: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(participants.len(), 2);
+
+    // Sorted by last_seen DESC — Alice sent the last message so should be first
+    assert_eq!(participants[0]["sender"].as_str().unwrap(), "Alice");
+    assert_eq!(participants[0]["message_count"].as_i64().unwrap(), 2);
+    assert_eq!(participants[0]["sender_type"].as_str().unwrap(), "human");
+    assert!(participants[0]["first_seen"].is_string());
+    assert!(participants[0]["last_seen"].is_string());
+
+    assert_eq!(participants[1]["sender"].as_str().unwrap(), "Bob");
+    assert_eq!(participants[1]["message_count"].as_i64().unwrap(), 1);
+    assert_eq!(participants[1]["sender_type"].as_str().unwrap(), "agent");
+}
+
+#[test]
+fn test_participants_sender_type_uses_latest() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "type-change-room"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // First message as agent
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Charlie", "content": "I'm an agent", "sender_type": "agent"}"#)
+        .dispatch();
+
+    // Second message as human (changed)
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Charlie", "content": "Actually I'm human", "sender_type": "human"}"#)
+        .dispatch();
+
+    let res = client.get(format!("/api/v1/rooms/{room_id}/participants")).dispatch();
+    let participants: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(participants.len(), 1);
+    // Should use the latest sender_type
+    assert_eq!(participants[0]["sender_type"].as_str().unwrap(), "human");
+    assert_eq!(participants[0]["message_count"].as_i64().unwrap(), 2);
+}
