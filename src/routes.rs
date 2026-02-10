@@ -599,6 +599,7 @@ pub fn delete_message(
 }
 
 #[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>")]
+#[allow(clippy::too_many_arguments)]
 pub fn get_messages(
     db: &State<Db>,
     room_id: &str,
@@ -706,6 +707,7 @@ pub fn get_messages(
 // --- Activity Feed (cross-room) ---
 
 #[get("/api/v1/activity?<since>&<limit>&<room_id>&<sender>&<sender_type>&<after>")]
+#[allow(clippy::too_many_arguments)]
 pub fn activity_feed(
     db: &State<Db>,
     since: Option<&str>,
