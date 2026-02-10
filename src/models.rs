@@ -36,6 +36,7 @@ pub struct Message {
     pub reply_to: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sender_type: Option<String>,
+    pub seq: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,6 +97,7 @@ pub struct ActivityEvent {
     pub edited_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_to: Option<String>,
+    pub seq: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

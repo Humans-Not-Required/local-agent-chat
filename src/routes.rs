@@ -368,9 +368,14 @@ pub fn send_message(
         }
     }
 
+    // Compute next monotonic seq
+    let seq: i64 = conn
+        .query_row("SELECT COALESCE(MAX(seq), 0) + 1 FROM messages", [], |r| r.get(0))
+        .unwrap_or(1);
+
     conn.execute(
-        "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, reply_to, sender_type) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &reply_to, &sender_type],
+        "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, reply_to, sender_type, seq) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &reply_to, &sender_type, seq],
     )
     .map_err(|e| {
         (
@@ -396,6 +401,7 @@ pub fn send_message(
         edited_at: None,
         reply_to,
         sender_type,
+        seq,
     };
 
     // Publish event for SSE
@@ -485,7 +491,7 @@ pub fn edit_message(
     // Fetch the updated message
     let msg = conn
         .query_row(
-            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type FROM messages WHERE id = ?1",
+            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE id = ?1",
             params![message_id],
             |row| {
                 let metadata_str: String = row.get(4)?;
@@ -499,6 +505,7 @@ pub fn edit_message(
                     edited_at: row.get(6)?,
                     reply_to: row.get(7)?,
                     sender_type: row.get(8)?,
+                    seq: row.get(9)?,
                 })
             },
         )
@@ -591,7 +598,7 @@ pub fn delete_message(
     Ok(Json(serde_json::json!({"deleted": true})))
 }
 
-#[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>")]
+#[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>")]
 pub fn get_messages(
     db: &State<Db>,
     room_id: &str,
@@ -600,6 +607,7 @@ pub fn get_messages(
     before: Option<&str>,
     sender: Option<&str>,
     sender_type: Option<&str>,
+    after: Option<i64>,
 ) -> Result<Json<Vec<Message>>, (Status, Json<serde_json::Value>)> {
     let conn = db.conn.lock().unwrap();
 
@@ -622,10 +630,15 @@ pub fn get_messages(
 
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
-    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type FROM messages WHERE room_id = ?1");
+    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE room_id = ?1");
     let mut param_values: Vec<String> = vec![room_id.to_string()];
     let mut idx = 2;
 
+    if let Some(after_val) = after {
+        sql.push_str(&format!(" AND seq > ?{idx}"));
+        param_values.push(after_val.to_string());
+        idx += 1;
+    }
     if let Some(since_val) = since {
         sql.push_str(&format!(" AND created_at > ?{idx}"));
         param_values.push(since_val.to_string());
@@ -647,7 +660,7 @@ pub fn get_messages(
         idx += 1;
     }
 
-    sql.push_str(&format!(" ORDER BY created_at ASC LIMIT ?{idx}"));
+    sql.push_str(&format!(" ORDER BY seq ASC LIMIT ?{idx}"));
     param_values.push(limit.to_string());
 
     let mut stmt = conn.prepare(&sql).map_err(|e| {
@@ -675,6 +688,7 @@ pub fn get_messages(
                 edited_at: row.get(6)?,
                 reply_to: row.get(7)?,
                 sender_type: row.get(8)?,
+                seq: row.get(9)?,
             })
         })
         .map_err(|e| {
@@ -691,7 +705,7 @@ pub fn get_messages(
 
 // --- Activity Feed (cross-room) ---
 
-#[get("/api/v1/activity?<since>&<limit>&<room_id>&<sender>&<sender_type>")]
+#[get("/api/v1/activity?<since>&<limit>&<room_id>&<sender>&<sender_type>&<after>")]
 pub fn activity_feed(
     db: &State<Db>,
     since: Option<&str>,
@@ -699,17 +713,23 @@ pub fn activity_feed(
     room_id: Option<&str>,
     sender: Option<&str>,
     sender_type: Option<&str>,
+    after: Option<i64>,
 ) -> Json<ActivityResponse> {
     let conn = db.conn.lock().unwrap();
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
     let mut sql = String::from(
-        "SELECT m.id, m.room_id, r.name, m.sender, m.sender_type, m.content, m.created_at, m.edited_at, m.reply_to \
+        "SELECT m.id, m.room_id, r.name, m.sender, m.sender_type, m.content, m.created_at, m.edited_at, m.reply_to, m.seq \
          FROM messages m JOIN rooms r ON m.room_id = r.id WHERE 1=1"
     );
     let mut param_values: Vec<String> = vec![];
     let mut idx = 1;
 
+    if let Some(after_val) = after {
+        sql.push_str(&format!(" AND m.seq > ?{idx}"));
+        param_values.push(after_val.to_string());
+        idx += 1;
+    }
     if let Some(since_val) = since {
         sql.push_str(&format!(" AND m.created_at > ?{idx}"));
         param_values.push(since_val.to_string());
@@ -731,7 +751,7 @@ pub fn activity_feed(
         idx += 1;
     }
 
-    sql.push_str(&format!(" ORDER BY m.created_at DESC LIMIT ?{idx}"));
+    sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
     param_values.push(limit.to_string());
 
     let mut stmt = conn.prepare(&sql).unwrap();
@@ -753,6 +773,7 @@ pub fn activity_feed(
                 created_at: row.get(6)?,
                 edited_at: row.get(7)?,
                 reply_to: row.get(8)?,
+                seq: row.get(9)?,
             })
         })
         .unwrap()
@@ -848,22 +869,55 @@ pub fn notify_typing(
 
 // --- SSE Stream ---
 
-#[get("/api/v1/rooms/<room_id>/stream?<since>")]
+#[get("/api/v1/rooms/<room_id>/stream?<since>&<after>")]
 pub fn message_stream(
     db: &State<Db>,
     events: &State<EventBus>,
     room_id: &str,
     since: Option<&str>,
+    after: Option<i64>,
 ) -> EventStream![] {
     let mut rx = events.sender.subscribe();
     let room_id = room_id.to_string();
 
-    // Replay missed messages if `since` provided
-    let replay: Vec<Message> = if let Some(since_val) = since {
+    // Replay missed messages if `after` or `since` provided
+    let replay: Vec<Message> = if let Some(after_val) = after {
+        // Preferred: cursor-based replay using monotonic seq
         let conn = db.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY created_at ASC LIMIT 100",
+                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE room_id = ?1 AND seq > ?2 ORDER BY seq ASC LIMIT 100",
+            )
+            .ok();
+        if let Some(ref mut s) = stmt {
+            s.query_map(params![&room_id, after_val], |row| {
+                let metadata_str: String = row.get(4)?;
+                Ok(Message {
+                    id: row.get(0)?,
+                    room_id: row.get(1)?,
+                    sender: row.get(2)?,
+                    content: row.get(3)?,
+                    metadata: serde_json::from_str(&metadata_str)
+                        .unwrap_or(serde_json::json!({})),
+                    created_at: row.get(5)?,
+                    edited_at: row.get(6)?,
+                    reply_to: row.get(7)?,
+                    sender_type: row.get(8)?,
+                    seq: row.get(9)?,
+                })
+            })
+            .ok()
+            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default()
+        } else {
+            vec![]
+        }
+    } else if let Some(since_val) = since {
+        // Backward compat: timestamp-based replay
+        let conn = db.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY seq ASC LIMIT 100",
             )
             .ok();
         if let Some(ref mut s) = stmt {
@@ -880,6 +934,7 @@ pub fn message_stream(
                     edited_at: row.get(6)?,
                     reply_to: row.get(7)?,
                     sender_type: row.get(8)?,
+                    seq: row.get(9)?,
                 })
             })
             .ok()
@@ -1269,14 +1324,14 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - POST /api/v1/rooms/{id}/messages — send message (body: {"sender": "...", "content": "...", "reply_to": "msg-id (optional)"})
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
-- GET /api/v1/rooms/{id}/messages?since=&limit=&before=&sender=&sender_type= — poll messages (sender_type: agent|human)
-- GET /api/v1/rooms/{id}/stream?since= — SSE real-time stream (events: message, message_edited, message_deleted, typing)
+- GET /api/v1/rooms/{id}/messages?after=<seq>&since=&limit=&before=&sender=&sender_type= — poll messages. Use `after=<seq>` for reliable cursor-based pagination (preferred). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer.
+- GET /api/v1/rooms/{id}/stream?after=<seq>&since= — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Events: message, message_edited, message_deleted, typing
 
 ## Typing Indicators
 - POST /api/v1/rooms/{id}/typing — notify typing (body: {"sender": "..."}). Ephemeral, not stored. Deduped server-side (2s per sender).
 
 ## Activity Feed
-- GET /api/v1/activity?since=&limit=&room_id=&sender=&sender_type= — cross-room activity feed (newest first). Returns all messages across rooms since a timestamp. Useful for agents monitoring the whole service.
+- GET /api/v1/activity?after=<seq>&since=&limit=&room_id=&sender=&sender_type= — cross-room activity feed (newest first). Use `after=<seq>` for cursor-based pagination (preferred). Returns all messages across rooms. Each event includes a `seq` field for cursor tracking.
 
 ## Files / Attachments
 - POST /api/v1/rooms/{id}/files — upload file (body: {"sender": "...", "filename": "...", "content_type": "image/png", "data": "<base64>"})

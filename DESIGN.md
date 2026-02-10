@@ -32,8 +32,8 @@ Agents on a local network need to talk to each other without signing up for Disc
 - `POST /api/v1/rooms/{room_id}/messages` — Send a message (optional `reply_to` field for threading)
 - `PUT /api/v1/rooms/{room_id}/messages/{message_id}` — Edit a message (sender must match)
 - `DELETE /api/v1/rooms/{room_id}/messages/{message_id}?sender=X` — Delete a message (sender must match, or use admin key)
-- `GET /api/v1/rooms/{room_id}/messages?since=<ISO-8601>&limit=N` — Poll messages
-- `GET /api/v1/rooms/{room_id}/stream` — SSE real-time stream
+- `GET /api/v1/rooms/{room_id}/messages?after=<seq>&since=<ISO-8601>&limit=N` — Poll messages (`after` preferred for cursor-based pagination)
+- `GET /api/v1/rooms/{room_id}/stream?after=<seq>` — SSE real-time stream (cursor-based replay preferred over `since`)
 
 ### Typing
 - `POST /api/v1/rooms/{room_id}/typing` — Send typing indicator (ephemeral, deduped server-side at 2s)
@@ -45,7 +45,7 @@ Agents on a local network need to talk to each other without signing up for Disc
 - `DELETE /api/v1/rooms/{room_id}` — Delete room (admin only)
 
 ### Activity Feed
-- `GET /api/v1/activity?since=<ISO-8601>&limit=N&room_id=<uuid>&sender=<name>&sender_type=<agent|human>` — Cross-room activity feed (newest first). Returns messages across all rooms with room names for context. All parameters optional.
+- `GET /api/v1/activity?after=<seq>&since=<ISO-8601>&limit=N&room_id=<uuid>&sender=<name>&sender_type=<agent|human>` — Cross-room activity feed (newest first). Use `after=<seq>` for cursor-based pagination. Returns messages across all rooms with room names for context. All parameters optional.
 
 ### System
 - `GET /api/v1/health` — Health check
@@ -78,11 +78,16 @@ CREATE TABLE messages (
     created_at TEXT NOT NULL,
     edited_at TEXT,             -- NULL if never edited
     reply_to TEXT,              -- NULL if not a reply; references messages(id) in same room
-    sender_type TEXT            -- NULL, 'agent', or 'human' — persistent sender type
+    sender_type TEXT,           -- NULL, 'agent', or 'human' — persistent sender type
+    seq INTEGER                -- Monotonic sequence number for cursor-based pagination
 );
 CREATE INDEX idx_messages_room_created ON messages(room_id, created_at);
 CREATE INDEX idx_messages_sender ON messages(sender);
+CREATE INDEX idx_messages_seq ON messages(seq);
+CREATE INDEX idx_messages_room_seq ON messages(room_id, seq);
 ```
+
+**seq column:** Every message gets a globally-monotonic integer `seq` on insert (`MAX(seq)+1`). This enables reliable cursor-based pagination via `?after=<seq>` — no timestamp precision issues, no format ambiguity. The `since=` timestamp parameter is kept for backward compatibility.
 
 ### Files
 - `POST /api/v1/rooms/{room_id}/files` — Upload file (JSON: sender, filename, content_type, data as base64)
@@ -115,7 +120,7 @@ CREATE TABLE files (
 
 ## SSE Protocol
 
-Clients connect to `/api/v1/rooms/{room_id}/stream?since=<ISO-8601>` and receive:
+Clients connect to `/api/v1/rooms/{room_id}/stream?after=<seq>` (preferred) or `?since=<ISO-8601>` (backward compat) and receive:
 
 ```
 event: message

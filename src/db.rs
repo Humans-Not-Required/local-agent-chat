@@ -62,6 +62,11 @@ impl Db {
         // Add sender_type column for persistent sender type tracking (agent/human)
         conn.execute_batch("ALTER TABLE messages ADD COLUMN sender_type TEXT;").ok();
 
+        // Add monotonic seq column for cursor-based pagination
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN seq INTEGER;").ok();
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(seq);").ok();
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_messages_room_seq ON messages(room_id, seq);").ok();
+
         // Files table for attachments
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS files (
@@ -78,6 +83,32 @@ impl Db {
             CREATE INDEX IF NOT EXISTS idx_files_sender ON files(sender);",
         )
         .expect("Failed to create files table");
+
+        // Backfill seq for existing messages that don't have one
+        let needs_seq_backfill: i64 = conn
+            .query_row("SELECT COUNT(*) FROM messages WHERE seq IS NULL", [], |r| r.get(0))
+            .unwrap_or(0);
+        if needs_seq_backfill > 0 {
+            let mut stmt = conn
+                .prepare("SELECT id FROM messages WHERE seq IS NULL ORDER BY created_at ASC, id ASC")
+                .unwrap();
+            let ids: Vec<String> = stmt
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect();
+            drop(stmt);
+            let max_seq: i64 = conn
+                .query_row("SELECT COALESCE(MAX(seq), 0) FROM messages", [], |r| r.get(0))
+                .unwrap_or(0);
+            for (i, id) in ids.iter().enumerate() {
+                conn.execute(
+                    "UPDATE messages SET seq = ?1 WHERE id = ?2",
+                    params![max_seq + (i as i64) + 1, &id],
+                )
+                .ok();
+            }
+        }
 
         // Backfill admin_key for existing rooms that don't have one
         let mut stmt = conn
