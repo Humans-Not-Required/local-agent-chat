@@ -60,7 +60,7 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts }) {
   };
 
   return (
-    <div style={styles.sidebar}>
+    <div className="chat-sidebar" style={styles.sidebar}>
       <div style={styles.sidebarHeader}>
         <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>💬 Rooms</h2>
         <button onClick={() => setCreating(!creating)} style={styles.iconBtn} title="Create room">+</button>
@@ -1148,7 +1148,7 @@ export default function App() {
         />
       )}
       {/* Mobile header */}
-      <div style={styles.mobileHeader}>
+      <div className="chat-mobile-header" data-mobile-header style={styles.mobileHeader}>
         <button onClick={() => setShowSidebar(!showSidebar)} style={styles.iconBtn}>
           {showSidebar ? '✕' : '☰'}
         </button>
@@ -1176,13 +1176,20 @@ export default function App() {
 
       <div style={styles.main}>
         {showSidebar && (
-          <RoomList
-            rooms={rooms}
-            activeRoom={activeRoom}
-            onSelect={handleSelectRoom}
-            onCreateRoom={handleCreateRoom}
-            unreadCounts={unreadCounts}
-          />
+          <>
+            {/* Backdrop overlay for mobile */}
+            <div
+              className="chat-sidebar-backdrop"
+              onClick={() => { if (window.innerWidth <= 768) setShowSidebar(false); }}
+            />
+            <RoomList
+              rooms={rooms}
+              activeRoom={activeRoom}
+              onSelect={handleSelectRoom}
+              onCreateRoom={handleCreateRoom}
+              unreadCounts={unreadCounts}
+            />
+          </>
         )}
         <ChatArea
           room={activeRoom}
@@ -1628,7 +1635,31 @@ if (typeof window !== 'undefined') {
   style.textContent = `
     @media (max-width: 768px) {
       .chat-mobile-header { display: flex !important; }
-      .chat-sidebar { position: fixed; left: 0; top: 45px; bottom: 0; z-index: 50; width: 260px; }
+      .chat-sidebar {
+        position: fixed !important;
+        left: 0; top: 45px; bottom: 0;
+        z-index: 50;
+        width: 280px !important;
+        min-width: 280px !important;
+        background: #0f172a !important;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+        animation: slideIn 0.2s ease-out;
+      }
+      .chat-sidebar-backdrop {
+        display: block !important;
+        position: fixed;
+        inset: 0;
+        top: 45px;
+        background: rgba(0,0,0,0.5);
+        z-index: 40;
+      }
+    }
+    @media (min-width: 769px) {
+      .chat-sidebar-backdrop { display: none !important; }
+    }
+    @keyframes slideIn {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0); }
     }
     @keyframes typingBounce {
       0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
