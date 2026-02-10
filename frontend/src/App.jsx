@@ -1291,8 +1291,10 @@ const styles = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    height: '100vh',
+    height: '100dvh',
+    maxHeight: '100dvh',
     background: '#0f172a',
+    overflow: 'hidden',
   },
   mobileHeader: {
     display: 'none',
@@ -1731,6 +1733,15 @@ const styles = {
 if (typeof window !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = `
+    /* iOS Safari 100vh fix - fallback for browsers without dvh support */
+    @supports not (height: 100dvh) {
+      #root > div {
+        height: 100vh !important;
+        height: -webkit-fill-available !important;
+        max-height: 100vh !important;
+        max-height: -webkit-fill-available !important;
+      }
+    }
     @media (max-width: 768px) {
       .chat-mobile-header { display: flex !important; }
       .chat-sidebar {
@@ -1751,6 +1762,10 @@ if (typeof window !== 'undefined') {
         background: rgba(0,0,0,0.5);
         z-index: 40;
       }
+    }
+    /* Prevent iOS bounce scroll on main layout */
+    @media (max-width: 768px) {
+      body { position: fixed; width: 100%; }
     }
     @media (min-width: 769px) {
       .chat-sidebar-backdrop { display: none !important; }
