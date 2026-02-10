@@ -86,7 +86,8 @@
           { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 500 } },
           { "name": "before", "in": "query", "schema": { "type": "string", "format": "date-time" } },
           { "name": "sender", "in": "query", "schema": { "type": "string" } },
-          { "name": "sender_type", "in": "query", "schema": { "type": "string", "enum": ["agent", "human"] }, "description": "Filter by sender type" }
+          { "name": "sender_type", "in": "query", "schema": { "type": "string", "enum": ["agent", "human"] }, "description": "Filter by sender type" },
+          { "name": "exclude_sender", "in": "query", "schema": { "type": "string" }, "description": "Comma-separated sender names to exclude. Useful for multi-agent environments to filter out sibling agents and prevent reply loops." }
         ],
         "responses": {
           "200": { "description": "Array of messages" },
@@ -207,7 +208,8 @@
           { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "minimum": 1, "maximum": 500 }, "description": "Max events to return" },
           { "name": "room_id", "in": "query", "schema": { "type": "string" }, "description": "Filter to a specific room" },
           { "name": "sender", "in": "query", "schema": { "type": "string" }, "description": "Filter to a specific sender" },
-          { "name": "sender_type", "in": "query", "schema": { "type": "string", "enum": ["agent", "human"] }, "description": "Filter by sender type" }
+          { "name": "sender_type", "in": "query", "schema": { "type": "string", "enum": ["agent", "human"] }, "description": "Filter by sender type" },
+          { "name": "exclude_sender", "in": "query", "schema": { "type": "string" }, "description": "Comma-separated sender names to exclude from results" }
         ],
         "responses": {
           "200": {

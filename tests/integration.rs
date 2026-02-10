@@ -2407,3 +2407,173 @@ fn test_participants_sender_type_uses_latest() {
     assert_eq!(participants[0]["sender_type"].as_str().unwrap(), "human");
     assert_eq!(participants[0]["message_count"].as_i64().unwrap(), 2);
 }
+
+// --- Exclude Sender Filter ---
+
+#[test]
+fn test_exclude_sender_single() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "exclude-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Three senders
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Hello from Nanook"}"#)
+        .dispatch();
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "Hello from Forge"}"#)
+        .dispatch();
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Drift", "content": "Hello from Drift"}"#)
+        .dispatch();
+
+    // Exclude Forge
+    let res = client.get(format!("/api/v1/rooms/{room_id}/messages?exclude_sender=Forge")).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 2);
+    assert!(msgs.iter().all(|m| m["sender"].as_str().unwrap() != "Forge"));
+    assert!(msgs.iter().any(|m| m["sender"].as_str().unwrap() == "Nanook"));
+    assert!(msgs.iter().any(|m| m["sender"].as_str().unwrap() == "Drift"));
+}
+
+#[test]
+fn test_exclude_sender_multiple_comma_separated() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "exclude-multi"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "From Nanook"}"#)
+        .dispatch();
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "From Forge"}"#)
+        .dispatch();
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Drift", "content": "From Drift"}"#)
+        .dispatch();
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Lux", "content": "From Lux"}"#)
+        .dispatch();
+
+    // Exclude Forge and Drift (comma-separated)
+    let res = client.get(format!("/api/v1/rooms/{room_id}/messages?exclude_sender=Forge,Drift")).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 2);
+    let senders: Vec<&str> = msgs.iter().map(|m| m["sender"].as_str().unwrap()).collect();
+    assert!(senders.contains(&"Nanook"));
+    assert!(senders.contains(&"Lux"));
+    assert!(!senders.contains(&"Forge"));
+    assert!(!senders.contains(&"Drift"));
+}
+
+#[test]
+fn test_exclude_sender_with_after_filter() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "exclude-after"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send messages and track seq
+    let res = client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "First"}"#)
+        .dispatch();
+    let msg1: serde_json::Value = res.into_json().unwrap();
+    let seq1 = msg1["seq"].as_i64().unwrap();
+
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "Second"}"#)
+        .dispatch();
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Third"}"#)
+        .dispatch();
+
+    // after=seq1, exclude Forge — should only get Nanook's "Third"
+    let res = client.get(format!("/api/v1/rooms/{room_id}/messages?after={seq1}&exclude_sender=Forge")).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0]["sender"].as_str().unwrap(), "Nanook");
+    assert_eq!(msgs[0]["content"].as_str().unwrap(), "Third");
+}
+
+#[test]
+fn test_exclude_sender_activity_feed() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "exclude-activity"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Activity from Nanook"}"#)
+        .dispatch();
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "Activity from Forge"}"#)
+        .dispatch();
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Drift", "content": "Activity from Drift"}"#)
+        .dispatch();
+
+    // Exclude Forge from activity feed
+    let res = client.get(format!("/api/v1/activity?room_id={room_id}&exclude_sender=Forge")).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    let events = body["events"].as_array().unwrap();
+    assert_eq!(events.len(), 2);
+    assert!(events.iter().all(|e| e["sender"].as_str().unwrap() != "Forge"));
+}
+
+#[test]
+fn test_exclude_sender_empty_string_ignored() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "exclude-empty"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Hello"}"#)
+        .dispatch();
+
+    // Empty exclude_sender should return all messages
+    let res = client.get(format!("/api/v1/rooms/{room_id}/messages?exclude_sender=")).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 1);
+}

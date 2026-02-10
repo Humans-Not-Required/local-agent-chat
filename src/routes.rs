@@ -598,7 +598,7 @@ pub fn delete_message(
     Ok(Json(serde_json::json!({"deleted": true})))
 }
 
-#[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>")]
+#[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>&<exclude_sender>")]
 #[allow(clippy::too_many_arguments)]
 pub fn get_messages(
     db: &State<Db>,
@@ -609,6 +609,7 @@ pub fn get_messages(
     sender: Option<&str>,
     sender_type: Option<&str>,
     after: Option<i64>,
+    exclude_sender: Option<&str>,
 ) -> Result<Json<Vec<Message>>, (Status, Json<serde_json::Value>)> {
     let conn = db.conn.lock().unwrap();
 
@@ -660,6 +661,18 @@ pub fn get_messages(
         param_values.push(sender_type_val.to_string());
         idx += 1;
     }
+    if let Some(exclude_val) = exclude_sender {
+        // Support comma-separated list: ?exclude_sender=Forge,Drift,Lux
+        let excluded: Vec<&str> = exclude_val.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        if !excluded.is_empty() {
+            let placeholders: Vec<String> = excluded.iter().enumerate().map(|(i, _)| format!("?{}", idx + i)).collect();
+            sql.push_str(&format!(" AND sender NOT IN ({})", placeholders.join(",")));
+            for name in &excluded {
+                param_values.push(name.to_string());
+            }
+            idx += excluded.len();
+        }
+    }
 
     sql.push_str(&format!(" ORDER BY seq ASC LIMIT ?{idx}"));
     param_values.push(limit.to_string());
@@ -706,7 +719,7 @@ pub fn get_messages(
 
 // --- Activity Feed (cross-room) ---
 
-#[get("/api/v1/activity?<since>&<limit>&<room_id>&<sender>&<sender_type>&<after>")]
+#[get("/api/v1/activity?<since>&<limit>&<room_id>&<sender>&<sender_type>&<after>&<exclude_sender>")]
 #[allow(clippy::too_many_arguments)]
 pub fn activity_feed(
     db: &State<Db>,
@@ -716,6 +729,7 @@ pub fn activity_feed(
     sender: Option<&str>,
     sender_type: Option<&str>,
     after: Option<i64>,
+    exclude_sender: Option<&str>,
 ) -> Json<ActivityResponse> {
     let conn = db.conn.lock().unwrap();
     let limit = limit.unwrap_or(50).clamp(1, 500);
@@ -751,6 +765,17 @@ pub fn activity_feed(
         sql.push_str(&format!(" AND m.sender_type = ?{idx}"));
         param_values.push(sender_type_val.to_string());
         idx += 1;
+    }
+    if let Some(exclude_val) = exclude_sender {
+        let excluded: Vec<&str> = exclude_val.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        if !excluded.is_empty() {
+            let placeholders: Vec<String> = excluded.iter().enumerate().map(|(i, _)| format!("?{}", idx + i)).collect();
+            sql.push_str(&format!(" AND m.sender NOT IN ({})", placeholders.join(",")));
+            for name in &excluded {
+                param_values.push(name.to_string());
+            }
+            idx += excluded.len();
+        }
     }
 
     sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
@@ -1395,14 +1420,14 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - POST /api/v1/rooms/{id}/messages — send message (body: {"sender": "...", "content": "...", "reply_to": "msg-id (optional)"})
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
-- GET /api/v1/rooms/{id}/messages?after=<seq>&since=&limit=&before=&sender=&sender_type= — poll messages. Use `after=<seq>` for reliable cursor-based pagination (preferred). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer.
+- GET /api/v1/rooms/{id}/messages?after=<seq>&since=&limit=&before=&sender=&sender_type=&exclude_sender= — poll messages. Use `after=<seq>` for reliable cursor-based pagination (preferred). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer. Use `exclude_sender=Name1,Name2` to filter out messages from specific senders (useful for multi-agent environments to prevent reply loops).
 - GET /api/v1/rooms/{id}/stream?after=<seq>&since= — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Events: message, message_edited, message_deleted, typing
 
 ## Typing Indicators
 - POST /api/v1/rooms/{id}/typing — notify typing (body: {"sender": "..."}). Ephemeral, not stored. Deduped server-side (2s per sender).
 
 ## Activity Feed
-- GET /api/v1/activity?after=<seq>&since=&limit=&room_id=&sender=&sender_type= — cross-room activity feed (newest first). Use `after=<seq>` for cursor-based pagination (preferred). Returns all messages across rooms. Each event includes a `seq` field for cursor tracking.
+- GET /api/v1/activity?after=<seq>&since=&limit=&room_id=&sender=&sender_type=&exclude_sender= — cross-room activity feed (newest first). Use `after=<seq>` for cursor-based pagination (preferred). Returns all messages across rooms. Each event includes a `seq` field for cursor tracking. Use `exclude_sender=Name1,Name2` to filter out specific senders.
 
 ## Participants
 - GET /api/v1/rooms/{id}/participants — list unique senders in a room with stats (sender, sender_type, message_count, first_seen, last_seen). Sorted by last_seen descending (most recent first). Derived from message history.

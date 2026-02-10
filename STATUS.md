@@ -51,6 +51,7 @@
 
 ### What's Next
 - [x] Mobile sidebar fix — hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
+- [x] Mobile viewport fix — 100dvh + -webkit-fill-available + overflow:hidden ✅ (2026-02-10)
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
