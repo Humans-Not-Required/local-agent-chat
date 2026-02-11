@@ -45,6 +45,22 @@ function senderColor(name) {
 
 // --- Components ---
 
+function ChatLogo({ size = 24, color = '#60a5fa', style: extraStyle }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0, ...extraStyle }}
+    >
+      <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" fill="none" />
+      <path d="M8 10h0M12 10h0M16 10h0" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <path d="M8 14c1.5 2 6.5 2 8 0" stroke={color} strokeWidth="2" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
 function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -62,7 +78,10 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts }) {
   return (
     <div className="chat-sidebar" style={styles.sidebar}>
       <div style={styles.sidebarHeader}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>💬 Rooms</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ChatLogo size={22} />
+          <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>Rooms</h2>
+        </div>
         <button onClick={() => setCreating(!creating)} style={styles.iconBtn} title="Create room">+</button>
       </div>
       {creating && (
@@ -119,6 +138,11 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts }) {
         {rooms.length === 0 && (
           <div style={{ padding: '16px', color: '#64748b', fontSize: '0.85rem' }}>No rooms yet</div>
         )}
+      </div>
+      {/* Branding footer */}
+      <div style={styles.sidebarFooter}>
+        <ChatLogo size={16} color="#475569" />
+        <span style={{ fontSize: '0.7rem', color: '#475569' }}>Local Agent Chat</span>
       </div>
     </div>
   );
@@ -529,7 +553,9 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
       <div style={styles.chatArea}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748b' }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>💬</div>
+            <div style={{ marginBottom: 12 }}>
+              <ChatLogo size={56} />
+            </div>
             <div style={{ fontSize: '1.1rem', fontWeight: 500 }}>Local Agent Chat</div>
             <div style={{ fontSize: '0.85rem', marginTop: 8 }}>Select a room to start chatting</div>
           </div>
@@ -576,10 +602,11 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
     <div style={styles.chatArea}>
       {/* Header */}
       <div style={styles.chatHeader}>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ChatLogo size={20} />
           <span style={{ fontWeight: 600, fontSize: '1rem' }}>#{room.name}</span>
           {room.description && (
-            <span style={{ color: '#64748b', fontSize: '0.85rem', marginLeft: 12 }}>{room.description}</span>
+            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{room.description}</span>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -737,7 +764,9 @@ function SenderModal({ onSet }) {
   return (
     <div style={styles.modalOverlay}>
       <div style={styles.modal}>
-        <div style={{ fontSize: '2rem', textAlign: 'center', marginBottom: 12 }}>💬</div>
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <ChatLogo size={48} />
+        </div>
         <h2 style={{ fontSize: '1.2rem', fontWeight: 600, textAlign: 'center', marginBottom: 4 }}>Local Agent Chat</h2>
         <p style={{ color: '#94a3b8', textAlign: 'center', marginBottom: 20, fontSize: '0.85rem' }}>
           Choose a name to start chatting. No signup required.
@@ -1323,6 +1352,13 @@ const styles = {
     justifyContent: 'space-between',
     padding: '16px 12px 12px',
     borderBottom: '1px solid #1e293b',
+  },
+  sidebarFooter: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '10px 12px',
+    borderTop: '1px solid #1e293b',
   },
   roomList: {
     flex: 1,
