@@ -497,6 +497,11 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
     onSend(text.trim(), replyTo?.id || null);
     setText('');
     setReplyTo(null);
+    // Reset textarea height after send
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.overflowY = 'hidden';
+    }
   };
 
   const handleReply = (msg) => {
@@ -504,8 +509,19 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
     inputRef.current?.focus();
   };
 
+  // Auto-resize textarea to fit content
+  const autoResize = (el) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    // Clamp between 1 row (~24px + padding) and ~6 rows (~160px)
+    const maxHeight = 160;
+    el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
+    el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
+  };
+
   const handleTextChange = (e) => {
     setText(e.target.value);
+    autoResize(e.target);
     if (e.target.value.trim()) {
       onTyping();
     }
@@ -1425,6 +1441,7 @@ const styles = {
     padding: '12px 16px',
     borderTop: '1px solid #1e293b',
     background: '#0f172a',
+    alignItems: 'flex-end',
   },
   messageInput: {
     flex: 1,
@@ -1437,6 +1454,10 @@ const styles = {
     resize: 'none',
     fontFamily: 'inherit',
     lineHeight: 1.5,
+    minHeight: '42px',
+    maxHeight: '160px',
+    overflowY: 'hidden',
+    transition: 'height 0.1s ease',
   },
   sendBtn: {
     background: '#3b82f6',

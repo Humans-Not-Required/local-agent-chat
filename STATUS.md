@@ -48,6 +48,7 @@
 - [x] **Frontend file upload/display UI** — 📎 upload button in input area, file cards interleaved in chat timeline (merged with messages by created_at), image previews, file type icons, download/delete buttons, SSE real-time sync for file_uploaded/file_deleted, upload loading state.
 - [x] **Monotonic seq cursor pagination** — `seq INTEGER` column on messages table, globally monotonic (MAX+1 on insert). `?after=<seq>` param on GET messages, activity feed, and SSE stream. Fixes timestamp precision issues with `since=`. Backward compat preserved (`since=` still works). Migration auto-backfills existing messages. 9 new tests (86 total).
 - [x] **Room participant lists** — `GET /api/v1/rooms/{room_id}/participants` returns unique senders with sender_type, message_count, first_seen, last_seen. Frontend 👥 button in chat header toggles participant panel. Uses latest non-null sender_type per sender. Mobile-responsive slide-in panel. 4 new tests (90 total).
+- [x] **Auto-expanding message input** — Textarea auto-grows up to ~6 lines (160px) as user types, collapses back to single line after send. Input area buttons align to bottom. Smooth CSS transition. Prevents iOS auto-zoom (16px font). Works across all screen sizes.
 
 ### What's Next
 - [x] Mobile sidebar fix — hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
@@ -55,6 +56,8 @@
 - [x] Reply loop prevention — `exclude_sender` API param + sibling-agent.sh example ✅ (2026-02-10)
 - [x] **Move live indicator** to the left of the members list button ✅ (2026-02-11)
 - [x] **Desktop members list persistence** — members panel stays open when switching rooms ✅ (2026-02-11)
+- [x] **ChatLogo SVG component** — Favicon SVG extracted into reusable component. Visible in sidebar header, login modal, empty state, chat room header, and sidebar footer branding. Replaces emoji placeholders with consistent visual identity ✅ (2026-02-11)
+- [x] **Auto-expanding message input** — Textarea grows as text is entered (up to ~6 lines / 160px max), shrinks back after send. Buttons align to bottom of input area. Smooth transition. Works on all screen sizes ✅ (2026-02-11)
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
