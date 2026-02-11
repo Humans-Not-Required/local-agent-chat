@@ -449,10 +449,9 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
   const [uploading, setUploading] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
 
-  // Clear reply state and close participants when room changes
+  // Clear reply state when room changes (keep participants panel open on desktop)
   useEffect(() => {
     setReplyTo(null);
-    setShowParticipants(false);
   }, [room?.id]);
 
   useEffect(() => {
@@ -584,6 +583,13 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: connected ? '#34d399' : '#ef4444',
+          }} />
+          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+            {connected ? 'Live' : 'Reconnecting...'}
+          </span>
           <button
             onClick={() => setShowParticipants(prev => !prev)}
             style={{
@@ -596,13 +602,6 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
           >
             👥
           </button>
-          <div style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: connected ? '#34d399' : '#ef4444',
-          }} />
-          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-            {connected ? 'Live' : 'Reconnecting...'}
-          </span>
         </div>
       </div>
 
