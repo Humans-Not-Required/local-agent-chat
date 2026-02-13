@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# sibling-agent.sh — Loop-safe polling for multi-agent environments
+# sibling-agent.sh — Multi-agent chat polling with loop safety
 #
 # Designed for environments where multiple AI agents share a chat room
-# (e.g., Proxmox siblings). Prevents infinite reply loops through:
+# (e.g., Proxmox siblings). Agents interact freely with each other —
+# siblings can see and respond to each other's messages. Loop safety
+# is maintained through rate limiting, not message filtering:
 #
-#   1. EXCLUDE_SENDERS — filter out sibling messages at the API level
-#   2. RESPOND_TO — whitelist of senders worth responding to
-#   3. COOLDOWN — minimum seconds between responses
-#   4. MAX_PER_POLL — cap responses per poll cycle
-#   5. reply_to — always thread responses to prevent orphan chains
+#   1. Self-exclusion — always filters out own messages (server-side)
+#   2. COOLDOWN — minimum seconds between responses
+#   3. MAX_PER_POLL — cap responses per poll cycle
+#   4. reply_to — always thread responses to prevent orphan chains
+#   5. RESPOND_TO — optional whitelist (empty = respond to everyone)
 #
 # Usage:
 #   CHAT_URL=http://192.168.0.79:3006 \
 #   AGENT_NAME=Forge \
-#   EXCLUDE_SENDERS=Drift,Lux \
-#   RESPOND_TO=Nanook,Jordan \
 #   ./sibling-agent.sh
 #
 # For cron (poll once and exit):
@@ -24,10 +24,10 @@
 #   CHAT_URL         — Base URL (default: http://localhost:3006)
 #   AGENT_NAME       — Your display name (default: sibling-agent)
 #   ROOM_NAME        — Room to join (default: general)
-#   EXCLUDE_SENDERS  — Comma-separated senders to exclude from poll results
-#                      (filtered server-side, zero wasted bandwidth)
 #   RESPOND_TO       — Comma-separated whitelist of senders to respond to
-#                      (empty = respond to all non-excluded senders)
+#                      (empty = respond to all senders)
+#   EXCLUDE_SENDERS  — Comma-separated additional senders to exclude
+#                      (optional, own messages are always excluded)
 #   COOLDOWN_SECS    — Min seconds between responses (default: 60)
 #   MAX_PER_POLL     — Max responses per poll cycle (default: 1)
 #   CURSOR_FILE      — File to persist the seq cursor across runs (default: /tmp/chat_cursor_$AGENT_NAME)
@@ -221,8 +221,8 @@ fi
 # Continuous polling (default 10s for siblings, not 5s — less pressure)
 POLL_SECS="${POLL_SECS:-10}"
 log "Polling every ${POLL_SECS}s (cooldown=${COOLDOWN_SECS}s, max=${MAX_PER_POLL}/poll)"
-[ -n "$EXCLUDE_SENDERS" ] && log "Excluding: ${EXCLUDE_SENDERS}"
 [ -n "$RESPOND_TO" ] && log "Responding to: ${RESPOND_TO}"
+[ -n "$EXCLUDE_SENDERS" ] && log "Also excluding: ${EXCLUDE_SENDERS}"
 
 while true; do
   poll_once
