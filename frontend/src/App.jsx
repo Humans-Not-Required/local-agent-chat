@@ -467,6 +467,146 @@ function TypingIndicator({ typingUsers }) {
   );
 }
 
+function SearchPanel({ onClose, rooms, onSelectRoom }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const inputRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const doSearch = useCallback(async (q) => {
+    if (!q.trim()) {
+      setResults([]);
+      setSearched(false);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch(`${API}/search?q=${encodeURIComponent(q.trim())}&limit=50`);
+      if (res.ok) {
+        const data = await res.json();
+        setResults(data);
+      }
+    } catch (e) { /* ignore */ }
+    setSearching(false);
+    setSearched(true);
+  }, []);
+
+  const handleChange = (e) => {
+    const val = e.target.value;
+    setQuery(val);
+    // Debounce search by 300ms
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doSearch(val), 300);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') onClose();
+    if (e.key === 'Enter') {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      doSearch(query);
+    }
+  };
+
+  const handleResultClick = (result) => {
+    // Find the room and navigate to it
+    const room = rooms.find(r => r.id === result.room_id);
+    if (room) {
+      onSelectRoom(room);
+      onClose();
+    }
+  };
+
+  // Highlight matching text in content
+  const highlightMatch = (content, q) => {
+    if (!q.trim() || !content) return content;
+    const idx = content.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) return content;
+    const before = content.slice(0, idx);
+    const match = content.slice(idx, idx + q.length);
+    const after = content.slice(idx + q.length);
+    return React.createElement(React.Fragment, null,
+      before,
+      React.createElement('mark', {
+        style: { background: '#3b82f6', color: '#fff', borderRadius: 2, padding: '0 1px' }
+      }, match),
+      after
+    );
+  };
+
+  return (
+    <div style={styles.searchPanel}>
+      <div style={styles.searchHeader}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+          <span style={{ color: '#64748b', fontSize: '1rem' }}>🔍</span>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Search messages across all rooms..."
+            style={styles.searchInput}
+          />
+          {query && (
+            <button
+              onClick={() => { setQuery(''); setResults([]); setSearched(false); inputRef.current?.focus(); }}
+              style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.9rem', padding: '2px 6px' }}
+            >✕</button>
+          )}
+        </div>
+        <button onClick={onClose} style={styles.searchCloseBtn}>Close</button>
+      </div>
+      <div style={styles.searchResults}>
+        {searching && (
+          <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Searching...</div>
+        )}
+        {!searching && searched && results.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+            <div style={{ fontSize: '1.2rem', marginBottom: 8 }}>No results found</div>
+            <div style={{ fontSize: '0.85rem' }}>Try different keywords</div>
+          </div>
+        )}
+        {!searching && !searched && (
+          <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+            <div style={{ fontSize: '1.2rem', marginBottom: 8 }}>🔍</div>
+            <div style={{ fontSize: '0.85rem' }}>Search messages across all rooms</div>
+            <div style={{ fontSize: '0.75rem', marginTop: 4 }}>Press Enter or just start typing</div>
+          </div>
+        )}
+        {results.map(r => (
+          <div
+            key={r.id}
+            onClick={() => handleResultClick(r)}
+            style={styles.searchResultItem}
+            onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 600 }}>
+                  #{r.room_name || 'unknown'}
+                </span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: senderColor(r.sender) }}>
+                  {r.sender_type === 'human' ? '👤' : '🤖'} {r.sender}
+                </span>
+              </div>
+              <span style={{ fontSize: '0.7rem', color: '#475569' }}>{timeAgo(r.created_at)}</span>
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              {highlightMatch(r.content, query)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ParticipantPanel({ roomId, onClose }) {
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -522,7 +662,7 @@ function ParticipantPanel({ roomId, onClose }) {
   );
 }
 
-function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onTyping, typingUsers, loading, connected }) {
+function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onTyping, typingUsers, loading, connected, rooms, onSelectRoom }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null); // { id, sender, content }
   const messagesEndRef = useRef(null);
@@ -532,6 +672,7 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   // Clear reply state when room changes (keep participants panel open on desktop)
   useEffect(() => {
@@ -563,6 +704,18 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
       inputRef.current.style.overflowY = 'hidden';
     }
   };
+
+  // Keyboard shortcut: Ctrl+K / Cmd+K to toggle search
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const handleReply = (msg) => {
     setReplyTo({ id: msg.id, sender: msg.sender, content: msg.content });
@@ -696,6 +849,18 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
             {connected ? 'Live' : 'Reconnecting...'}
           </span>
           <button
+            onClick={() => setShowSearch(true)}
+            style={{
+              ...styles.iconBtn,
+              background: showSearch ? '#334155' : 'none',
+              fontSize: '0.9rem',
+              padding: '4px 8px',
+            }}
+            title="Search messages"
+          >
+            🔍
+          </button>
+          <button
             onClick={() => setShowParticipants(prev => !prev)}
             style={{
               ...styles.iconBtn,
@@ -710,7 +875,17 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
         </div>
       </div>
 
+      {/* Search overlay */}
+      {showSearch && (
+        <SearchPanel
+          onClose={() => setShowSearch(false)}
+          rooms={rooms || []}
+          onSelectRoom={(room) => { onSelectRoom?.(room); setShowSearch(false); }}
+        />
+      )}
+
       {/* Messages + Participants layout */}
+      {!showSearch && (
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
       <div ref={containerRef} onScroll={handleScroll} style={styles.messageContainer}>
         {loading && (
@@ -755,12 +930,13 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
         <ParticipantPanel roomId={room.id} onClose={() => setShowParticipants(false)} />
       )}
       </div>
+      )}
 
       {/* Typing indicator */}
-      <TypingIndicator typingUsers={typingUsers} />
+      {!showSearch && <TypingIndicator typingUsers={typingUsers} />}
 
       {/* Scroll to bottom button */}
-      {!autoScroll && (
+      {!showSearch && !autoScroll && (
         <button
           onClick={() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -773,7 +949,7 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
       )}
 
       {/* Reply bar */}
-      {replyTo && (
+      {!showSearch && replyTo && (
         <div style={styles.replyBar}>
           <div style={{ width: 3, background: senderColor(replyTo.sender), borderRadius: 2, flexShrink: 0 }} />
           <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -789,6 +965,7 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
       )}
 
       {/* Input */}
+      {!showSearch && (
       <form onSubmit={handleSubmit} style={styles.inputArea}>
         <input
           ref={fileInputRef}
@@ -824,6 +1001,7 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
           Send
         </button>
       </form>
+      )}
     </div>
   );
 }
@@ -1385,6 +1563,8 @@ export default function App() {
           typingUsers={typingUsers}
           loading={loading}
           connected={connected}
+          rooms={rooms}
+          onSelectRoom={handleSelectRoom}
         />
       </div>
     </div>
@@ -1856,6 +2036,52 @@ const styles = {
     padding: '4px 6px',
     flexShrink: 0,
     lineHeight: 1,
+  },
+  searchPanel: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  searchHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '10px 16px',
+    borderBottom: '1px solid #1e293b',
+    background: '#0f172a',
+  },
+  searchInput: {
+    flex: 1,
+    background: 'transparent',
+    border: 'none',
+    color: '#e2e8f0',
+    fontSize: '0.95rem',
+    outline: 'none',
+    fontFamily: 'inherit',
+    padding: '4px 0',
+  },
+  searchCloseBtn: {
+    background: '#334155',
+    color: '#cbd5e1',
+    border: 'none',
+    borderRadius: 6,
+    padding: '6px 14px',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    flexShrink: 0,
+  },
+  searchResults: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '4px 0',
+  },
+  searchResultItem: {
+    padding: '10px 16px',
+    cursor: 'pointer',
+    borderBottom: '1px solid rgba(30,41,59,0.5)',
+    transition: 'background 0.15s',
   },
 };
 
