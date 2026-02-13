@@ -6,10 +6,10 @@ use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::stream::{Event, EventStream};
 use rocket::serde::json::Json;
-use rocket::{State, get, post, put, delete};
+use rocket::{State, delete, get, post, put};
+use rusqlite::params;
 use std::collections::HashMap;
 use std::sync::Mutex as StdMutex;
-use rusqlite::params;
 use tokio::time::{Duration, interval};
 
 // --- Client IP extraction ---
@@ -344,11 +344,20 @@ pub fn send_message(
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     let metadata = body.metadata.clone().unwrap_or(serde_json::json!({}));
-    let reply_to = body.reply_to.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()).map(String::from);
+    let reply_to = body
+        .reply_to
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(String::from);
 
     // Resolve sender_type: top-level field takes priority, fall back to metadata.sender_type
-    let sender_type = body.sender_type.clone()
-        .or_else(|| metadata.get("sender_type").and_then(|v| v.as_str()).map(String::from));
+    let sender_type = body.sender_type.clone().or_else(|| {
+        metadata
+            .get("sender_type")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    });
 
     // Validate reply_to references a real message in this room
     if let Some(ref reply_id) = reply_to {
@@ -370,7 +379,9 @@ pub fn send_message(
 
     // Compute next monotonic seq
     let seq: i64 = conn
-        .query_row("SELECT COALESCE(MAX(seq), 0) + 1 FROM messages", [], |r| r.get(0))
+        .query_row("SELECT COALESCE(MAX(seq), 0) + 1 FROM messages", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(1);
 
     conn.execute(
@@ -412,7 +423,11 @@ pub fn send_message(
 
 // --- Edit Message ---
 
-#[put("/api/v1/rooms/<room_id>/messages/<message_id>", format = "json", data = "<body>")]
+#[put(
+    "/api/v1/rooms/<room_id>/messages/<message_id>",
+    format = "json",
+    data = "<body>"
+)]
 pub fn edit_message(
     db: &State<Db>,
     events: &State<EventBus>,
@@ -467,7 +482,12 @@ pub fn edit_message(
     if let Some(ref meta) = metadata {
         conn.execute(
             "UPDATE messages SET content = ?1, metadata = ?2, edited_at = ?3 WHERE id = ?4",
-            params![&content, serde_json::to_string(meta).unwrap(), &now, message_id],
+            params![
+                &content,
+                serde_json::to_string(meta).unwrap(),
+                &now,
+                message_id
+            ],
         )
         .map_err(|e| {
             (
@@ -574,7 +594,9 @@ pub fn delete_message(
         if sender != existing_sender {
             return Err((
                 Status::Forbidden,
-                Json(serde_json::json!({"error": "Only the original sender can delete this message"})),
+                Json(
+                    serde_json::json!({"error": "Only the original sender can delete this message"}),
+                ),
             ));
         }
     }
@@ -598,7 +620,9 @@ pub fn delete_message(
     Ok(Json(serde_json::json!({"deleted": true})))
 }
 
-#[get("/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>&<exclude_sender>")]
+#[get(
+    "/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>&<exclude_sender>"
+)]
 #[allow(clippy::too_many_arguments)]
 pub fn get_messages(
     db: &State<Db>,
@@ -632,7 +656,9 @@ pub fn get_messages(
 
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
-    let mut sql = String::from("SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE room_id = ?1");
+    let mut sql = String::from(
+        "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE room_id = ?1",
+    );
     let mut param_values: Vec<String> = vec![room_id.to_string()];
     let mut idx = 2;
 
@@ -663,9 +689,17 @@ pub fn get_messages(
     }
     if let Some(exclude_val) = exclude_sender {
         // Support comma-separated list: ?exclude_sender=Forge,Drift,Lux
-        let excluded: Vec<&str> = exclude_val.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        let excluded: Vec<&str> = exclude_val
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
         if !excluded.is_empty() {
-            let placeholders: Vec<String> = excluded.iter().enumerate().map(|(i, _)| format!("?{}", idx + i)).collect();
+            let placeholders: Vec<String> = excluded
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", idx + i))
+                .collect();
             sql.push_str(&format!(" AND sender NOT IN ({})", placeholders.join(",")));
             for name in &excluded {
                 param_values.push(name.to_string());
@@ -736,7 +770,7 @@ pub fn activity_feed(
 
     let mut sql = String::from(
         "SELECT m.id, m.room_id, r.name, m.sender, m.sender_type, m.content, m.created_at, m.edited_at, m.reply_to, m.seq \
-         FROM messages m JOIN rooms r ON m.room_id = r.id WHERE 1=1"
+         FROM messages m JOIN rooms r ON m.room_id = r.id WHERE 1=1",
     );
     let mut param_values: Vec<String> = vec![];
     let mut idx = 1;
@@ -767,10 +801,21 @@ pub fn activity_feed(
         idx += 1;
     }
     if let Some(exclude_val) = exclude_sender {
-        let excluded: Vec<&str> = exclude_val.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        let excluded: Vec<&str> = exclude_val
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
         if !excluded.is_empty() {
-            let placeholders: Vec<String> = excluded.iter().enumerate().map(|(i, _)| format!("?{}", idx + i)).collect();
-            sql.push_str(&format!(" AND m.sender NOT IN ({})", placeholders.join(",")));
+            let placeholders: Vec<String> = excluded
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", idx + i))
+                .collect();
+            sql.push_str(&format!(
+                " AND m.sender NOT IN ({})",
+                placeholders.join(",")
+            ));
             for name in &excluded {
                 param_values.push(name.to_string());
             }
@@ -813,6 +858,102 @@ pub fn activity_feed(
         count,
         since: since.map(String::from),
     })
+}
+
+// --- Message Search (cross-room) ---
+
+#[get("/api/v1/search?<q>&<room_id>&<sender>&<sender_type>&<limit>")]
+pub fn search_messages(
+    db: &State<Db>,
+    q: &str,
+    room_id: Option<&str>,
+    sender: Option<&str>,
+    sender_type: Option<&str>,
+    limit: Option<i64>,
+) -> Result<Json<SearchResponse>, (Status, Json<serde_json::Value>)> {
+    let query = q.trim();
+    if query.is_empty() {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "Query parameter 'q' must not be empty"})),
+        ));
+    }
+    if query.len() > 500 {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "Query too long (max 500 characters)"})),
+        ));
+    }
+
+    let conn = db.conn.lock().unwrap();
+    let limit = limit.unwrap_or(50).clamp(1, 200);
+
+    // Escape LIKE special characters and wrap with wildcards
+    let escaped = query
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    let like_pattern = format!("%{escaped}%");
+
+    let mut sql = String::from(
+        "SELECT m.id, m.room_id, r.name, m.sender, m.sender_type, m.content, \
+         m.created_at, m.edited_at, m.reply_to, m.seq \
+         FROM messages m JOIN rooms r ON m.room_id = r.id \
+         WHERE m.content LIKE ?1 ESCAPE '\\'",
+    );
+    let mut param_values: Vec<String> = vec![like_pattern];
+    let mut idx = 2;
+
+    if let Some(room_val) = room_id {
+        sql.push_str(&format!(" AND m.room_id = ?{idx}"));
+        param_values.push(room_val.to_string());
+        idx += 1;
+    }
+    if let Some(sender_val) = sender {
+        sql.push_str(&format!(" AND m.sender = ?{idx}"));
+        param_values.push(sender_val.to_string());
+        idx += 1;
+    }
+    if let Some(sender_type_val) = sender_type {
+        sql.push_str(&format!(" AND m.sender_type = ?{idx}"));
+        param_values.push(sender_type_val.to_string());
+        idx += 1;
+    }
+
+    sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
+    param_values.push(limit.to_string());
+
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(|v| v as &dyn rusqlite::types::ToSql)
+        .collect();
+
+    let results: Vec<SearchResult> = stmt
+        .query_map(params_refs.as_slice(), |row| {
+            Ok(SearchResult {
+                message_id: row.get(0)?,
+                room_id: row.get(1)?,
+                room_name: row.get(2)?,
+                sender: row.get(3)?,
+                sender_type: row.get(4)?,
+                content: row.get(5)?,
+                created_at: row.get(6)?,
+                edited_at: row.get(7)?,
+                reply_to: row.get(8)?,
+                seq: row.get(9)?,
+            })
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let count = results.len();
+    Ok(Json(SearchResponse {
+        results,
+        count,
+        query: query.to_string(),
+    }))
 }
 
 // --- Typing Indicator ---
@@ -924,8 +1065,7 @@ pub fn message_stream(
                     room_id: row.get(1)?,
                     sender: row.get(2)?,
                     content: row.get(3)?,
-                    metadata: serde_json::from_str(&metadata_str)
-                        .unwrap_or(serde_json::json!({})),
+                    metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({})),
                     created_at: row.get(5)?,
                     edited_at: row.get(6)?,
                     reply_to: row.get(7)?,
@@ -955,8 +1095,7 @@ pub fn message_stream(
                     room_id: row.get(1)?,
                     sender: row.get(2)?,
                     content: row.get(3)?,
-                    metadata: serde_json::from_str(&metadata_str)
-                        .unwrap_or(serde_json::json!({})),
+                    metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({})),
                     created_at: row.get(5)?,
                     edited_at: row.get(6)?,
                     reply_to: row.get(7)?,
@@ -1144,7 +1283,9 @@ pub fn upload_file(
     if decoded.len() > MAX_FILE_SIZE {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": format!("File too large: {} bytes (max {} bytes)", decoded.len(), MAX_FILE_SIZE)})),
+            Json(
+                serde_json::json!({"error": format!("File too large: {} bytes (max {} bytes)", decoded.len(), MAX_FILE_SIZE)}),
+            ),
         ));
     }
 
@@ -1358,7 +1499,9 @@ pub fn delete_file(
         if sender != existing_sender {
             return Err((
                 Status::Forbidden,
-                Json(serde_json::json!({"error": "Only the original uploader can delete this file"})),
+                Json(
+                    serde_json::json!({"error": "Only the original uploader can delete this file"}),
+                ),
             ));
         }
     }
@@ -1429,6 +1572,9 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 ## Activity Feed
 - GET /api/v1/activity?after=<seq>&since=&limit=&room_id=&sender=&sender_type=&exclude_sender= — cross-room activity feed (newest first). Use `after=<seq>` for cursor-based pagination (preferred). Returns all messages across rooms. Each event includes a `seq` field for cursor tracking. Use `exclude_sender=Name1,Name2` to filter out specific senders.
 
+## Search
+- GET /api/v1/search?q=<query>&room_id=&sender=&sender_type=&limit= — cross-room message search (newest first). Searches `content` with SQLite LIKE (case-insensitive for ASCII by default). `q` is required.
+
 ## Participants
 - GET /api/v1/rooms/{id}/participants — list unique senders in a room with stats (sender, sender_type, message_count, first_seen, last_seen). Sorted by last_seen descending (most recent first). Derived from message history.
 
@@ -1450,7 +1596,10 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 
 #[get("/api/v1/openapi.json")]
 pub fn openapi_json() -> (rocket::http::ContentType, &'static str) {
-    (rocket::http::ContentType::JSON, include_str!("../openapi.json"))
+    (
+        rocket::http::ContentType::JSON,
+        include_str!("../openapi.json"),
+    )
 }
 
 // --- 429 catcher ---

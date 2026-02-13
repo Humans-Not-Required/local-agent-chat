@@ -7,9 +7,9 @@ pub mod routes;
 use db::Db;
 use events::EventBus;
 use rate_limit::RateLimiter;
-use routes::TypingTracker;
 use rocket::fs::{FileServer, Options};
 use rocket_cors::CorsOptions;
+use routes::TypingTracker;
 use std::env;
 use std::path::PathBuf;
 
@@ -35,8 +35,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
 
     // Increase JSON data limit to 10MB to accommodate base64-encoded file uploads
     // (5MB file = ~6.7MB base64 + JSON wrapper)
-    let figment = rocket::Config::figment()
-        .merge(("limits.json", 10 * 1024 * 1024)); // 10MB
+    let figment = rocket::Config::figment().merge(("limits.json", 10 * 1024 * 1024)); // 10MB
 
     // Frontend static files directory
     let static_dir: PathBuf = env::var("STATIC_DIR")
@@ -67,6 +66,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::delete_message,
                 routes::get_messages,
                 routes::activity_feed,
+                routes::search_messages,
                 routes::room_participants,
                 routes::notify_typing,
                 routes::message_stream,

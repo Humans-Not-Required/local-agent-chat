@@ -110,9 +110,7 @@ fn test_get_room() {
 #[test]
 fn test_get_room_not_found() {
     let client = test_client();
-    let res = client
-        .get("/api/v1/rooms/nonexistent-id")
-        .dispatch();
+    let res = client.get("/api/v1/rooms/nonexistent-id").dispatch();
     assert_eq!(res.status(), Status::NotFound);
 }
 
@@ -603,7 +601,9 @@ fn test_delete_message_by_sender() {
 
     // Delete as sender
     let res = client
-        .delete(format!("/api/v1/rooms/{room_id}/messages/{msg_id}?sender=Bot"))
+        .delete(format!(
+            "/api/v1/rooms/{room_id}/messages/{msg_id}?sender=Bot"
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
@@ -634,7 +634,9 @@ fn test_delete_message_wrong_sender() {
 
     // BotB tries to delete BotA's message
     let res = client
-        .delete(format!("/api/v1/rooms/{room_id}/messages/{msg_id}?sender=BotB"))
+        .delete(format!(
+            "/api/v1/rooms/{room_id}/messages/{msg_id}?sender=BotB"
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Forbidden);
 }
@@ -731,7 +733,10 @@ fn test_create_room_returns_admin_key() {
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
     let key = body["admin_key"].as_str().unwrap();
-    assert!(key.starts_with("chat_"), "admin_key should start with 'chat_'");
+    assert!(
+        key.starts_with("chat_"),
+        "admin_key should start with 'chat_'"
+    );
     assert!(key.len() > 10, "admin_key should be sufficiently long");
 }
 
@@ -749,14 +754,22 @@ fn test_admin_key_not_in_room_list() {
     let res = client.get("/api/v1/rooms").dispatch();
     let rooms: Vec<serde_json::Value> = res.into_json().unwrap();
     for room in &rooms {
-        assert!(room.get("admin_key").is_none(), "admin_key should not be in room list");
+        assert!(
+            room.get("admin_key").is_none(),
+            "admin_key should not be in room list"
+        );
     }
 
     // Get single room — admin_key should NOT be present
-    let room_id = rooms.iter().find(|r| r["name"] == "no-leak-test").unwrap()["id"].as_str().unwrap();
+    let room_id = rooms.iter().find(|r| r["name"] == "no-leak-test").unwrap()["id"]
+        .as_str()
+        .unwrap();
     let res = client.get(format!("/api/v1/rooms/{room_id}")).dispatch();
     let room: serde_json::Value = res.into_json().unwrap();
-    assert!(room.get("admin_key").is_none(), "admin_key should not be in room detail");
+    assert!(
+        room.get("admin_key").is_none(),
+        "admin_key should not be in room detail"
+    );
 }
 
 #[test]
@@ -767,7 +780,9 @@ fn test_delete_message_not_found() {
     let room_id = rooms[0]["id"].as_str().unwrap();
 
     let res = client
-        .delete(format!("/api/v1/rooms/{room_id}/messages/nonexistent?sender=Bot"))
+        .delete(format!(
+            "/api/v1/rooms/{room_id}/messages/nonexistent?sender=Bot"
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::NotFound);
 }
@@ -777,9 +792,7 @@ fn test_delete_message_not_found() {
 #[test]
 fn test_get_messages_nonexistent_room() {
     let client = test_client();
-    let res = client
-        .get("/api/v1/rooms/nonexistent/messages")
-        .dispatch();
+    let res = client.get("/api/v1/rooms/nonexistent/messages").dispatch();
     assert_eq!(res.status(), Status::NotFound);
 }
 
@@ -807,7 +820,9 @@ fn test_reply_to_message() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
-        .body(format!(r#"{{"sender":"Bob","content":"Hey Alice!","reply_to":"{original_id}"}}"#))
+        .body(format!(
+            r#"{{"sender":"Bob","content":"Hey Alice!","reply_to":"{original_id}"}}"#
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let reply: serde_json::Value = res.into_json().unwrap();
@@ -876,7 +891,9 @@ fn test_reply_to_message_in_different_room() {
     let res = client
         .post(format!("/api/v1/rooms/{room_b_id}/messages"))
         .header(ContentType::JSON)
-        .body(format!(r#"{{"sender":"Bob","content":"Cross-room reply","reply_to":"{msg_a_id}"}}"#))
+        .body(format!(
+            r#"{{"sender":"Bob","content":"Cross-room reply","reply_to":"{msg_a_id}"}}"#
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::BadRequest);
 }
@@ -1082,7 +1099,9 @@ fn test_messages_sender_type_filter() {
 
     // Filter by sender_type=agent
     let res = client
-        .get(format!("/api/v1/rooms/{room_id}/messages?sender_type=agent"))
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?sender_type=agent"
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
@@ -1092,7 +1111,9 @@ fn test_messages_sender_type_filter() {
 
     // Filter by sender_type=human
     let res = client
-        .get(format!("/api/v1/rooms/{room_id}/messages?sender_type=human"))
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?sender_type=human"
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
@@ -1127,7 +1148,9 @@ fn test_messages_sender_type_combined_with_sender_filter() {
 
     // Filter by sender=Bot1 AND sender_type=agent
     let res = client
-        .get(format!("/api/v1/rooms/{room_id}/messages?sender=Bot1&sender_type=agent"))
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?sender=Bot1&sender_type=agent"
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
@@ -1377,9 +1400,7 @@ fn test_stats_update_after_message_deletion() {
     }
 
     // Verify initial count
-    let res = client
-        .get(format!("/api/v1/rooms/{room_id}"))
-        .dispatch();
+    let res = client.get(format!("/api/v1/rooms/{room_id}")).dispatch();
     let room_detail: serde_json::Value = res.into_json().unwrap();
     assert_eq!(room_detail["message_count"].as_i64().unwrap(), 3);
 
@@ -1392,7 +1413,9 @@ fn test_stats_update_after_message_deletion() {
 
     // Delete one message using admin key
     let res = client
-        .delete(format!("/api/v1/rooms/{room_id}/messages/{msg_id}?sender=bot"))
+        .delete(format!(
+            "/api/v1/rooms/{room_id}/messages/{msg_id}?sender=bot"
+        ))
         .header(Header::new("Authorization", format!("Bearer {admin_key}")))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
@@ -1422,9 +1445,7 @@ fn test_create_room_with_description() {
 
     // Verify it shows in room detail
     let room_id = room["id"].as_str().unwrap();
-    let res = client
-        .get(format!("/api/v1/rooms/{room_id}"))
-        .dispatch();
+    let res = client.get(format!("/api/v1/rooms/{room_id}")).dispatch();
     assert_eq!(res.status(), Status::Ok);
     let detail: serde_json::Value = res.into_json().unwrap();
     assert_eq!(detail["description"], "A room for testing descriptions");
@@ -1639,9 +1660,7 @@ fn test_activity_feed_sender_type_filter() {
         .dispatch();
 
     // Filter to agents only
-    let res = client
-        .get("/api/v1/activity?sender_type=agent")
-        .dispatch();
+    let res = client.get("/api/v1/activity?sender_type=agent").dispatch();
     let body: serde_json::Value = res.into_json().unwrap();
     assert_eq!(body["count"].as_i64().unwrap(), 1);
     assert_eq!(body["events"][0]["sender"], "nanook");
@@ -1692,7 +1711,9 @@ fn get_general_room_id(client: &Client) -> String {
     let res = client.get("/api/v1/rooms").dispatch();
     let rooms: Vec<serde_json::Value> = res.into_json().unwrap();
     rooms.iter().find(|r| r["name"] == "general").unwrap()["id"]
-        .as_str().unwrap().to_string()
+        .as_str()
+        .unwrap()
+        .to_string()
 }
 
 #[test]
@@ -1708,12 +1729,15 @@ fn test_upload_and_download_file() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/files"))
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "nanook",
-            "filename": "test.txt",
-            "content_type": "text/plain",
-            "data": b64
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "nanook",
+                "filename": "test.txt",
+                "content_type": "text/plain",
+                "data": b64
+            })
+            .to_string(),
+        )
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
@@ -1743,18 +1767,23 @@ fn test_file_info_endpoint() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/files"))
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "agent1",
-            "filename": "data.json",
-            "content_type": "application/json",
-            "data": b64
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "agent1",
+                "filename": "data.json",
+                "content_type": "application/json",
+                "data": b64
+            })
+            .to_string(),
+        )
         .dispatch();
     let upload: serde_json::Value = res.into_json().unwrap();
     let file_id = upload["id"].as_str().unwrap();
 
     // Get file info
-    let res = client.get(format!("/api/v1/files/{file_id}/info")).dispatch();
+    let res = client
+        .get(format!("/api/v1/files/{file_id}/info"))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let info: serde_json::Value = res.into_json().unwrap();
     assert_eq!(info["filename"], "data.json");
@@ -1775,15 +1804,20 @@ fn test_list_files_in_room() {
         client
             .post(format!("/api/v1/rooms/{room_id}/files"))
             .header(ContentType::JSON)
-            .body(serde_json::json!({
-                "sender": "uploader",
-                "filename": name,
-                "data": b64
-            }).to_string())
+            .body(
+                serde_json::json!({
+                    "sender": "uploader",
+                    "filename": name,
+                    "data": b64
+                })
+                .to_string(),
+            )
             .dispatch();
     }
 
-    let res = client.get(format!("/api/v1/rooms/{room_id}/files")).dispatch();
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/files"))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let files: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(files.len(), 2);
@@ -1799,18 +1833,23 @@ fn test_delete_file_by_sender() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/files"))
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "owner",
-            "filename": "temp.txt",
-            "data": b64
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "owner",
+                "filename": "temp.txt",
+                "data": b64
+            })
+            .to_string(),
+        )
         .dispatch();
     let upload: serde_json::Value = res.into_json().unwrap();
     let file_id = upload["id"].as_str().unwrap();
 
     // Delete by correct sender
     let res = client
-        .delete(format!("/api/v1/rooms/{room_id}/files/{file_id}?sender=owner"))
+        .delete(format!(
+            "/api/v1/rooms/{room_id}/files/{file_id}?sender=owner"
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
 
@@ -1829,18 +1868,23 @@ fn test_delete_file_wrong_sender_forbidden() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/files"))
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "alice",
-            "filename": "secret.txt",
-            "data": b64
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "alice",
+                "filename": "secret.txt",
+                "data": b64
+            })
+            .to_string(),
+        )
         .dispatch();
     let upload: serde_json::Value = res.into_json().unwrap();
     let file_id = upload["id"].as_str().unwrap();
 
     // Wrong sender
     let res = client
-        .delete(format!("/api/v1/rooms/{room_id}/files/{file_id}?sender=bob"))
+        .delete(format!(
+            "/api/v1/rooms/{room_id}/files/{file_id}?sender=bob"
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Forbidden);
 }
@@ -1865,11 +1909,14 @@ fn test_delete_file_with_admin_key() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/files"))
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "someone",
-            "filename": "moderated.txt",
-            "data": b64
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "someone",
+                "filename": "moderated.txt",
+                "data": b64
+            })
+            .to_string(),
+        )
         .dispatch();
     let upload: serde_json::Value = res.into_json().unwrap();
     let file_id = upload["id"].as_str().unwrap();
@@ -1890,11 +1937,14 @@ fn test_upload_file_invalid_base64() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/files"))
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "nanook",
-            "filename": "bad.txt",
-            "data": "not-valid-base64!!!"
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "nanook",
+                "filename": "bad.txt",
+                "data": "not-valid-base64!!!"
+            })
+            .to_string(),
+        )
         .dispatch();
     assert_eq!(res.status(), Status::BadRequest);
     let body: serde_json::Value = res.into_json().unwrap();
@@ -1909,11 +1959,14 @@ fn test_upload_file_empty_sender() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/files"))
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "",
-            "filename": "test.txt",
-            "data": "aGVsbG8="
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "",
+                "filename": "test.txt",
+                "data": "aGVsbG8="
+            })
+            .to_string(),
+        )
         .dispatch();
     assert_eq!(res.status(), Status::BadRequest);
 }
@@ -1925,11 +1978,14 @@ fn test_upload_file_nonexistent_room() {
     let res = client
         .post("/api/v1/rooms/nonexistent-room-id/files")
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "nanook",
-            "filename": "test.txt",
-            "data": "aGVsbG8="
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "nanook",
+                "filename": "test.txt",
+                "data": "aGVsbG8="
+            })
+            .to_string(),
+        )
         .dispatch();
     assert_eq!(res.status(), Status::NotFound);
 }
@@ -1947,11 +2003,14 @@ fn test_upload_file_too_large() {
     let res = client
         .post(format!("/api/v1/rooms/{room_id}/files"))
         .header(ContentType::JSON)
-        .body(serde_json::json!({
-            "sender": "nanook",
-            "filename": "huge.bin",
-            "data": b64
-        }).to_string())
+        .body(
+            serde_json::json!({
+                "sender": "nanook",
+                "filename": "huge.bin",
+                "data": b64
+            })
+            .to_string(),
+        )
         .dispatch();
     assert_eq!(res.status(), Status::BadRequest);
     let body: serde_json::Value = res.into_json().unwrap();
@@ -1993,7 +2052,10 @@ fn test_messages_have_seq_field() {
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msg: serde_json::Value = res.into_json().unwrap();
-    assert!(msg["seq"].is_number(), "Message should have numeric seq field");
+    assert!(
+        msg["seq"].is_number(),
+        "Message should have numeric seq field"
+    );
     assert!(msg["seq"].as_i64().unwrap() >= 1);
 
     // Verify seq appears in GET messages
@@ -2031,7 +2093,12 @@ fn test_seq_monotonically_increasing() {
 
     // Verify strictly monotonically increasing
     for i in 1..seqs.len() {
-        assert!(seqs[i] > seqs[i - 1], "seq should be strictly increasing: {} > {}", seqs[i], seqs[i - 1]);
+        assert!(
+            seqs[i] > seqs[i - 1],
+            "seq should be strictly increasing: {} > {}",
+            seqs[i],
+            seqs[i - 1]
+        );
     }
 }
 
@@ -2060,7 +2127,10 @@ fn test_after_cursor_pagination() {
 
     // Use after= to get messages after the first one
     let res = client
-        .get(format!("/api/v1/rooms/{room_id}/messages?after={}", seqs[0]))
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?after={}",
+            seqs[0]
+        ))
         .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
@@ -2070,7 +2140,10 @@ fn test_after_cursor_pagination() {
 
     // Use after= to get messages after the second one
     let res = client
-        .get(format!("/api/v1/rooms/{room_id}/messages?after={}", seqs[1]))
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?after={}",
+            seqs[1]
+        ))
         .dispatch();
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 1);
@@ -2078,7 +2151,10 @@ fn test_after_cursor_pagination() {
 
     // Use after= with last seq — should get nothing
     let res = client
-        .get(format!("/api/v1/rooms/{room_id}/messages?after={}", seqs[2]))
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?after={}",
+            seqs[2]
+        ))
         .dispatch();
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 0);
@@ -2111,7 +2187,9 @@ fn test_after_cursor_with_limit() {
 
     // Get 2 messages after the first
     let res = client
-        .get(format!("/api/v1/rooms/{room_id}/messages?after={first_seq}&limit=2"))
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?after={first_seq}&limit=2"
+        ))
         .dispatch();
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 2);
@@ -2181,7 +2259,10 @@ fn test_activity_feed_has_seq() {
     let body: serde_json::Value = res.into_json().unwrap();
     assert!(body["count"].as_i64().unwrap() >= 1);
     let events = body["events"].as_array().unwrap();
-    assert!(events[0]["seq"].is_number(), "Activity events should have seq field");
+    assert!(
+        events[0]["seq"].is_number(),
+        "Activity events should have seq field"
+    );
 }
 
 #[test]
@@ -2201,7 +2282,9 @@ fn test_activity_feed_after_cursor() {
         let res = client
             .post(format!("/api/v1/rooms/{general_id}/messages"))
             .header(ContentType::JSON)
-            .body(format!(r#"{{"sender": "bot", "content": "activity msg {i}"}}"#))
+            .body(format!(
+                r#"{{"sender": "bot", "content": "activity msg {i}"}}"#
+            ))
             .dispatch();
         let msg: serde_json::Value = res.into_json().unwrap();
         seqs.push(msg["seq"].as_i64().unwrap());
@@ -2317,7 +2400,9 @@ fn test_participants_empty_room() {
     let room: serde_json::Value = res.into_json().unwrap();
     let room_id = room["id"].as_str().unwrap();
 
-    let res = client.get(format!("/api/v1/rooms/{room_id}/participants")).dispatch();
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/participants"))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let participants: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(participants.len(), 0);
@@ -2326,7 +2411,9 @@ fn test_participants_empty_room() {
 #[test]
 fn test_participants_nonexistent_room() {
     let client = test_client();
-    let res = client.get("/api/v1/rooms/nonexistent-uuid/participants").dispatch();
+    let res = client
+        .get("/api/v1/rooms/nonexistent-uuid/participants")
+        .dispatch();
     assert_eq!(res.status(), Status::NotFound);
 }
 
@@ -2358,7 +2445,9 @@ fn test_participants_basic() {
         .body(r#"{"sender": "Alice", "content": "How are you?"}"#)
         .dispatch();
 
-    let res = client.get(format!("/api/v1/rooms/{room_id}/participants")).dispatch();
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/participants"))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let participants: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(participants.len(), 2);
@@ -2400,7 +2489,9 @@ fn test_participants_sender_type_uses_latest() {
         .body(r#"{"sender": "Charlie", "content": "Actually I'm human", "sender_type": "human"}"#)
         .dispatch();
 
-    let res = client.get(format!("/api/v1/rooms/{room_id}/participants")).dispatch();
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/participants"))
+        .dispatch();
     let participants: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(participants.len(), 1);
     // Should use the latest sender_type
@@ -2422,27 +2513,43 @@ fn test_exclude_sender_single() {
     let room_id = room["id"].as_str().unwrap();
 
     // Three senders
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Nanook", "content": "Hello from Nanook"}"#)
         .dispatch();
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Forge", "content": "Hello from Forge"}"#)
         .dispatch();
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Drift", "content": "Hello from Drift"}"#)
         .dispatch();
 
     // Exclude Forge
-    let res = client.get(format!("/api/v1/rooms/{room_id}/messages?exclude_sender=Forge")).dispatch();
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?exclude_sender=Forge"
+        ))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 2);
-    assert!(msgs.iter().all(|m| m["sender"].as_str().unwrap() != "Forge"));
-    assert!(msgs.iter().any(|m| m["sender"].as_str().unwrap() == "Nanook"));
-    assert!(msgs.iter().any(|m| m["sender"].as_str().unwrap() == "Drift"));
+    assert!(
+        msgs.iter()
+            .all(|m| m["sender"].as_str().unwrap() != "Forge")
+    );
+    assert!(
+        msgs.iter()
+            .any(|m| m["sender"].as_str().unwrap() == "Nanook")
+    );
+    assert!(
+        msgs.iter()
+            .any(|m| m["sender"].as_str().unwrap() == "Drift")
+    );
 }
 
 #[test]
@@ -2456,25 +2563,33 @@ fn test_exclude_sender_multiple_comma_separated() {
     let room: serde_json::Value = res.into_json().unwrap();
     let room_id = room["id"].as_str().unwrap();
 
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Nanook", "content": "From Nanook"}"#)
         .dispatch();
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Forge", "content": "From Forge"}"#)
         .dispatch();
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Drift", "content": "From Drift"}"#)
         .dispatch();
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Lux", "content": "From Lux"}"#)
         .dispatch();
 
     // Exclude Forge and Drift (comma-separated)
-    let res = client.get(format!("/api/v1/rooms/{room_id}/messages?exclude_sender=Forge,Drift")).dispatch();
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?exclude_sender=Forge,Drift"
+        ))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 2);
@@ -2497,24 +2612,31 @@ fn test_exclude_sender_with_after_filter() {
     let room_id = room["id"].as_str().unwrap();
 
     // Send messages and track seq
-    let res = client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Nanook", "content": "First"}"#)
         .dispatch();
     let msg1: serde_json::Value = res.into_json().unwrap();
     let seq1 = msg1["seq"].as_i64().unwrap();
 
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Forge", "content": "Second"}"#)
         .dispatch();
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Nanook", "content": "Third"}"#)
         .dispatch();
 
     // after=seq1, exclude Forge — should only get Nanook's "Third"
-    let res = client.get(format!("/api/v1/rooms/{room_id}/messages?after={seq1}&exclude_sender=Forge")).dispatch();
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?after={seq1}&exclude_sender=Forge"
+        ))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 1);
@@ -2533,26 +2655,37 @@ fn test_exclude_sender_activity_feed() {
     let room: serde_json::Value = res.into_json().unwrap();
     let room_id = room["id"].as_str().unwrap();
 
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Nanook", "content": "Activity from Nanook"}"#)
         .dispatch();
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Forge", "content": "Activity from Forge"}"#)
         .dispatch();
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Drift", "content": "Activity from Drift"}"#)
         .dispatch();
 
     // Exclude Forge from activity feed
-    let res = client.get(format!("/api/v1/activity?room_id={room_id}&exclude_sender=Forge")).dispatch();
+    let res = client
+        .get(format!(
+            "/api/v1/activity?room_id={room_id}&exclude_sender=Forge"
+        ))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
     let events = body["events"].as_array().unwrap();
     assert_eq!(events.len(), 2);
-    assert!(events.iter().all(|e| e["sender"].as_str().unwrap() != "Forge"));
+    assert!(
+        events
+            .iter()
+            .all(|e| e["sender"].as_str().unwrap() != "Forge")
+    );
 }
 
 #[test]
@@ -2566,14 +2699,268 @@ fn test_exclude_sender_empty_string_ignored() {
     let room: serde_json::Value = res.into_json().unwrap();
     let room_id = room["id"].as_str().unwrap();
 
-    client.post(format!("/api/v1/rooms/{room_id}/messages"))
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
         .header(ContentType::JSON)
         .body(r#"{"sender": "Nanook", "content": "Hello"}"#)
         .dispatch();
 
     // Empty exclude_sender should return all messages
-    let res = client.get(format!("/api/v1/rooms/{room_id}/messages?exclude_sender=")).dispatch();
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?exclude_sender="))
+        .dispatch();
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 1);
+}
+
+// ===== Message Search Tests =====
+
+#[test]
+fn test_search_basic() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-basic"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "The weather is cold today"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "I am building something new"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Drift", "content": "The cold never bothered me"}"#)
+        .dispatch();
+
+    // Search for "cold" — should find 2 messages
+    let res = client.get("/api/v1/search?q=cold").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 2);
+    assert_eq!(body["query"].as_str().unwrap(), "cold");
+    let results = body["results"].as_array().unwrap();
+    assert_eq!(results.len(), 2);
+    // Results should include room_name
+    assert!(
+        results
+            .iter()
+            .all(|r| r["room_name"].as_str().unwrap() == "search-basic")
+    );
+}
+
+#[test]
+fn test_search_empty_query() {
+    let client = test_client();
+    let res = client.get("/api/v1/search?q=").dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("empty"));
+}
+
+#[test]
+fn test_search_no_results() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-empty"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Hello world"}"#)
+        .dispatch();
+
+    let res = client.get("/api/v1/search?q=xyznonexistent").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 0);
+    assert_eq!(body["results"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn test_search_filter_by_room() {
+    let client = test_client();
+
+    // Create two rooms
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-room-a"}"#)
+        .dispatch();
+    let room_a: serde_json::Value = res.into_json().unwrap();
+    let room_a_id = room_a["id"].as_str().unwrap();
+
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-room-b"}"#)
+        .dispatch();
+    let room_b: serde_json::Value = res.into_json().unwrap();
+    let room_b_id = room_b["id"].as_str().unwrap();
+
+    client
+        .post(format!("/api/v1/rooms/{room_a_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "deploy to staging"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_b_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "deploy to production"}"#)
+        .dispatch();
+
+    // Search "deploy" scoped to room A
+    let res = client
+        .get(format!("/api/v1/search?q=deploy&room_id={room_a_id}"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 1);
+    assert_eq!(
+        body["results"][0]["room_name"].as_str().unwrap(),
+        "search-room-a"
+    );
+}
+
+#[test]
+fn test_search_filter_by_sender() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-sender"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "fix the bug"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "found the bug"}"#)
+        .dispatch();
+
+    // Search "bug" from Nanook only
+    let res = client.get("/api/v1/search?q=bug&sender=Nanook").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 1);
+    assert_eq!(body["results"][0]["sender"].as_str().unwrap(), "Nanook");
+}
+
+#[test]
+fn test_search_with_limit() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-limit"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    for i in 0..5 {
+        client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(
+                r#"{{"sender": "Nanook", "content": "message number {i}"}}"#
+            ))
+            .dispatch();
+    }
+
+    // Limit to 2 results
+    let res = client.get("/api/v1/search?q=message&limit=2").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 2);
+}
+
+#[test]
+fn test_search_case_insensitive() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-case"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "IMPORTANT UPDATE"}"#)
+        .dispatch();
+
+    // SQLite LIKE is case-insensitive for ASCII by default
+    let res = client.get("/api/v1/search?q=important").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 1);
+}
+
+#[test]
+fn test_search_cross_room() {
+    let client = test_client();
+
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-cross-1"}"#)
+        .dispatch();
+    let room1: serde_json::Value = res.into_json().unwrap();
+    let room1_id = room1["id"].as_str().unwrap();
+
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "search-cross-2"}"#)
+        .dispatch();
+    let room2: serde_json::Value = res.into_json().unwrap();
+    let room2_id = room2["id"].as_str().unwrap();
+
+    client
+        .post(format!("/api/v1/rooms/{room1_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "testing cross-room search"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room2_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "also testing search across rooms"}"#)
+        .dispatch();
+
+    // Unscoped search should find both
+    let res = client.get("/api/v1/search?q=search").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 2);
+    let room_names: Vec<&str> = body["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["room_name"].as_str().unwrap())
+        .collect();
+    assert!(room_names.contains(&"search-cross-1"));
+    assert!(room_names.contains(&"search-cross-2"));
 }

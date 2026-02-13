@@ -15,7 +15,9 @@ impl Db {
         let conn = Connection::open(path).expect("Failed to open database");
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
             .expect("Failed to set pragmas");
-        let db = Db { conn: Mutex::new(conn) };
+        let db = Db {
+            conn: Mutex::new(conn),
+        };
         db.migrate();
         db
     }
@@ -51,21 +53,30 @@ impl Db {
         .expect("Failed to run migrations");
 
         // Add edited_at column (idempotent — .ok() ignores "duplicate column" errors)
-        conn.execute_batch("ALTER TABLE messages ADD COLUMN edited_at TEXT;").ok();
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN edited_at TEXT;")
+            .ok();
 
         // Add reply_to column for message threading
-        conn.execute_batch("ALTER TABLE messages ADD COLUMN reply_to TEXT;").ok();
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN reply_to TEXT;")
+            .ok();
 
         // Add admin_key column for room-scoped admin keys
-        conn.execute_batch("ALTER TABLE rooms ADD COLUMN admin_key TEXT;").ok();
+        conn.execute_batch("ALTER TABLE rooms ADD COLUMN admin_key TEXT;")
+            .ok();
 
         // Add sender_type column for persistent sender type tracking (agent/human)
-        conn.execute_batch("ALTER TABLE messages ADD COLUMN sender_type TEXT;").ok();
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN sender_type TEXT;")
+            .ok();
 
         // Add monotonic seq column for cursor-based pagination
-        conn.execute_batch("ALTER TABLE messages ADD COLUMN seq INTEGER;").ok();
-        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(seq);").ok();
-        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_messages_room_seq ON messages(room_id, seq);").ok();
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN seq INTEGER;")
+            .ok();
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(seq);")
+            .ok();
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_messages_room_seq ON messages(room_id, seq);",
+        )
+        .ok();
 
         // Files table for attachments
         conn.execute_batch(
@@ -86,11 +97,15 @@ impl Db {
 
         // Backfill seq for existing messages that don't have one
         let needs_seq_backfill: i64 = conn
-            .query_row("SELECT COUNT(*) FROM messages WHERE seq IS NULL", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM messages WHERE seq IS NULL", [], |r| {
+                r.get(0)
+            })
             .unwrap_or(0);
         if needs_seq_backfill > 0 {
             let mut stmt = conn
-                .prepare("SELECT id FROM messages WHERE seq IS NULL ORDER BY created_at ASC, id ASC")
+                .prepare(
+                    "SELECT id FROM messages WHERE seq IS NULL ORDER BY created_at ASC, id ASC",
+                )
                 .unwrap();
             let ids: Vec<String> = stmt
                 .query_map([], |row| row.get(0))
@@ -99,7 +114,9 @@ impl Db {
                 .collect();
             drop(stmt);
             let max_seq: i64 = conn
-                .query_row("SELECT COALESCE(MAX(seq), 0) FROM messages", [], |r| r.get(0))
+                .query_row("SELECT COALESCE(MAX(seq), 0) FROM messages", [], |r| {
+                    r.get(0)
+                })
                 .unwrap_or(0);
             for (i, id) in ids.iter().enumerate() {
                 conn.execute(
@@ -131,7 +148,11 @@ impl Db {
 
         // Seed #general room if it doesn't exist
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM rooms WHERE name = 'general'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM rooms WHERE name = 'general'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap_or(0);
         if count == 0 {
             let now = chrono::Utc::now().to_rfc3339();

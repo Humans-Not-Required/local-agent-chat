@@ -150,3 +150,29 @@ pub struct Participant {
     pub first_seen: String,
     pub last_seen: String,
 }
+
+// --- Search ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SearchResult {
+    pub message_id: String,
+    pub room_id: String,
+    pub room_name: String,
+    pub sender: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
+    pub content: String,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<String>,
+    pub seq: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResponse {
+    pub results: Vec<SearchResult>,
+    pub count: usize,
+    pub query: String,
+}

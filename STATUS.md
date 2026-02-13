@@ -52,6 +52,7 @@
 - [x] **Clickable links** — URLs (http/https, www.) in messages auto-detected and rendered as clickable links opening in new tab. Handles trailing punctuation. Click doesn't trigger message action toggle.
 - [x] **@mention highlighting** — @mentions rendered with purple highlight (text + subtle background). Combined with URL linkification in single-pass renderer.
 - [x] **Input bar height fix** — Attach button, textarea, and send button normalized to consistent 44px height using box-sizing: border-box. Buttons use flexbox centering. Auto-resize updated for border-box mode. (95 tests)
+- [x] **Cross-room message search** — GET /api/v1/search?q=... with optional room_id/sender/sender_type/limit filters. Returns newest-first results with room context. Added 8 integration tests. (103 tests)
 
 ### What's Next
 - [x] Mobile sidebar fix — hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
