@@ -33,6 +33,54 @@ function formatDate(dateStr) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Convert URLs in text to clickable links (preserves whitespace/newlines)
+function linkify(text) {
+  if (!text) return text;
+  // Match http(s) URLs and www. prefixed URLs
+  const urlRegex = /(https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  let keyIdx = 0;
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    // Add text before the URL
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    let url = match[0];
+    // Strip trailing punctuation that's likely not part of the URL
+    const trailing = url.match(/[.,;:!?]+$/);
+    let suffix = '';
+    if (trailing) {
+      suffix = trailing[0];
+      url = url.slice(0, -suffix.length);
+    }
+
+    const href = url.startsWith('www.') ? 'https://' + url : url;
+    parts.push(
+      React.createElement('a', {
+        key: `link-${keyIdx++}`,
+        href: href,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        style: { color: '#60a5fa', textDecoration: 'underline', wordBreak: 'break-all' },
+        onClick: (e) => e.stopPropagation(), // Don't trigger bubble click (action toggle)
+      }, url)
+    );
+    if (suffix) parts.push(suffix);
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
+}
+
 // Generate a consistent color for a sender name
 function senderColor(name) {
   let hash = 0;
@@ -259,7 +307,7 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
         ) : (
           <>
             {msg.reply_to && <ReplyPreview replyToId={msg.reply_to} messages={allMessages} />}
-            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</div>
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(msg.content)}</div>
             <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
               {msg.edited_at && <span style={{ fontStyle: 'italic' }}>(edited)</span>}
               {formatTime(msg.created_at)}
