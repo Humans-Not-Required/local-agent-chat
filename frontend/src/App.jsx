@@ -33,43 +33,55 @@ function formatDate(dateStr) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// Convert URLs in text to clickable links (preserves whitespace/newlines)
+// Convert URLs to clickable links and highlight @mentions
 function linkify(text) {
   if (!text) return text;
-  // Match http(s) URLs and www. prefixed URLs
-  const urlRegex = /(https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+)/g;
+  // Match URLs or @mentions (word chars, dots, hyphens)
+  const tokenRegex = /(https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+|@[\w.-]+)/g;
   const parts = [];
   let lastIndex = 0;
   let match;
   let keyIdx = 0;
 
-  while ((match = urlRegex.exec(text)) !== null) {
-    // Add text before the URL
+  while ((match = tokenRegex.exec(text)) !== null) {
+    // Add text before the match
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
 
-    let url = match[0];
-    // Strip trailing punctuation that's likely not part of the URL
-    const trailing = url.match(/[.,;:!?]+$/);
-    let suffix = '';
-    if (trailing) {
-      suffix = trailing[0];
-      url = url.slice(0, -suffix.length);
-    }
+    const token = match[0];
 
-    const href = url.startsWith('www.') ? 'https://' + url : url;
-    parts.push(
-      React.createElement('a', {
-        key: `link-${keyIdx++}`,
-        href: href,
-        target: '_blank',
-        rel: 'noopener noreferrer',
-        style: { color: '#60a5fa', textDecoration: 'underline', wordBreak: 'break-all' },
-        onClick: (e) => e.stopPropagation(), // Don't trigger bubble click (action toggle)
-      }, url)
-    );
-    if (suffix) parts.push(suffix);
+    if (token.startsWith('@')) {
+      // @mention highlight
+      parts.push(
+        React.createElement('span', {
+          key: `mention-${keyIdx++}`,
+          style: { color: '#a78bfa', fontWeight: 600, background: 'rgba(167,139,250,0.1)', borderRadius: 3, padding: '0 2px' },
+        }, token)
+      );
+    } else {
+      // URL link
+      let url = token;
+      const trailing = url.match(/[.,;:!?]+$/);
+      let suffix = '';
+      if (trailing) {
+        suffix = trailing[0];
+        url = url.slice(0, -suffix.length);
+      }
+
+      const href = url.startsWith('www.') ? 'https://' + url : url;
+      parts.push(
+        React.createElement('a', {
+          key: `link-${keyIdx++}`,
+          href: href,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          style: { color: '#60a5fa', textDecoration: 'underline', wordBreak: 'break-all' },
+          onClick: (e) => e.stopPropagation(), // Don't trigger bubble click (action toggle)
+        }, url)
+      );
+      if (suffix) parts.push(suffix);
+    }
 
     lastIndex = match.index + match[0].length;
   }
