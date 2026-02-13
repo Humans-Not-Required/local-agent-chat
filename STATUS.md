@@ -49,6 +49,8 @@
 - [x] **Monotonic seq cursor pagination** — `seq INTEGER` column on messages table, globally monotonic (MAX+1 on insert). `?after=<seq>` param on GET messages, activity feed, and SSE stream. Fixes timestamp precision issues with `since=`. Backward compat preserved (`since=` still works). Migration auto-backfills existing messages. 9 new tests (86 total).
 - [x] **Room participant lists** — `GET /api/v1/rooms/{room_id}/participants` returns unique senders with sender_type, message_count, first_seen, last_seen. Frontend 👥 button in chat header toggles participant panel. Uses latest non-null sender_type per sender. Mobile-responsive slide-in panel. 4 new tests (90 total).
 - [x] **Auto-expanding message input** — Textarea auto-grows up to ~6 lines (160px) as user types, collapses back to single line after send. Input area buttons align to bottom. Smooth CSS transition. Prevents iOS auto-zoom (16px font). Works across all screen sizes.
+- [x] **Clickable links** — URLs (http/https, www.) in messages auto-detected and rendered as clickable links opening in new tab. Handles trailing punctuation. Click doesn't trigger message action toggle.
+- [x] **@mention highlighting** — @mentions rendered with purple highlight (text + subtle background). Combined with URL linkification in single-pass renderer.
 
 ### What's Next
 - [x] Mobile sidebar fix — hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
