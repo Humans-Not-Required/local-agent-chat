@@ -58,6 +58,7 @@
 - [x] **Desktop members list persistence** — members panel stays open when switching rooms ✅ (2026-02-11)
 - [x] **ChatLogo SVG component** — Favicon SVG extracted into reusable component. Visible in sidebar header, login modal, empty state, chat room header, and sidebar footer branding. Replaces emoji placeholders with consistent visual identity ✅ (2026-02-11)
 - [x] **Auto-expanding message input** — Textarea grows as text is entered (up to ~6 lines / 160px max), shrinks back after send. Buttons align to bottom of input area. Smooth transition. Works on all screen sizes ✅ (2026-02-11)
+- [x] **Sibling chat: remove sibling exclusion** — Updated sibling-agent.sh: siblings interact freely, loop safety via rate limits only (cooldown, max-per-poll, reply threading). EXCLUDE_SENDERS demoted to optional. Commit: 9282964. ✅ (2026-02-13)
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
@@ -79,3 +80,20 @@
 - React + Vite frontend (same dark theme as other HNR services)
 - Same patterns as kanban, blog, agent-docs
 - Port 8000 internal, 3006 external (Docker)
+
+## Incoming Directions (Work Queue)
+
+<!-- WORK_QUEUE_DIRECTIONS_START -->
+- [ ] Local Agent Chat: Add favicon/logo visibly in the UI — For the local agent chat, you have a pretty great little emoji character thingy as your fav icon. I think that that should be the logo for this product, and that logo should be visible somewhere on the screen. Maybe, I'm not exactly sure where, maybe the bottom left corner would be a good spot, at least on desktop within the rooms, because you have little space at the bottom, that's a possibility. Or you could do it in the top, like in the chat room bar, maybe centered in that header, there's some dead space there. I want you to think about this and come up with something. (Jordan; 2026-02-13 07:52:02; task_id: f58f2a22-744e-4e32-ac39-23cd45fa7b45)
+- [ ] Admin key confirmation dialog + sender_type DB column — 1) Show admin key in a modal when a room is created (copy button, shown-once warning). 2) Persist sender_type as a proper DB column instead of just JSON metadata. Backward compatible: falls back to metadata.sender_type. 3 new tests (48 total). (Jordan; 2026-02-13 07:52:02; task_id: c14637c6-3d62-46fe-9584-d41096a87c29)
+- [ ] Local Agent Chat: Cross-room activity feed endpoint — GET /api/v1/activity with since, limit, room_id, sender, sender_type filters. Returns messages across all rooms (newest first) with room_name context. 7 new tests (65 total). Answers Jordan question about activity endpoint. (Jordan; 2026-02-13T09:59:53.350Z; task_id: 2d46fff5-4a08-4117-92b4-0c20563a2714)
+- [ ] Improve message input field - auto-expand and responsive sizing — Message field is very small and doesn’t expand as more text is entered. Needs to function better on all resolutions. (Jordan; 2026-02-13T09:59:53.475Z; task_id: 3d14377f-0a31-4c9f-adc3-e3561f85ae9f)
+- [ ] Local Agent Chat: Add favicon/logo in UI — Triage check: verify if this was completed. If evidence in git/code that it's done, close it. If not, work on it. (Jordan; 2026-02-13T09:59:54.683Z; task_id: 7285f1d9-8f7a-453b-a0f0-580ed308b812)
+- [ ] Improve message input field — Triage check: verify if this was completed. If evidence in git/code that it's done, close it. If not, work on it. (Jordan; 2026-02-13T10:40:28.558Z; task_id: 66b9ea40-654a-4c4c-864c-1c2c09fbbb18)
+- [ ] Participant list UX tweaks — Move “live” indicator (green dot) to the left of the members (👥) button; on desktop, if participant panel is open, keep it open when switching rooms. (Jordan; 2026-02-13T18:40:08.450Z; task_id: e043a93c-26b3-4890-8db0-6ee7d881009c)
+<!-- WORK_QUEUE_DIRECTIONS_END -->
+
+## Incoming directions (2026-02-13T17:49:01Z)
+- Jordan requested a clear testing summary for staging deploy task + confirm what’s been exercised.
+- Jordan asked to self-verify + archive: DB volume mount path fix (task f6397b19) and message edit/delete API (task 5e47352c).
+- (Repeat ping via NATS directions) Anonymous + Jordan asked again to verify/close the DB volume fix + edit/delete UI tasks — already implemented and marked done in this STATUS.
