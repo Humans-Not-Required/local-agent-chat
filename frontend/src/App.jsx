@@ -573,10 +573,12 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
   const autoResize = (el) => {
     if (!el) return;
     el.style.height = 'auto';
-    // Clamp between 1 row (~24px + padding) and ~6 rows (~160px)
+    // Clamp between 1 row and ~6 rows (~160px)
     const maxHeight = 160;
-    el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
-    el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    // +2 accounts for border in border-box mode
+    const h = el.scrollHeight + 2;
+    el.style.height = Math.min(h, maxHeight) + 'px';
+    el.style.overflowY = h > maxHeight ? 'auto' : 'hidden';
   };
 
   const handleTextChange = (e) => {
@@ -1508,27 +1510,34 @@ const styles = {
     background: '#1e293b',
     border: '1px solid #334155',
     borderRadius: 8,
-    padding: '10px 14px',
+    padding: '9px 14px',
     color: '#e2e8f0',
     fontSize: '1rem',
     resize: 'none',
     fontFamily: 'inherit',
     lineHeight: 1.5,
-    minHeight: '42px',
+    minHeight: '44px',
     maxHeight: '160px',
     overflowY: 'hidden',
     transition: 'height 0.1s ease',
+    boxSizing: 'border-box',
   },
   sendBtn: {
     background: '#3b82f6',
     color: '#fff',
     border: 'none',
     borderRadius: 8,
-    padding: '10px 20px',
+    padding: '0 20px',
     fontWeight: 600,
     cursor: 'pointer',
     fontSize: '0.9rem',
     transition: 'opacity 0.15s',
+    height: '44px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   scrollBtn: {
     position: 'absolute',
@@ -1767,12 +1776,17 @@ const styles = {
     border: '1px solid #334155',
     borderRadius: 8,
     color: '#e2e8f0',
-    padding: '8px 12px',
+    padding: '0 12px',
     cursor: 'pointer',
     fontSize: '1.1rem',
     lineHeight: 1,
     flexShrink: 0,
     transition: 'background 0.15s',
+    height: '44px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fileBubble: {
     padding: '10px 14px',
