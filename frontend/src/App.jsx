@@ -1408,7 +1408,7 @@ export default function App() {
   const [typingUsers, setTypingUsers] = useState([]); // names of users currently typing
   const [unreadCounts, setUnreadCounts] = useState({}); // roomId -> unread count
   const eventSourceRef = useRef(null);
-  const lastMsgTimeRef = useRef(null);
+  const lastSeqRef = useRef(null);
   const typingTimeoutsRef = useRef({}); // sender -> timeout id
   const lastTypingSentRef = useRef(0); // timestamp of last typing notification sent
   const lastSeenCountsRef = useRef(null);
@@ -1457,7 +1457,8 @@ export default function App() {
         const data = await res.json();
         setMessages(data);
         if (data.length > 0) {
-          lastMsgTimeRef.current = data[data.length - 1].created_at;
+          const lastMsg = data[data.length - 1];
+          lastSeqRef.current = lastMsg.seq || null;
         }
       }
     } catch (e) { /* ignore */ }
@@ -1492,8 +1493,8 @@ export default function App() {
       eventSourceRef.current.close();
     }
 
-    const since = lastMsgTimeRef.current ? `?since=${encodeURIComponent(lastMsgTimeRef.current)}` : '';
-    const es = new EventSource(`${API}/rooms/${roomId}/stream${since}`);
+    const afterParam = lastSeqRef.current ? `?after=${lastSeqRef.current}` : '';
+    const es = new EventSource(`${API}/rooms/${roomId}/stream${afterParam}`);
 
     es.addEventListener('message', (e) => {
       try {
@@ -1501,7 +1502,7 @@ export default function App() {
         setMessages(prev => {
           // Deduplicate
           if (prev.some(m => m.id === msg.id)) return prev;
-          lastMsgTimeRef.current = msg.created_at;
+          if (msg.seq) lastSeqRef.current = msg.seq;
           return [...prev, msg];
         });
         // Update last-seen count for active room (we're reading it right now)
@@ -1590,6 +1591,13 @@ export default function App() {
       } catch (err) { /* ignore */ }
     });
 
+    es.addEventListener('room_updated', (e) => {
+      try {
+        const updated = JSON.parse(e.data);
+        setRooms(prev => prev.map(r => r.id === updated.id ? { ...r, ...updated } : r));
+      } catch (err) { /* ignore */ }
+    });
+
     es.addEventListener('typing', (e) => {
       try {
         const { sender: typingSender } = JSON.parse(e.data);
@@ -1646,7 +1654,7 @@ export default function App() {
   // Load messages + files + SSE when room changes
   useEffect(() => {
     if (!activeRoom) return;
-    lastMsgTimeRef.current = null;
+    lastSeqRef.current = null;
     setTypingUsers([]);
     setFiles([]);
     // Clear all typing timeouts
