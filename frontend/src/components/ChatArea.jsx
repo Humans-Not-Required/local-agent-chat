@@ -6,6 +6,7 @@ import SearchPanel from './SearchPanel';
 import RoomSettingsModal from './RoomSettingsModal';
 import ParticipantPanel from './ParticipantPanel';
 import PinnedPanel from './PinnedPanel';
+import ThreadPanel from './ThreadPanel';
 import TypingIndicator from './TypingIndicator';
 import DateSeparator from './DateSeparator';
 import FileCard from './FileCard';
@@ -29,11 +30,13 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
   const prevMsgCountRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
+  const [threadMessageId, setThreadMessageId] = useState(null);
 
   useEffect(() => {
     setReplyTo(null);
     setNewMsgCount(0);
     setLoadingOlder(false);
+    setThreadMessageId(null);
   }, [room?.id]);
 
   const handleLoadOlder = async () => {
@@ -429,6 +432,16 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
         />
       )}
 
+      {threadMessageId && room && (
+        <ThreadPanel
+          roomId={room.id}
+          messageId={threadMessageId}
+          sender={sender}
+          onReply={handleReply}
+          onClose={() => setThreadMessageId(null)}
+        />
+      )}
+
       {showSettings && (
         <RoomSettingsModal
           room={room}
@@ -502,6 +515,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
               reactions={reactions}
               sender={sender}
               allMessages={messages}
+              onOpenThread={(msgId) => setThreadMessageId(msgId)}
             />
           );
         })}

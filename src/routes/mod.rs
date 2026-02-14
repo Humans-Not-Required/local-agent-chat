@@ -12,6 +12,7 @@ mod search;
 mod stream;
 mod system;
 mod typing;
+mod threads;
 mod webhook_routes;
 
 // --- Re-exports (all route functions used by lib.rs mount) ---
@@ -25,6 +26,7 @@ pub use reactions::{add_reaction, get_reactions, get_room_reactions, remove_reac
 pub use rooms::{create_room, delete_room, get_room, list_rooms, update_room};
 pub use search::{activity_feed, search_messages};
 pub use stream::message_stream;
+pub use threads::get_thread;
 pub use system::{
     health, llms_txt_api, llms_txt_root, not_found, openapi_json, spa_fallback, stats,
     too_many_requests,

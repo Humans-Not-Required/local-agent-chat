@@ -81,6 +81,7 @@
 - [x] **Webhooks** — Register webhook URLs to receive event notifications. CRUD API (POST/GET/PUT/DELETE /rooms/{id}/webhooks) with admin key auth. Event filtering (all or comma-separated types: message, message_edited, message_deleted, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, presence_joined, presence_left, room_updated). Optional HMAC-SHA256 signing (X-Chat-Signature header). Background dispatcher subscribes to EventBus, fire-and-forget delivery (5s timeout). CASCADE delete on room removal. 18 new tests (173 total).
 
 - [x] **Backend route decomposition** — Monolithic 3032-line `src/routes.rs` split into 14 focused module files under `src/routes/`. Shared types (ClientIp, AdminKey, TypingTracker, PresenceTracker) in mod.rs; domain routes in individual files (rooms, messages, search, stream, reactions, pins, presence, files, webhooks, typing, participants, system). Zero functional changes. All 173 tests pass. Commit: eb0961a.
+- [x] **Thread view API + frontend** — GET /rooms/{id}/messages/{msg_id}/thread walks up reply_to chain to find root, collects all descendants with depth info, returns chronological thread. Frontend ThreadPanel (🧵) with root message, nested replies, inline reply input. Thread reply count indicators ("🧵 N replies") on messages with replies. Clickable ReplyPreview opens thread panel. 🧵 action button on all messages. 7 new tests (180 total).
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)

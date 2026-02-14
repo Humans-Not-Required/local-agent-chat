@@ -128,6 +128,9 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 ## Participants
 - GET /api/v1/rooms/{id}/participants — list unique senders in a room with stats (sender, sender_type, message_count, first_seen, last_seen). Sorted by last_seen descending (most recent first). Derived from message history.
 
+## Threads
+- GET /api/v1/rooms/{id}/messages/{msg_id}/thread — get full thread context for a message. Walks up reply_to chain to find the root, then collects all descendants with depth info. Returns {"root": Message, "replies": [{"depth": N, ...Message}], "total_replies": N}. Replies sorted chronologically by seq. Works from any message in the thread (root, middle, or leaf).
+
 ## Reactions
 - POST /api/v1/rooms/{id}/messages/{msg_id}/reactions — add emoji reaction (body: {"sender": "...", "emoji": "👍"}). Toggle behavior: if the same sender+emoji already exists, it's removed instead.
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}/reactions?sender=...&emoji=... — remove a specific reaction

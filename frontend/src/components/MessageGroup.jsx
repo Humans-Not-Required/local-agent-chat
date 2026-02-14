@@ -2,7 +2,7 @@ import React from 'react';
 import { senderColor } from '../utils';
 import MessageBubble from './MessageBubble';
 
-export default function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, onReact, onPin, onUnpin, hasAdminKey, reactions, sender, allMessages }) {
+export default function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, onReact, onPin, onUnpin, hasAdminKey, reactions, sender, allMessages, onOpenThread }) {
   const msgSender = messages[0].sender;
   const color = senderColor(msgSender);
   const msgType = messages[0].sender_type || messages[0].metadata?.sender_type;
@@ -28,6 +28,7 @@ export default function MessageGroup({ messages, isOwn, onEdit, onDelete, onRepl
           reactions={(reactions || {})[msg.id] || []}
           sender={sender}
           allMessages={allMessages}
+          onOpenThread={onOpenThread}
         />
       ))}
     </div>

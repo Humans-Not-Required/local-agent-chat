@@ -5,11 +5,14 @@ import ReplyPreview from './ReplyPreview';
 import ReactionChips from './ReactionChips';
 import EmojiPicker from './EmojiPicker';
 
-export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, onReact, onPin, onUnpin, hasAdminKey, reactions, sender, allMessages }) {
+export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, onReact, onPin, onUnpin, hasAdminKey, reactions, sender, allMessages, onOpenThread }) {
   const [showActions, setShowActions] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(msg.content);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  // Count replies to this message
+  const replyCount = allMessages ? allMessages.filter(m => m.reply_to === msg.id).length : 0;
 
   const handleSaveEdit = () => {
     const trimmed = editText.trim();
@@ -60,6 +63,11 @@ export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, o
             style={styles.msgActionBtn}
             title="Reply"
           >↩</button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenThread?.(msg.id); setShowActions(false); }}
+            style={styles.msgActionBtn}
+            title="View thread"
+          >🧵</button>
           <button
             onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(prev => !prev); }}
             style={styles.msgActionBtn}
@@ -141,7 +149,15 @@ export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, o
                 <span>📌</span> Pinned
               </div>
             )}
-            {msg.reply_to && <ReplyPreview replyToId={msg.reply_to} messages={allMessages} />}
+            {msg.reply_to && (
+              <div
+                onClick={(e) => { e.stopPropagation(); onOpenThread?.(msg.id); }}
+                style={{ cursor: 'pointer' }}
+                title="View thread"
+              >
+                <ReplyPreview replyToId={msg.reply_to} messages={allMessages} />
+              </div>
+            )}
             <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderContent(msg.content)}</div>
             <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
               {msg.edited_at && <span style={{ fontStyle: 'italic' }} title={`Edited: ${formatFullTimestamp(msg.edited_at)}`}>(edited)</span>}
@@ -157,6 +173,26 @@ export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, o
           onToggle={(emoji) => onReact(msg.id, emoji)}
         />
       </div>
+      {replyCount > 0 && (
+        <div
+          onClick={(e) => { e.stopPropagation(); onOpenThread?.(msg.id); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: '3px 8px', marginTop: 2,
+            fontSize: '0.75rem', color: '#60a5fa',
+            cursor: 'pointer', borderRadius: 6,
+            background: 'rgba(96,165,250,0.08)',
+            width: 'fit-content',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(96,165,250,0.18)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(96,165,250,0.08)'; }}
+          title="View thread"
+        >
+          <span>🧵</span>
+          <span style={{ fontWeight: 500 }}>{replyCount} {replyCount === 1 ? 'reply' : 'replies'}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -97,6 +97,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::list_webhooks,
                 routes::update_webhook,
                 routes::delete_webhook,
+                routes::get_thread,
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,
