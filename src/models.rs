@@ -214,6 +214,29 @@ pub struct PinnedMessage {
     pub pinned_by: String,
 }
 
+// --- Presence ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PresenceEntry {
+    pub sender: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
+    pub connected_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RoomPresenceResponse {
+    pub room_id: String,
+    pub online: Vec<PresenceEntry>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GlobalPresenceResponse {
+    pub rooms: std::collections::HashMap<String, Vec<PresenceEntry>>,
+    pub total_online: usize,
+}
+
 // --- Reactions ---
 
 #[derive(Debug, Deserialize)]

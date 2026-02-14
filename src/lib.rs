@@ -9,7 +9,7 @@ use events::EventBus;
 use rate_limit::RateLimiter;
 use rocket::fs::{FileServer, Options};
 use rocket_cors::CorsOptions;
-use routes::TypingTracker;
+use routes::{PresenceTracker, TypingTracker};
 use std::env;
 use std::path::PathBuf;
 
@@ -28,6 +28,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
     let events = EventBus::new();
     let rate_limiter = RateLimiter::new();
     let typing_tracker = TypingTracker::default();
+    let presence_tracker = PresenceTracker::default();
 
     let cors = CorsOptions::default()
         .to_cors()
@@ -47,6 +48,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
         .manage(events)
         .manage(rate_limiter)
         .manage(typing_tracker)
+        .manage(presence_tracker)
         .attach(cors)
         .register(
             "/",
@@ -83,6 +85,8 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::pin_message,
                 routes::unpin_message,
                 routes::list_pins,
+                routes::room_presence,
+                routes::global_presence,
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,

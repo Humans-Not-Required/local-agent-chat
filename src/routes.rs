@@ -9,7 +9,8 @@ use rocket::serde::json::Json;
 use rocket::{State, delete, get, post, put};
 use rusqlite::params;
 use std::collections::HashMap;
-use std::sync::Mutex as StdMutex;
+use std::sync::{Arc, Mutex as StdMutex, RwLock};
+use tokio::sync::broadcast;
 use tokio::time::{Duration, interval};
 
 // --- Client IP extraction ---
@@ -1229,6 +1230,123 @@ impl Default for TypingTracker {
     }
 }
 
+// --- Presence Tracker ---
+
+/// Internal entry with connection count (not serialized directly)
+struct PresenceInner {
+    sender: String,
+    sender_type: Option<String>,
+    connected_at: String,
+    connections: usize,
+}
+
+#[derive(Clone)]
+pub struct PresenceTracker {
+    inner: Arc<RwLock<HashMap<String, HashMap<String, PresenceInner>>>>,
+}
+
+impl Default for PresenceTracker {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+}
+
+impl PresenceTracker {
+    /// Register a sender as present in a room. Returns true if this is their first connection (new presence).
+    pub fn join(&self, room_id: &str, sender: &str, sender_type: Option<&str>) -> bool {
+        let mut map = self.inner.write().unwrap();
+        let room = map.entry(room_id.to_string()).or_default();
+        let is_new = !room.contains_key(sender);
+        let entry = room.entry(sender.to_string()).or_insert_with(|| PresenceInner {
+            sender: sender.to_string(),
+            sender_type: sender_type.map(String::from),
+            connected_at: chrono::Utc::now().to_rfc3339(),
+            connections: 0,
+        });
+        entry.connections += 1;
+        // Update sender_type if provided and was previously None
+        if sender_type.is_some() && entry.sender_type.is_none() {
+            entry.sender_type = sender_type.map(String::from);
+        }
+        is_new
+    }
+
+    /// Remove a sender's connection from a room. Returns true if fully disconnected (last connection).
+    pub fn leave(&self, room_id: &str, sender: &str) -> bool {
+        let mut map = self.inner.write().unwrap();
+        if let Some(room) = map.get_mut(room_id)
+            && let Some(entry) = room.get_mut(sender)
+        {
+            entry.connections = entry.connections.saturating_sub(1);
+            if entry.connections == 0 {
+                room.remove(sender);
+                if room.is_empty() {
+                    map.remove(room_id);
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Get all online users in a room.
+    pub fn get_room(&self, room_id: &str) -> Vec<crate::models::PresenceEntry> {
+        let map = self.inner.read().unwrap();
+        map.get(room_id)
+            .map(|room| {
+                room.values()
+                    .map(|e| crate::models::PresenceEntry {
+                        sender: e.sender.clone(),
+                        sender_type: e.sender_type.clone(),
+                        connected_at: e.connected_at.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get all online users across all rooms.
+    pub fn get_all(&self) -> HashMap<String, Vec<crate::models::PresenceEntry>> {
+        let map = self.inner.read().unwrap();
+        map.iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    v.values()
+                        .map(|e| crate::models::PresenceEntry {
+                            sender: e.sender.clone(),
+                            sender_type: e.sender_type.clone(),
+                            connected_at: e.connected_at.clone(),
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+}
+
+/// RAII guard that removes presence when the SSE stream is dropped (client disconnects).
+struct PresenceGuard {
+    tracker: PresenceTracker,
+    room_id: String,
+    sender: String,
+    events_sender: broadcast::Sender<ChatEvent>,
+}
+
+impl Drop for PresenceGuard {
+    fn drop(&mut self) {
+        let fully_left = self.tracker.leave(&self.room_id, &self.sender);
+        if fully_left {
+            let _ = self.events_sender.send(ChatEvent::PresenceLeft {
+                sender: self.sender.clone(),
+                room_id: self.room_id.clone(),
+            });
+        }
+    }
+}
+
 #[post("/api/v1/rooms/<room_id>/typing", format = "json", data = "<body>")]
 pub fn notify_typing(
     db: &State<Db>,
@@ -1294,16 +1412,40 @@ pub fn notify_typing(
 
 // --- SSE Stream ---
 
-#[get("/api/v1/rooms/<room_id>/stream?<since>&<after>")]
+#[get("/api/v1/rooms/<room_id>/stream?<since>&<after>&<sender>&<sender_type>")]
+#[allow(clippy::too_many_arguments)]
 pub fn message_stream(
     db: &State<Db>,
     events: &State<EventBus>,
+    presence: &State<PresenceTracker>,
     room_id: &str,
     since: Option<&str>,
     after: Option<i64>,
+    sender: Option<&str>,
+    sender_type: Option<&str>,
 ) -> EventStream![] {
     let mut rx = events.sender.subscribe();
     let room_id = room_id.to_string();
+
+    // Register presence if sender is provided
+    let guard = sender.map(|s| {
+        let s = s.trim().to_string();
+        let st = sender_type.map(|v| v.trim().to_string());
+        let is_new = presence.join(&room_id, &s, st.as_deref());
+        if is_new {
+            events.publish(ChatEvent::PresenceJoined {
+                sender: s.clone(),
+                sender_type: st.clone(),
+                room_id: room_id.clone(),
+            });
+        }
+        PresenceGuard {
+            tracker: PresenceTracker { inner: presence.inner.clone() },
+            room_id: room_id.clone(),
+            sender: s,
+            events_sender: events.sender.clone(),
+        }
+    });
 
     // Replay missed messages if `after` or `since` provided
     let replay: Vec<Message> = if let Some(after_val) = after {
@@ -1375,6 +1517,11 @@ pub fn message_stream(
     };
 
     EventStream! {
+        // Keep presence guard alive for the lifetime of the stream.
+        // When the stream is dropped (client disconnects), the guard is dropped,
+        // which removes the presence entry and publishes a PresenceLeft event.
+        let _presence_guard = guard;
+
         // Send replayed messages first
         for msg in replay {
             yield Event::json(&msg).event("message");
@@ -1418,6 +1565,12 @@ pub fn message_stream(
                         }
                         Ok(ChatEvent::MessageUnpinned { ref id, room_id: ref rid }) if *rid == room_id => {
                             yield Event::json(&serde_json::json!({"id": id, "room_id": rid})).event("message_unpinned");
+                        }
+                        Ok(ChatEvent::PresenceJoined { ref sender, ref sender_type, room_id: ref rid }) if *rid == room_id => {
+                            yield Event::json(&serde_json::json!({"sender": sender, "sender_type": sender_type, "room_id": rid})).event("presence_joined");
+                        }
+                        Ok(ChatEvent::PresenceLeft { ref sender, room_id: ref rid }) if *rid == room_id => {
+                            yield Event::json(&serde_json::json!({"sender": sender, "room_id": rid})).event("presence_left");
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
@@ -2071,6 +2224,65 @@ pub fn list_pins(
     Ok(Json(pins))
 }
 
+// --- Presence ---
+
+#[get("/api/v1/rooms/<room_id>/presence")]
+pub fn room_presence(
+    db: &State<Db>,
+    presence: &State<PresenceTracker>,
+    room_id: &str,
+) -> Result<Json<crate::models::RoomPresenceResponse>, (Status, Json<serde_json::Value>)> {
+    // Verify room exists
+    let conn = db.conn.lock().unwrap();
+    let room_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|c| c > 0)
+        .unwrap_or(false);
+
+    if !room_exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Room not found"})),
+        ));
+    }
+    drop(conn);
+
+    let online = presence.get_room(room_id);
+    let count = online.len();
+
+    Ok(Json(crate::models::RoomPresenceResponse {
+        room_id: room_id.to_string(),
+        online,
+        count,
+    }))
+}
+
+#[get("/api/v1/presence")]
+pub fn global_presence(
+    presence: &State<PresenceTracker>,
+) -> Json<crate::models::GlobalPresenceResponse> {
+    let rooms = presence.get_all();
+    let total_online: usize = {
+        // Count unique senders across all rooms
+        let mut unique = std::collections::HashSet::new();
+        for entries in rooms.values() {
+            for e in entries {
+                unique.insert(e.sender.clone());
+            }
+        }
+        unique.len()
+    };
+
+    Json(crate::models::GlobalPresenceResponse {
+        rooms,
+        total_online,
+    })
+}
+
 // --- File Attachments ---
 
 /// Max file size: 5MB (after base64 decode)
@@ -2444,6 +2656,14 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - DELETE /api/v1/rooms/{id}/files/{file_id}?sender=... — delete file (sender must match, or use room admin key)
 - Max file size: 5MB. Data must be base64-encoded in the upload request.
 - SSE events: file_uploaded, file_deleted (same stream as messages)
+
+## Presence (Online Status)
+- GET /api/v1/rooms/{id}/presence — list currently connected users in a room (sender, sender_type, connected_at). Tracked via SSE connections.
+- GET /api/v1/presence — global presence across all rooms (rooms map + total_online unique count).
+- To register presence: connect to SSE stream with `?sender=<name>&sender_type=<agent|human>` query params.
+- When the SSE stream disconnects, presence is automatically removed.
+- SSE events: presence_joined (when a new user connects), presence_left (when a user fully disconnects).
+- Multiple connections from the same sender to the same room are ref-counted — presence_left only fires when the last connection drops.
 
 ## System
 - GET /api/v1/health — health check

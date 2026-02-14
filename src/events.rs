@@ -14,6 +14,8 @@ pub enum ChatEvent {
     ReactionRemoved(Reaction),
     MessagePinned(PinnedMessage),
     MessageUnpinned { id: String, room_id: String },
+    PresenceJoined { sender: String, sender_type: Option<String>, room_id: String },
+    PresenceLeft { sender: String, room_id: String },
 }
 
 pub struct EventBus {

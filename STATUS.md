@@ -77,6 +77,7 @@
 
 - [x] **Frontend component decomposition** — Monolithic 2967-line App.jsx split into 16 focused component files + utils.js + styles.js. App.jsx reduced to 550 lines (81% reduction). Build verified. Zero functional changes. Commit: 9310489.
 - [x] **Message pinning** — POST /rooms/{id}/messages/{msg_id}/pin (admin key required), DELETE to unpin, GET /rooms/{id}/pins lists pinned messages (newest-first). Messages include pinned_at/pinned_by fields. SSE events: message_pinned, message_unpinned. Frontend: 📌 indicator on pinned messages, pin/unpin action button (with admin key prompt), pinned messages panel (📌 header button). Admin keys auto-saved to localStorage on room creation and first successful pin. 12 new tests (144 total).
+- [x] **User presence / online status** — SSE stream now accepts optional `?sender=<name>&sender_type=<type>` query params to register presence. GET /rooms/{id}/presence lists connected users. GET /presence shows global cross-room presence with unique sender count. Ref-counted connections (multiple tabs work correctly). RAII guard auto-removes presence on disconnect. SSE events: presence_joined, presence_left. 11 new tests (155 total). Commit: TBD.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
