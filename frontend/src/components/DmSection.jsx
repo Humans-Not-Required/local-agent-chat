@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { styles } from '../styles';
 import { timeAgo, formatFullTimestamp, senderColor } from '../utils';
 
-export default function DmSection({ conversations, activeRoom, onSelectDm, onStartDm, sender }) {
+export default function DmSection({ conversations, activeRoom, onSelectDm, onStartDm, sender, profiles }) {
   const [composing, setComposing] = useState(false);
   const [recipient, setRecipient] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
@@ -86,9 +86,42 @@ export default function DmSection({ conversations, activeRoom, onSelectDm, onSta
                   fontWeight: hasUnread ? 700 : 500,
                   color: isActive ? '#f1f5f9' : hasUnread ? '#f1f5f9' : '#cbd5e1',
                   fontSize: '0.9rem',
+                  display: 'flex', alignItems: 'center', gap: 8,
                 }}>
+                  {(() => {
+                    const p = profiles?.[conv.other_participant];
+                    const avatarUrl = p?.avatar_url;
+                    const initial = conv.other_participant.charAt(0).toUpperCase();
+                    const color = senderColor(conv.other_participant);
+                    return (
+                      <div style={{ flexShrink: 0 }}>
+                        {avatarUrl ? (
+                          <img
+                            src={avatarUrl}
+                            alt={conv.other_participant}
+                            style={{
+                              width: 24, height: 24, borderRadius: '50%',
+                              objectFit: 'cover', background: '#1e293b',
+                            }}
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div
+                          style={{
+                            width: 24, height: 24, borderRadius: '50%',
+                            background: color, display: avatarUrl ? 'none' : 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.65rem', fontWeight: 700, color: '#0f172a',
+                            userSelect: 'none',
+                          }}
+                        >
+                          {initial}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <span style={{ color: senderColor(conv.other_participant), fontWeight: 600 }}>
-                    {conv.other_participant}
+                    {profiles?.[conv.other_participant]?.display_name || conv.other_participant}
                   </span>
                 </div>
                 {hasUnread && (

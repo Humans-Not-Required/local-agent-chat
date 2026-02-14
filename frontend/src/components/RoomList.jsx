@@ -4,7 +4,7 @@ import { timeAgo, formatFullTimestamp, senderColor } from '../utils';
 import ChatLogo from './ChatLogo';
 import DmSection from './DmSection';
 
-export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, senderProfile, onChangeSender, onEditProfile, dmConversations, onSelectDm, onStartDm }) {
+export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, senderProfile, onChangeSender, onEditProfile, dmConversations, onSelectDm, onStartDm, profiles }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -95,6 +95,7 @@ export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, un
         onSelectDm={onSelectDm}
         onStartDm={onStartDm}
         sender={sender}
+        profiles={profiles}
       />
       {/* User identity footer */}
       {sender && (() => {

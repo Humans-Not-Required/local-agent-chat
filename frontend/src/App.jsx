@@ -279,6 +279,7 @@ export default function App() {
               dmConversations={dmConversations}
               onSelectDm={handleSelectDm}
               onStartDm={onStartDm}
+              profiles={profiles}
             />
           </>
         )}
