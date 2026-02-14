@@ -1887,7 +1887,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
 - GET /api/v1/rooms/{id}/messages?after=<seq>&since=&limit=&before=&sender=&sender_type=&exclude_sender= — poll messages. Use `after=<seq>` for reliable cursor-based pagination (preferred). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer. Use `exclude_sender=Name1,Name2` to filter out messages from specific senders (useful for multi-agent environments to prevent reply loops).
-- GET /api/v1/rooms/{id}/stream?after=<seq>&since= — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Events: message, message_edited, message_deleted, typing
+- GET /api/v1/rooms/{id}/stream?after=<seq>&since= — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, heartbeat
 
 ## Typing Indicators
 - POST /api/v1/rooms/{id}/typing — notify typing (body: {"sender": "..."}). Ephemeral, not stored. Deduped server-side (2s per sender).

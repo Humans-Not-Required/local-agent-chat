@@ -297,16 +297,286 @@
         }
       }
     },
+    "/rooms/{room_id}/participants": {
+      "get": {
+        "summary": "List room participants",
+        "operationId": "listParticipants",
+        "description": "Returns unique senders in a room with stats (message count, first/last seen, sender type). Derived from message history, sorted by last_seen descending.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Participant list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "room_id": { "type": "string" },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sender": { "type": "string" },
+                          "sender_type": { "type": "string", "nullable": true },
+                          "message_count": { "type": "integer" },
+                          "first_seen": { "type": "string", "format": "date-time" },
+                          "last_seen": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    },
+                    "count": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Room not found" }
+        }
+      }
+    },
+    "/rooms/{room_id}/messages/{message_id}/reactions": {
+      "post": {
+        "summary": "Add or toggle a reaction",
+        "operationId": "addReaction",
+        "description": "Add a reaction to a message. Toggle behavior: if the same sender+emoji already exists, it is removed instead.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "message_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sender", "emoji"],
+                "properties": {
+                  "sender": { "type": "string", "maxLength": 100 },
+                  "emoji": { "type": "string", "maxLength": 32 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Reaction added or toggled off" },
+          "404": { "description": "Message not found" }
+        }
+      },
+      "delete": {
+        "summary": "Remove a reaction",
+        "operationId": "removeReaction",
+        "description": "Explicitly remove a specific reaction by sender and emoji.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "message_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "sender", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "emoji", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Reaction removed" },
+          "404": { "description": "Reaction not found" }
+        }
+      },
+      "get": {
+        "summary": "Get reactions for a message",
+        "operationId": "getMessageReactions",
+        "description": "Returns reactions grouped by emoji with sender lists and counts.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "message_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Grouped reactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message_id": { "type": "string" },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": { "type": "string" },
+                          "count": { "type": "integer" },
+                          "senders": { "type": "array", "items": { "type": "string" } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Message not found" }
+        }
+      }
+    },
+    "/rooms/{room_id}/reactions": {
+      "get": {
+        "summary": "Bulk get reactions for all messages in a room",
+        "operationId": "getRoomReactions",
+        "description": "Returns reactions for all messages in a room, keyed by message_id. Avoids N+1 queries when rendering a room's messages with reactions.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reactions keyed by message_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "room_id": { "type": "string" },
+                    "reactions": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "emoji": { "type": "string" },
+                            "count": { "type": "integer" },
+                            "senders": { "type": "array", "items": { "type": "string" } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Room not found" }
+        }
+      }
+    },
+    "/rooms/{room_id}/files": {
+      "post": {
+        "summary": "Upload a file",
+        "operationId": "uploadFile",
+        "description": "Upload a file with base64-encoded data. 5MB size limit (after decode). Agent-friendly JSON format.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sender", "filename", "data"],
+                "properties": {
+                  "sender": { "type": "string", "maxLength": 100 },
+                  "filename": { "type": "string", "maxLength": 255 },
+                  "content_type": { "type": "string", "default": "application/octet-stream" },
+                  "data": { "type": "string", "format": "byte", "description": "Base64-encoded file data (max 5MB decoded)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "File uploaded with metadata" },
+          "400": { "description": "Invalid file data or size limit exceeded" },
+          "404": { "description": "Room not found" },
+          "429": { "description": "Rate limited (10 uploads/min per IP)" }
+        }
+      },
+      "get": {
+        "summary": "List files in a room",
+        "operationId": "listRoomFiles",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Array of file metadata (no binary data)" },
+          "404": { "description": "Room not found" }
+        }
+      }
+    },
+    "/rooms/{room_id}/files/{file_id}": {
+      "delete": {
+        "summary": "Delete a file",
+        "operationId": "deleteFile",
+        "description": "Delete a file. Sender must match, or provide room admin key.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "file_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "sender", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [{ "adminKey": [] }, {}],
+        "responses": {
+          "200": { "description": "File deleted" },
+          "403": { "description": "Sender mismatch and no valid admin key" },
+          "404": { "description": "File not found" }
+        }
+      }
+    },
+    "/files/{file_id}": {
+      "get": {
+        "summary": "Download a file",
+        "operationId": "downloadFile",
+        "description": "Download raw file binary with correct Content-Type header.",
+        "parameters": [
+          { "name": "file_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Raw file binary" },
+          "404": { "description": "File not found" }
+        }
+      }
+    },
+    "/files/{file_id}/info": {
+      "get": {
+        "summary": "Get file metadata",
+        "operationId": "getFileInfo",
+        "description": "Returns file metadata without the binary data.",
+        "parameters": [
+          { "name": "file_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "File metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "room_id": { "type": "string" },
+                    "sender": { "type": "string" },
+                    "filename": { "type": "string" },
+                    "content_type": { "type": "string" },
+                    "size": { "type": "integer" },
+                    "created_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "File not found" }
+        }
+      }
+    },
     "/rooms/{room_id}/stream": {
       "get": {
         "summary": "Real-time message stream (SSE)",
         "operationId": "messageStream",
         "parameters": [
           { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
-          { "name": "since", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "Replay messages after this timestamp" }
+          { "name": "since", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "Replay messages after this timestamp (backward compat)" },
+          { "name": "after", "in": "query", "schema": { "type": "integer" }, "description": "Replay messages after this seq cursor (preferred over since)" }
         ],
         "responses": {
-          "200": { "description": "SSE stream with events: message, message_edited, message_deleted, typing, heartbeat" }
+          "200": { "description": "SSE stream with events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, heartbeat" }
         }
       }
     }

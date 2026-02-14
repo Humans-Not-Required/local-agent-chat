@@ -63,6 +63,8 @@
 - [x] **Room last message preview** — Room list and detail endpoints include `last_message_sender` and `last_message_preview` (truncated to 100 chars). Sidebar shows sender + preview under room name. 2 new tests (115 total). Commit: 48b2026.
 - [x] **Room list sorted by activity** — Rooms with most recent messages appear first in sidebar. Empty rooms (no messages) sorted last alphabetically. 1 new test (116 total).
 - [x] **Inline markdown rendering** — Messages support `` `inline code` `` (monospace with background) and `**bold**` formatting. Integrated with existing URL linkification and @mention highlighting.
+- [x] **Fenced code blocks** — Triple-backtick code blocks (` ```lang `) rendered with dark background, monospace font, horizontal scroll, and optional language label. Code blocks bypass inline markdown processing.
+- [x] **Italic and strikethrough** — `*italic*` and `~~strikethrough~~` rendering in messages. Full inline markdown: bold, italic, strikethrough, inline code, @mentions, clickable links.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
