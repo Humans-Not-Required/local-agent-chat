@@ -313,10 +313,16 @@ pub fn post_via_hook(
     body: Json<IncomingWebhookMessage>,
 ) -> Result<Json<Message>, (Status, Json<serde_json::Value>)> {
     // Rate limit per token (60/min, same as regular messages)
-    if !rate_limiter.check(&format!("hook:{}", token), 60, 60) {
+    let rl = rate_limiter.check_with_info(&format!("hook:{}", token), 60, 60);
+    if !rl.allowed {
         return Err((
             Status::TooManyRequests,
-            Json(serde_json::json!({"error": "Rate limited: max 60 messages per minute per webhook"})),
+            Json(serde_json::json!({
+                "error": "Rate limited: max 60 messages per minute per webhook",
+                "retry_after_secs": rl.retry_after_secs,
+                "limit": rl.limit,
+                "remaining": 0
+            })),
         ));
     }
 

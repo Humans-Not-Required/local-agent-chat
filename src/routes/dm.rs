@@ -46,10 +46,16 @@ pub fn send_dm(
     body: Json<SendDm>,
 ) -> Result<Json<DmSendResponse>, (Status, Json<serde_json::Value>)> {
     // Rate limit
-    if !rate_limiter.check(&format!("send_dm:{}", ip.0), 60, 60) {
+    let rl = rate_limiter.check_with_info(&format!("send_dm:{}", ip.0), 60, 60);
+    if !rl.allowed {
         return Err((
             Status::TooManyRequests,
-            Json(serde_json::json!({"error": "Rate limited: max 60 DMs per minute"})),
+            Json(serde_json::json!({
+                "error": "Rate limited: max 60 DMs per minute",
+                "retry_after_secs": rl.retry_after_secs,
+                "limit": rl.limit,
+                "remaining": 0
+            })),
         ));
     }
 

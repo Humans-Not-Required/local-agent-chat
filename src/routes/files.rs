@@ -23,10 +23,16 @@ pub fn upload_file(
 ) -> Result<Json<FileInfo>, (Status, Json<serde_json::Value>)> {
     use base64::Engine;
 
-    if !rate_limiter.check(&format!("upload_file:{}", ip.0), 10, 60) {
+    let rl = rate_limiter.check_with_info(&format!("upload_file:{}", ip.0), 10, 60);
+    if !rl.allowed {
         return Err((
             Status::TooManyRequests,
-            Json(serde_json::json!({"error": "Rate limited: max 10 file uploads per minute"})),
+            Json(serde_json::json!({
+                "error": "Rate limited: max 10 file uploads per minute",
+                "retry_after_secs": rl.retry_after_secs,
+                "limit": rl.limit,
+                "remaining": 0
+            })),
         ));
     }
 

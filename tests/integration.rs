@@ -7233,3 +7233,74 @@ fn test_post_via_incoming_webhook_searchable() {
     assert_eq!(body["count"], 1);
     assert_eq!(body["results"][0]["sender"], "SearchBot");
 }
+
+// --- Rate Limit Info ---
+
+#[test]
+fn test_rate_limit_response_includes_retry_info() {
+    let client = test_client();
+
+    // Create a room
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "rate-limit-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send 60 messages to hit the rate limit (60/min)
+    for i in 0..60 {
+        let body = format!(r#"{{"sender": "spammer", "content": "msg {i}"}}"#);
+        let res = client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(body)
+            .dispatch();
+        assert_eq!(res.status(), Status::Ok, "Message {i} should succeed");
+    }
+
+    // The 61st should be rate limited
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "spammer", "content": "one too many"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::TooManyRequests);
+
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("Rate limited"));
+    assert!(body["retry_after_secs"].is_number(), "Should include retry_after_secs");
+    assert!(body["retry_after_secs"].as_u64().unwrap() > 0, "retry_after_secs should be positive");
+    assert_eq!(body["limit"], 60);
+    assert_eq!(body["remaining"], 0);
+}
+
+#[test]
+fn test_rate_limit_room_creation_includes_retry_info() {
+    let client = test_client();
+
+    // Create 10 rooms to hit the limit (10/hr)
+    for i in 0..10 {
+        let body = format!(r#"{{"name": "rl-room-{i}"}}"#);
+        let res = client
+            .post("/api/v1/rooms")
+            .header(ContentType::JSON)
+            .body(body)
+            .dispatch();
+        assert_eq!(res.status(), Status::Ok, "Room {i} should succeed");
+    }
+
+    // The 11th should be rate limited
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "one-too-many"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::TooManyRequests);
+
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["retry_after_secs"].is_number());
+    assert_eq!(body["limit"], 10);
+    assert_eq!(body["remaining"], 0);
+}

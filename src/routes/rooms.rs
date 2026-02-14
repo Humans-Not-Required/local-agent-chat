@@ -16,10 +16,16 @@ pub fn create_room(
     ip: ClientIp,
     body: Json<CreateRoom>,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    if !rate_limiter.check(&format!("create_room:{}", ip.0), 10, 3600) {
+    let rl = rate_limiter.check_with_info(&format!("create_room:{}", ip.0), 10, 3600);
+    if !rl.allowed {
         return Err((
             Status::TooManyRequests,
-            Json(serde_json::json!({"error": "Rate limited: max 10 rooms per hour"})),
+            Json(serde_json::json!({
+                "error": "Rate limited: max 10 rooms per hour",
+                "retry_after_secs": rl.retry_after_secs,
+                "limit": rl.limit,
+                "remaining": 0
+            })),
         ));
     }
 
