@@ -11,7 +11,7 @@ import DateSeparator from './DateSeparator';
 import FileCard from './FileCard';
 import MessageGroup from './MessageGroup';
 
-export default function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onPin, onUnpin, adminKey, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, soundEnabled, onToggleSound, hasMore, onLoadOlder }) {
+export default function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onPin, onUnpin, adminKey, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, soundEnabled, onToggleSound, hasMore, onLoadOlder, onlineUsers }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const messagesEndRef = useRef(null);
@@ -366,10 +366,23 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
               background: showParticipants ? '#334155' : 'none',
               fontSize: '0.9rem',
               padding: '4px 8px',
+              position: 'relative',
             }}
-            title="Members"
+            title={`Members${onlineUsers?.length ? ` (${onlineUsers.length} online)` : ''}`}
           >
             👥
+            {onlineUsers?.length > 0 && (
+              <span style={{
+                position: 'absolute', top: 0, right: 0,
+                background: '#34d399', color: '#0f172a',
+                fontSize: '0.6rem', fontWeight: 700,
+                borderRadius: '50%', minWidth: 14, height: 14,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '0 3px',
+              }}>
+                {onlineUsers.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setShowSettings(true)}
@@ -495,7 +508,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
         <div ref={messagesEndRef} />
       </div>
       {showParticipants && room && (
-        <ParticipantPanel roomId={room.id} onClose={() => setShowParticipants(false)} />
+        <ParticipantPanel roomId={room.id} onClose={() => setShowParticipants(false)} onlineUsers={onlineUsers || []} />
       )}
       </div>
       )}

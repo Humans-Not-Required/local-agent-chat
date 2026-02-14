@@ -25,6 +25,7 @@ export default function App() {
   const [typingUsers, setTypingUsers] = useState([]);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('chat-sound') !== 'off');
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const senderRef = useRef(sender);
   const soundEnabledRef = useRef(soundEnabled);
   const eventSourceRef = useRef(null);
@@ -141,8 +142,19 @@ export default function App() {
       eventSourceRef.current.close();
     }
 
-    const afterParam = lastSeqRef.current ? `?after=${lastSeqRef.current}` : '';
-    const es = new EventSource(`${API}/rooms/${roomId}/stream${afterParam}`);
+    const params = new URLSearchParams();
+    if (lastSeqRef.current) params.set('after', lastSeqRef.current);
+    if (senderRef.current) params.set('sender', senderRef.current);
+    const st = localStorage.getItem('chat-sender-type');
+    if (st) params.set('sender_type', st);
+    const paramStr = params.toString();
+    const es = new EventSource(`${API}/rooms/${roomId}/stream${paramStr ? '?' + paramStr : ''}`);
+
+    // Fetch initial presence for this room
+    fetch(`${API}/rooms/${roomId}/presence`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setOnlineUsers(data.online || []); })
+      .catch(() => {});
 
     es.addEventListener('message', (e) => {
       try {
@@ -253,6 +265,23 @@ export default function App() {
       } catch (err) { /* ignore */ }
     });
 
+    es.addEventListener('presence_joined', (e) => {
+      try {
+        const { sender: joinedSender, sender_type: joinedType } = JSON.parse(e.data);
+        setOnlineUsers(prev => {
+          if (prev.some(u => u.sender === joinedSender)) return prev;
+          return [...prev, { sender: joinedSender, sender_type: joinedType, connected_at: new Date().toISOString() }];
+        });
+      } catch { /* ignore */ }
+    });
+
+    es.addEventListener('presence_left', (e) => {
+      try {
+        const { sender: leftSender } = JSON.parse(e.data);
+        setOnlineUsers(prev => prev.filter(u => u.sender !== leftSender));
+      } catch { /* ignore */ }
+    });
+
     es.addEventListener('room_updated', (e) => {
       try {
         const updated = JSON.parse(e.data);
@@ -310,6 +339,7 @@ export default function App() {
     if (!activeRoom) return;
     lastSeqRef.current = null;
     setTypingUsers([]);
+    setOnlineUsers([]);
     setFiles([]);
     Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
     typingTimeoutsRef.current = {};
@@ -612,6 +642,7 @@ export default function App() {
           onToggleSound={() => setSoundEnabled(prev => !prev)}
           hasMore={hasMore}
           onLoadOlder={loadOlderMessages}
+          onlineUsers={onlineUsers}
         />
       </div>
       <footer style={{ textAlign: 'center', padding: '4px 16px', fontSize: '0.6rem', color: '#475569', flexShrink: 0, borderTop: '1px solid #1e293b' }}>
