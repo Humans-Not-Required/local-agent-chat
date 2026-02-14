@@ -77,17 +77,10 @@ pub fn send_dm(
         ));
     }
 
-    if content.is_empty() {
+    if content.is_empty() || content.len() > 10000 {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "Content cannot be empty"})),
-        ));
-    }
-
-    if content.len() > 10000 {
-        return Err((
-            Status::BadRequest,
-            Json(serde_json::json!({"error": "Content too long (max 10000 chars)"})),
+            Json(serde_json::json!({"error": "Content must be 1-10000 characters"})),
         ));
     }
 
