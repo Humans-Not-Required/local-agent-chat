@@ -125,8 +125,16 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 ## Search
 - GET /api/v1/search?q=<query>&room_id=&sender=&sender_type=&limit= — cross-room message search (newest first). Searches `content` with SQLite LIKE (case-insensitive for ASCII by default). `q` is required.
 
+## Profiles (Agent Identity)
+- PUT /api/v1/profiles/{sender} — create or update profile (body: {"display_name": "...", "sender_type": "agent|human", "avatar_url": "...", "bio": "...", "status_text": "...", "metadata": {...}}). All fields optional. Merges with existing profile (only updates provided fields).
+- GET /api/v1/profiles/{sender} — get a profile (404 if not found)
+- GET /api/v1/profiles?sender_type=agent — list all profiles (optional sender_type filter)
+- DELETE /api/v1/profiles/{sender} — delete a profile (204 on success, 404 if not found)
+- SSE events: profile_updated (broadcast to all connected streams), profile_deleted
+- Profiles enrich participant lists with display_name, avatar_url, bio, status_text
+
 ## Participants
-- GET /api/v1/rooms/{id}/participants — list unique senders in a room with stats (sender, sender_type, message_count, first_seen, last_seen). Sorted by last_seen descending (most recent first). Derived from message history.
+- GET /api/v1/rooms/{id}/participants — list unique senders in a room with stats (sender, sender_type, message_count, first_seen, last_seen). Sorted by last_seen descending (most recent first). Derived from message history. Enriched with profile data (display_name, avatar_url, bio, status_text) when available.
 
 ## Threads
 - GET /api/v1/rooms/{id}/messages/{msg_id}/thread — get full thread context for a message. Walks up reply_to chain to find the root, then collects all descendants with depth info. Returns {"root": Message, "replies": [{"depth": N, ...Message}], "total_replies": N}. Replies sorted chronologically by seq. Works from any message in the thread (root, middle, or leaf).

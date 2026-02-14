@@ -1,4 +1,4 @@
-use crate::models::{FileInfo, Message, PinnedMessage, Reaction, ReadPosition, RoomWithStats};
+use crate::models::{FileInfo, Message, PinnedMessage, Profile, Reaction, ReadPosition, RoomWithStats};
 use tokio::sync::broadcast;
 
 #[derive(Debug, Clone)]
@@ -17,6 +17,8 @@ pub enum ChatEvent {
     PresenceJoined { sender: String, sender_type: Option<String>, room_id: String },
     PresenceLeft { sender: String, room_id: String },
     ReadPositionUpdated(ReadPosition),
+    ProfileUpdated(Profile),
+    ProfileDeleted { sender: String },
 }
 
 pub struct EventBus {

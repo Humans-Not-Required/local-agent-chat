@@ -1674,7 +1674,9 @@
             "name": "room_id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -1683,10 +1685,19 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["sender", "last_read_seq"],
+                "required": [
+                  "sender",
+                  "last_read_seq"
+                ],
                 "properties": {
-                  "sender": { "type": "string", "description": "The sender marking messages as read" },
-                  "last_read_seq": { "type": "integer", "description": "Sequence number of the last read message" }
+                  "sender": {
+                    "type": "string",
+                    "description": "The sender marking messages as read"
+                  },
+                  "last_read_seq": {
+                    "type": "integer",
+                    "description": "Sequence number of the last read message"
+                  }
                 }
               }
             }
@@ -1700,17 +1711,30 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "room_id": { "type": "string" },
-                    "sender": { "type": "string" },
-                    "last_read_seq": { "type": "integer" },
-                    "updated_at": { "type": "string", "format": "date-time" }
+                    "room_id": {
+                      "type": "string"
+                    },
+                    "sender": {
+                      "type": "string"
+                    },
+                    "last_read_seq": {
+                      "type": "integer"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
                   }
                 }
               }
             }
           },
-          "400": { "description": "Invalid request (empty sender or negative seq)" },
-          "404": { "description": "Room not found" }
+          "400": {
+            "description": "Invalid request (empty sender or negative seq)"
+          },
+          "404": {
+            "description": "Room not found"
+          }
         }
       },
       "get": {
@@ -1722,7 +1746,9 @@
             "name": "room_id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1735,17 +1761,28 @@
                   "items": {
                     "type": "object",
                     "properties": {
-                      "room_id": { "type": "string" },
-                      "sender": { "type": "string" },
-                      "last_read_seq": { "type": "integer" },
-                      "updated_at": { "type": "string", "format": "date-time" }
+                      "room_id": {
+                        "type": "string"
+                      },
+                      "sender": {
+                        "type": "string"
+                      },
+                      "last_read_seq": {
+                        "type": "integer"
+                      },
+                      "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
                     }
                   }
                 }
               }
             }
           },
-          "404": { "description": "Room not found" }
+          "404": {
+            "description": "Room not found"
+          }
         }
       }
     },
@@ -1759,7 +1796,9 @@
             "name": "sender",
             "in": "query",
             "required": true,
-            "schema": { "type": "string" },
+            "schema": {
+              "type": "string"
+            },
             "description": "Sender name to check unread counts for"
           }
         ],
@@ -1771,27 +1810,211 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "sender": { "type": "string" },
+                    "sender": {
+                      "type": "string"
+                    },
                     "rooms": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "room_id": { "type": "string" },
-                          "room_name": { "type": "string" },
-                          "unread_count": { "type": "integer" },
-                          "last_read_seq": { "type": "integer" },
-                          "latest_seq": { "type": "integer" }
+                          "room_id": {
+                            "type": "string"
+                          },
+                          "room_name": {
+                            "type": "string"
+                          },
+                          "unread_count": {
+                            "type": "integer"
+                          },
+                          "last_read_seq": {
+                            "type": "integer"
+                          },
+                          "latest_seq": {
+                            "type": "integer"
+                          }
                         }
                       }
                     },
-                    "total_unread": { "type": "integer" }
+                    "total_unread": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
             }
           },
-          "400": { "description": "Empty sender parameter" }
+          "400": {
+            "description": "Empty sender parameter"
+          }
+        }
+      }
+    },
+    "/profiles": {
+      "get": {
+        "summary": "List all profiles",
+        "operationId": "listProfiles",
+        "tags": [
+          "profiles"
+        ],
+        "parameters": [
+          {
+            "name": "sender_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agent",
+                "human"
+              ]
+            },
+            "description": "Filter by sender type"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of profiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Profile"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profiles/{sender}": {
+      "get": {
+        "summary": "Get a profile",
+        "operationId": "getProfile",
+        "tags": [
+          "profiles"
+        ],
+        "parameters": [
+          {
+            "name": "sender",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Profile not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Create or update a profile",
+        "operationId": "upsertProfile",
+        "tags": [
+          "profiles"
+        ],
+        "parameters": [
+          {
+            "name": "sender",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "display_name": {
+                    "type": "string",
+                    "description": "Display name"
+                  },
+                  "sender_type": {
+                    "type": "string",
+                    "enum": [
+                      "agent",
+                      "human"
+                    ],
+                    "description": "Agent or human"
+                  },
+                  "avatar_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Avatar image URL"
+                  },
+                  "bio": {
+                    "type": "string",
+                    "description": "Short biography"
+                  },
+                  "status_text": {
+                    "type": "string",
+                    "description": "Current status text"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "description": "Extensible JSON metadata"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile created or updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a profile",
+        "operationId": "deleteProfile",
+        "tags": [
+          "profiles"
+        ],
+        "parameters": [
+          {
+            "name": "sender",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Profile deleted"
+          },
+          "404": {
+            "description": "Profile not found"
+          }
         }
       }
     }
@@ -1803,6 +2026,71 @@
         "scheme": "bearer",
         "description": "Per-room admin key (format: chat_<hex>). Returned only on room creation. Required for room deletion, message moderation, and webhook management."
       }
+    },
+    "schemas": {
+      "Profile": {
+        "type": "object",
+        "required": [
+          "sender",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "sender": {
+            "type": "string",
+            "description": "Unique sender identifier (primary key)"
+          },
+          "display_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Display name"
+          },
+          "sender_type": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "agent",
+              "human"
+            ],
+            "description": "Agent or human"
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true,
+            "format": "uri",
+            "description": "Avatar image URL"
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short biography"
+          },
+          "status_text": {
+            "type": "string",
+            "nullable": true,
+            "description": "Current status text"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Extensible JSON metadata"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "profiles",
+      "description": "Agent/user identity profiles"
+    }
+  ]
 }

@@ -354,3 +354,57 @@ pub struct RoomReactionsResponse {
     pub room_id: String,
     pub reactions: std::collections::HashMap<String, Vec<ReactionSummary>>,
 }
+
+// --- Profiles ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Profile {
+    pub sender: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_text: Option<String>,
+    pub metadata: serde_json::Value,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertProfile {
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub sender_type: Option<String>,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+    #[serde(default)]
+    pub bio: Option<String>,
+    #[serde(default)]
+    pub status_text: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EnrichedParticipant {
+    pub sender: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
+    pub message_count: i64,
+    pub first_seen: String,
+    pub last_seen: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_text: Option<String>,
+}

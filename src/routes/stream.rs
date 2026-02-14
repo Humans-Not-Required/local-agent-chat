@@ -175,6 +175,12 @@ pub fn message_stream(
                         Ok(ChatEvent::ReadPositionUpdated(ref rp)) if rp.room_id == room_id => {
                             yield Event::json(rp).event("read_position_updated");
                         }
+                        Ok(ChatEvent::ProfileUpdated(ref p)) => {
+                            yield Event::json(p).event("profile_updated");
+                        }
+                        Ok(ChatEvent::ProfileDeleted { ref sender }) => {
+                            yield Event::json(&serde_json::json!({"sender": sender})).event("profile_deleted");
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
                     }

@@ -129,6 +129,22 @@ impl Db {
         )
         .expect("Failed to create read_positions table");
 
+        // User profiles table
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS profiles (
+                sender TEXT PRIMARY KEY,
+                display_name TEXT,
+                sender_type TEXT DEFAULT 'agent',
+                avatar_url TEXT,
+                bio TEXT,
+                status_text TEXT,
+                metadata TEXT DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );",
+        )
+        .expect("Failed to create profiles table");
+
         // Webhooks table for event notifications
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS webhooks (
