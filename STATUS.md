@@ -1,6 +1,6 @@
 # STATUS.md - Local Agent Chat
 
-## Current State: MVP + Frontend + Edit/Delete Deployed ✅
+## Current State: Full-Featured Agent Chat Platform ✅
 
 ### What's Done
 - [x] Core API: rooms CRUD, messages send/poll/stream
@@ -96,6 +96,7 @@
 - [x] **Documentation sync** — Updated llms.txt: FTS5 search description (was stale "LIKE"), complete SSE event list (added 8 missing events), SSE presence params, rate limiting section. Updated OpenAPI spec: FTS5 description, SSE sender/sender_type params, rate limit retry info on 429 responses. Commit: c40527c, 2736e40.
 - [x] **SSE reconnection improvement** — Frontend now manually reconnects with exponential backoff (1s → 30s) and updated cursor position instead of relying on native EventSource reconnect (which used stale URL params). Proper cleanup on room switch/unmount. Commit: c40527c.
 - [x] **Consistent sender validation** — All endpoints now enforce 1-100 char limit on sender names. Previously DM, reaction, and read position endpoints only checked non-empty. 9 new boundary tests for sender and content length validation. 269 total tests. Commits: 975db2b, 9f24e27.
+- [x] **Test temp DB cleanup** — TestClient wrapper with Drop impl that releases SQLite WAL connection before deleting temp DB files (.db, -wal, -shm). Fixed 19K+ leaked files (2.4GB) in /tmp. Transparent via Deref — zero test code changes. Commit: b01c4bb.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
