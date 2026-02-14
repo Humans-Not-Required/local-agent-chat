@@ -4,7 +4,7 @@ import { timeAgo, formatFullTimestamp, senderColor } from '../utils';
 import ChatLogo from './ChatLogo';
 import DmSection from './DmSection';
 
-export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, onChangeSender, onEditProfile, dmConversations, onSelectDm, onStartDm }) {
+export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, senderProfile, onChangeSender, onEditProfile, dmConversations, onSelectDm, onStartDm }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -97,37 +97,74 @@ export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, un
         sender={sender}
       />
       {/* User identity footer */}
-      {sender && (
-        <div style={styles.sidebarFooter}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: '0.9rem', flexShrink: 0 }}>{senderType === 'human' ? '👤' : '🤖'}</span>
-            <span style={{
-              fontSize: '0.8rem',
-              color: senderColor(sender),
-              fontWeight: 600,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              {sender}
-            </span>
+      {sender && (() => {
+        const avatarUrl = senderProfile?.avatar_url;
+        const displayName = senderProfile?.display_name || sender;
+        const initial = sender.charAt(0).toUpperCase();
+        const color = senderColor(sender);
+        return (
+          <div style={styles.sidebarFooter}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+              {/* User avatar */}
+              <div style={{ flexShrink: 0, position: 'relative' }}>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={sender}
+                    style={{
+                      width: 28, height: 28, borderRadius: '50%',
+                      objectFit: 'cover', background: '#1e293b',
+                    }}
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                  />
+                ) : null}
+                <div
+                  style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: color, display: avatarUrl ? 'none' : 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.75rem', fontWeight: 700, color: '#0f172a',
+                    userSelect: 'none',
+                  }}
+                >
+                  {initial}
+                </div>
+                {/* Type badge */}
+                <span style={{
+                  position: 'absolute', bottom: -2, right: -2,
+                  fontSize: '0.55rem', lineHeight: 1,
+                }}>
+                  {senderType === 'human' ? '👤' : '🤖'}
+                </span>
+              </div>
+              <span style={{
+                fontSize: '0.8rem',
+                color,
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {displayName}
+              </span>
+            </div>
+            <button
+              onClick={onEditProfile}
+              style={{ ...styles.iconBtn, fontSize: '0.75rem', padding: '2px 8px', border: 'none' }}
+              title="Edit profile"
+            >
+              👤
+            </button>
+            <button
+              onClick={onChangeSender}
+              style={{ ...styles.iconBtn, fontSize: '0.75rem', padding: '2px 8px', border: 'none' }}
+              title="Change name"
+            >
+              ✎
+            </button>
           </div>
-          <button
-            onClick={onEditProfile}
-            style={{ ...styles.iconBtn, fontSize: '0.75rem', padding: '2px 8px', border: 'none' }}
-            title="Edit profile"
-          >
-            👤
-          </button>
-          <button
-            onClick={onChangeSender}
-            style={{ ...styles.iconBtn, fontSize: '0.75rem', padding: '2px 8px', border: 'none' }}
-            title="Change name"
-          >
-            ✎
-          </button>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

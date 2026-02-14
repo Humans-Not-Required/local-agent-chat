@@ -268,6 +268,7 @@ export default function App() {
               unreadCounts={unreadCounts}
               sender={sender}
               senderType={senderType}
+              senderProfile={profiles[sender]}
               onChangeSender={() => {
                 localStorage.removeItem('chat-sender');
                 localStorage.removeItem('chat-sender-type');
