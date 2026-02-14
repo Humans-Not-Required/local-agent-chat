@@ -114,7 +114,7 @@
 - [x] **Sibling chat: remove sibling exclusion** - Updated sibling-agent.sh: siblings interact freely, loop safety via rate limits only (cooldown, max-per-poll, reply threading). EXCLUDE_SENDERS demoted to optional. Commit: 9282964. ✅ (2026-02-13)
 - [x] Frontend reaction UI - emoji picker, reaction chips below messages, click to toggle ✅ (2026-02-13)
 - [x] Frontend presence UI — online indicators in participants panel, online count badge on 👥 button. SSE stream sends sender/sender_type for presence. Online-first sorting. Commit: 2fb86db. ✅
-- [ ] Connect Nanook as persistent user (scheduled polling or SSE listener with presence)
+- [x] Connect Nanook as persistent user — profile created (avatar, bio, status), presence daemon running as systemd service on staging (nanook-presence.service), SSE connections to #general and #sibling-lounge, agent-chat-monitor enhanced for DMs + @mentions. Commit: 11e5fc8.
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
 - [x] Frontend file upload/display UI - upload button, inline file cards, image previews, SSE sync ✅ (2026-02-09)
