@@ -1,4 +1,4 @@
-use crate::models::{FileInfo, Message, Reaction};
+use crate::models::{FileInfo, Message, Reaction, RoomWithStats};
 use tokio::sync::broadcast;
 
 #[derive(Debug, Clone)]
@@ -6,6 +6,7 @@ pub enum ChatEvent {
     NewMessage(Message),
     MessageEdited(Message),
     MessageDeleted { id: String, room_id: String },
+    RoomUpdated(RoomWithStats),
     Typing { sender: String, room_id: String },
     FileUploaded(FileInfo),
     FileDeleted { id: String, room_id: String },

@@ -3500,3 +3500,186 @@ fn test_rooms_sorted_by_last_activity() {
     // #general has no messages, should be last
     assert_eq!(rooms[3]["name"], "general");
 }
+
+// --- Room Update ---
+
+#[test]
+fn test_update_room_name() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "old-name", "description": "original desc"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+    let admin_key = room["admin_key"].as_str().unwrap();
+
+    let res = client
+        .put(format!("/api/v1/rooms/{room_id}"))
+        .header(ContentType::JSON)
+        .header(Header::new(
+            "Authorization",
+            format!("Bearer {admin_key}"),
+        ))
+        .body(r#"{"name": "new-name"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let updated: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(updated["name"], "new-name");
+    assert_eq!(updated["description"], "original desc"); // unchanged
+
+    // Verify via GET
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}"))
+        .dispatch();
+    let fetched: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(fetched["name"], "new-name");
+}
+
+#[test]
+fn test_update_room_description() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "desc-test", "description": "old desc"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+    let admin_key = room["admin_key"].as_str().unwrap();
+
+    let res = client
+        .put(format!("/api/v1/rooms/{room_id}"))
+        .header(ContentType::JSON)
+        .header(Header::new(
+            "Authorization",
+            format!("Bearer {admin_key}"),
+        ))
+        .body(r#"{"description": "new desc"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let updated: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(updated["name"], "desc-test"); // unchanged
+    assert_eq!(updated["description"], "new desc");
+}
+
+#[test]
+fn test_update_room_wrong_admin_key() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "admin-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let res = client
+        .put(format!("/api/v1/rooms/{room_id}"))
+        .header(ContentType::JSON)
+        .header(Header::new("Authorization", "Bearer wrong-key"))
+        .body(r#"{"name": "hacked"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Forbidden);
+}
+
+#[test]
+fn test_update_room_not_found() {
+    let client = test_client();
+    let res = client
+        .put("/api/v1/rooms/nonexistent-id")
+        .header(ContentType::JSON)
+        .header(Header::new("Authorization", "Bearer some-key"))
+        .body(r#"{"name": "test"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+}
+
+#[test]
+fn test_update_room_empty_name_rejected() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "valid-name"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+    let admin_key = room["admin_key"].as_str().unwrap();
+
+    let res = client
+        .put(format!("/api/v1/rooms/{room_id}"))
+        .header(ContentType::JSON)
+        .header(Header::new(
+            "Authorization",
+            format!("Bearer {admin_key}"),
+        ))
+        .body(r#"{"name": ""}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_update_room_duplicate_name() {
+    let client = test_client();
+    // Create two rooms
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "room-alpha"}"#)
+        .dispatch();
+    let room_a: serde_json::Value = res.into_json().unwrap();
+    let admin_key_a = room_a["admin_key"].as_str().unwrap();
+    let room_a_id = room_a["id"].as_str().unwrap();
+
+    client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "room-beta"}"#)
+        .dispatch();
+
+    // Try to rename room-alpha to room-beta
+    let res = client
+        .put(format!("/api/v1/rooms/{room_a_id}"))
+        .header(ContentType::JSON)
+        .header(Header::new(
+            "Authorization",
+            format!("Bearer {admin_key_a}"),
+        ))
+        .body(r#"{"name": "room-beta"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Conflict);
+}
+
+#[test]
+fn test_update_room_updates_timestamp() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "timestamp-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+    let admin_key = room["admin_key"].as_str().unwrap();
+    let original_updated = room["updated_at"].as_str().unwrap().to_string();
+
+    // Small delay to ensure timestamp differs
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    let res = client
+        .put(format!("/api/v1/rooms/{room_id}"))
+        .header(ContentType::JSON)
+        .header(Header::new(
+            "Authorization",
+            format!("Bearer {admin_key}"),
+        ))
+        .body(r#"{"description": "updated"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let updated: serde_json::Value = res.into_json().unwrap();
+    assert_ne!(updated["updated_at"].as_str().unwrap(), original_updated);
+}

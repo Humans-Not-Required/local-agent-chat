@@ -53,6 +53,14 @@ pub struct CreateRoom {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UpdateRoom {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SendMessage {
     pub sender: String,
     pub content: String,

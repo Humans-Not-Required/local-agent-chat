@@ -257,6 +257,142 @@ pub fn get_room(
     })
 }
 
+#[put("/api/v1/rooms/<room_id>", format = "json", data = "<body>")]
+pub fn update_room(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    admin: AdminKey,
+    body: Json<UpdateRoom>,
+) -> Result<Json<RoomWithStats>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Verify room exists and admin key matches
+    let stored_key: Option<String> = conn
+        .query_row(
+            "SELECT admin_key FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Room not found"})),
+            )
+        })?;
+
+    match stored_key {
+        Some(ref key) if key == &admin.0 => {}
+        _ => {
+            return Err((
+                Status::Forbidden,
+                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
+            ));
+        }
+    }
+
+    // Validate name if provided
+    if let Some(ref name) = body.name {
+        let trimmed = name.trim();
+        if trimmed.is_empty() || trimmed.len() > 100 {
+            return Err((
+                Status::BadRequest,
+                Json(serde_json::json!({"error": "Room name must be 1-100 characters"})),
+            ));
+        }
+    }
+
+    // Build dynamic UPDATE
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut updates: Vec<String> = vec!["updated_at = ?1".to_string()];
+    let mut param_idx = 2;
+
+    if body.name.is_some() {
+        updates.push(format!("name = ?{}", param_idx));
+        param_idx += 1;
+    }
+    if body.description.is_some() {
+        updates.push(format!("description = ?{}", param_idx));
+    }
+
+    // Build params dynamically
+    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(now.clone())];
+    if let Some(ref name) = body.name {
+        param_values.push(Box::new(name.trim().to_string()));
+    }
+    if let Some(ref desc) = body.description {
+        param_values.push(Box::new(desc.clone()));
+    }
+    param_values.push(Box::new(room_id.to_string()));
+
+    let final_sql = format!(
+        "UPDATE rooms SET {} WHERE id = ?{}",
+        updates.join(", "),
+        param_values.len()
+    );
+
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+
+    match conn.execute(&final_sql, params_refs.as_slice()) {
+        Ok(0) => {
+            return Err((
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Room not found"})),
+            ));
+        }
+        Ok(_) => {}
+        Err(e) if e.to_string().contains("UNIQUE") => {
+            return Err((
+                Status::Conflict,
+                Json(serde_json::json!({"error": "A room with that name already exists"})),
+            ));
+        }
+        Err(e) => {
+            return Err((
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": e.to_string()})),
+            ));
+        }
+    }
+
+    // Fetch updated room with stats
+    let room = conn
+        .query_row(
+            "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
+                    (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
+                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                    (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview
+             FROM rooms r WHERE r.id = ?1",
+            params![room_id],
+            |row| {
+                Ok(RoomWithStats {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    created_by: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    message_count: row.get(6)?,
+                    last_activity: row.get(7)?,
+                    last_message_sender: row.get(8)?,
+                    last_message_preview: row.get(9)?,
+                })
+            },
+        )
+        .map_err(|_| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": "Failed to fetch updated room"})),
+            )
+        })?;
+
+    // Publish SSE event
+    events.publish(ChatEvent::RoomUpdated(room.clone()));
+
+    Ok(Json(room))
+}
+
 #[delete("/api/v1/rooms/<room_id>")]
 pub fn delete_room(
     db: &State<Db>,
@@ -1141,6 +1277,9 @@ pub fn message_stream(
                         }
                         Ok(ChatEvent::MessageDeleted { ref id, room_id: ref rid }) if *rid == room_id => {
                             yield Event::json(&serde_json::json!({"id": id, "room_id": rid})).event("message_deleted");
+                        }
+                        Ok(ChatEvent::RoomUpdated(ref r)) if r.id == room_id => {
+                            yield Event::json(r).event("room_updated");
                         }
                         Ok(ChatEvent::Typing { ref sender, room_id: ref rid }) if *rid == room_id => {
                             yield Event::json(&serde_json::json!({"sender": sender, "room_id": rid})).event("typing");
