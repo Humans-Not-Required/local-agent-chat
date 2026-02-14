@@ -63,10 +63,10 @@ pub fn send_dm(
     let recipient = body.recipient.trim().to_string();
     let content = body.content.clone();
 
-    if sender.is_empty() || recipient.is_empty() {
+    if sender.is_empty() || sender.len() > 100 || recipient.is_empty() || recipient.len() > 100 {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "sender and recipient are required"})),
+            Json(serde_json::json!({"error": "sender and recipient must be 1-100 characters"})),
         ));
     }
 
@@ -177,10 +177,10 @@ pub fn list_dm_conversations(
     sender: &str,
 ) -> Result<Json<DmConversationsResponse>, (Status, Json<serde_json::Value>)> {
     let sender = sender.trim().to_string();
-    if sender.is_empty() {
+    if sender.is_empty() || sender.len() > 100 {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "sender parameter is required"})),
+            Json(serde_json::json!({"error": "sender must be 1-100 characters"})),
         ));
     }
 

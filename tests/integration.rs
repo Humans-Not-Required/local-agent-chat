@@ -7304,3 +7304,89 @@ fn test_rate_limit_room_creation_includes_retry_info() {
     assert_eq!(body["limit"], 10);
     assert_eq!(body["remaining"], 0);
 }
+
+// --- Sender Length Validation ---
+
+#[test]
+fn test_message_sender_too_long() {
+    let client = test_client();
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    let long_sender = "a".repeat(101);
+    let body = serde_json::json!({"sender": long_sender, "content": "test"});
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_dm_sender_too_long() {
+    let client = test_client();
+    let long_sender = "b".repeat(101);
+    let body = serde_json::json!({"sender": long_sender, "recipient": "bob", "content": "hi"});
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_dm_recipient_too_long() {
+    let client = test_client();
+    let long_recipient = "c".repeat(101);
+    let body = serde_json::json!({"sender": "alice", "recipient": long_recipient, "content": "hi"});
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_reaction_sender_too_long() {
+    let client = test_client();
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    // Send a message first
+    let msg_body = serde_json::json!({"sender": "alice", "content": "test"});
+    let msg_res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(msg_body.to_string())
+        .dispatch();
+    let msg: serde_json::Value = msg_res.into_json().unwrap();
+    let msg_id = msg["id"].as_str().unwrap();
+
+    let long_sender = "d".repeat(101);
+    let body = serde_json::json!({"sender": long_sender, "emoji": "👍"});
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_sender_exactly_100_chars_accepted() {
+    let client = test_client();
+    let rooms: Vec<serde_json::Value> = client.get("/api/v1/rooms").dispatch().into_json().unwrap();
+    let room_id = rooms[0]["id"].as_str().unwrap();
+
+    let sender_100 = "e".repeat(100);
+    let body = serde_json::json!({"sender": sender_100, "content": "boundary test"});
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+}

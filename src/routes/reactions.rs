@@ -20,10 +20,10 @@ pub fn add_reaction(
 ) -> Result<Json<Reaction>, (Status, Json<serde_json::Value>)> {
     let sender = body.sender.trim();
     let emoji = body.emoji.trim();
-    if sender.is_empty() {
+    if sender.is_empty() || sender.len() > 100 {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "sender must not be empty"})),
+            Json(serde_json::json!({"error": "sender must be 1-100 characters"})),
         ));
     }
     if emoji.is_empty() {

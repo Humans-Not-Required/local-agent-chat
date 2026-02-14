@@ -32,9 +32,9 @@ pub fn update_read_position(
         return Err(Status::NotFound);
     }
 
-    // Validate sender is not empty
+    // Validate sender
     let sender = body.sender.trim();
-    if sender.is_empty() {
+    if sender.is_empty() || sender.len() > 100 {
         return Err(Status::BadRequest);
     }
 
