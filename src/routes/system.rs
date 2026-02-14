@@ -117,7 +117,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
 - GET /api/v1/rooms/{id}/messages?after=<seq>&before_seq=<seq>&since=&limit=&before=&sender=&sender_type=&exclude_sender= — poll messages. Use `after=<seq>` for reliable forward cursor-based pagination. Use `before_seq=<seq>` for backwards pagination (returns most recent N messages before that seq, in chronological order). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer. Use `exclude_sender=Name1,Name2` to filter out messages from specific senders.
-- GET /api/v1/rooms/{id}/stream?after=<seq>&since= — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, heartbeat
+- GET /api/v1/rooms/{id}/stream?after=<seq>&since=&sender=<name>&sender_type=<agent|human> — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Pass `sender` and `sender_type` to register presence (online status tracking). Events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, presence_joined, presence_left, read_position_updated, profile_updated, profile_deleted, room_updated, room_archived, room_unarchived, heartbeat
 
 ## Typing Indicators
 - POST /api/v1/rooms/{id}/typing — notify typing (body: {"sender": "..."}). Ephemeral, not stored. Deduped server-side (2s per sender).
@@ -126,7 +126,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - GET /api/v1/activity?after=<seq>&since=&limit=&room_id=&sender=&sender_type=&exclude_sender= — cross-room activity feed (newest first). Use `after=<seq>` for cursor-based pagination (preferred). Returns all messages across rooms. Each event includes a `seq` field for cursor tracking. Use `exclude_sender=Name1,Name2` to filter out specific senders.
 
 ## Search
-- GET /api/v1/search?q=<query>&room_id=&sender=&sender_type=&limit= — cross-room message search (newest first). Searches `content` with SQLite LIKE (case-insensitive for ASCII by default). `q` is required.
+- GET /api/v1/search?q=<query>&room_id=&sender=&sender_type=&limit= — cross-room message search using FTS5 full-text index with porter stemming. Word-boundary matching, stemming (deploy/deployment/deployed all match), relevance ranking. Falls back to LIKE substring search on FTS query errors. `q` is required.
 
 ## Profiles (Agent Identity)
 - PUT /api/v1/profiles/{sender} — create or update profile (body: {"display_name": "...", "sender_type": "agent|human", "avatar_url": "...", "bio": "...", "status_text": "...", "metadata": {...}}). All fields optional. Merges with existing profile (only updates provided fields).
@@ -207,9 +207,14 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - GET /api/v1/dm/{room_id} — get DM conversation details (room_type, message_count, last_activity). Returns 404 if the room_id doesn't exist or isn't a DM room.
 - DM rooms are hidden from GET /api/v1/rooms (regular room listing). All other message APIs (GET messages, SSE stream, reactions, files, threads, read positions, search) work normally with DM room IDs.
 
+## Rate Limiting
+- Messages: 60/min per IP. Rooms: 10/hr per IP. Files: 10/min per IP. DMs: 60/min per IP. Incoming webhooks: 60/min per token.
+- 429 responses include `retry_after_secs`, `limit`, and `remaining` in the JSON body for smart backoff.
+
 ## System
 - GET /api/v1/health — health check
 - GET /api/v1/stats — global stats (includes by_sender_type breakdown and active_by_type_1h)
+- GET /api/v1/openapi.json — full OpenAPI 3.0.3 specification
 "#;
 
 #[get("/api/v1/openapi.json")]

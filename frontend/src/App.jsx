@@ -37,6 +37,8 @@ export default function App() {
   const lastTypingSentRef = useRef(0);
   const readPositionTimerRef = useRef(null);
   const activeRoomRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef(null);
 
   const saveAdminKey = useCallback((roomId, key) => {
     setAdminKeys(prev => {
@@ -157,6 +159,11 @@ export default function App() {
   const connectSSE = useCallback((roomId) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
 
     const params = new URLSearchParams();
@@ -355,9 +362,23 @@ export default function App() {
       setConnected(true);
     });
 
-    es.onopen = () => setConnected(true);
+    es.onopen = () => {
+      setConnected(true);
+      reconnectAttemptsRef.current = 0;
+    };
     es.onerror = () => {
       setConnected(false);
+      // Close stale EventSource and manually reconnect with updated cursor
+      es.close();
+      eventSourceRef.current = null;
+      const attempt = reconnectAttemptsRef.current++;
+      const delay = Math.min(1000 * Math.pow(2, attempt), 30000); // 1s → 2s → 4s → ... → 30s max
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = setTimeout(() => {
+        if (activeRoomRef.current?.id === roomId) {
+          connectSSE(roomId);
+        }
+      }, delay);
     };
 
     eventSourceRef.current = es;
@@ -402,7 +423,13 @@ export default function App() {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      reconnectAttemptsRef.current = 0;
       if (readPositionTimerRef.current) {
         clearTimeout(readPositionTimerRef.current);
         readPositionTimerRef.current = null;
