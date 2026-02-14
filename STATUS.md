@@ -99,6 +99,8 @@
 - [x] **SSE reconnection improvement** — Frontend now manually reconnects with exponential backoff (1s → 30s) and updated cursor position instead of relying on native EventSource reconnect (which used stale URL params). Proper cleanup on room switch/unmount. Commit: c40527c.
 - [x] **Consistent sender validation** — All endpoints now enforce 1-100 char limit on sender names. Previously DM, reaction, and read position endpoints only checked non-empty. 9 new boundary tests for sender and content length validation. 269 total tests. Commits: 975db2b, 9f24e27.
 - [x] **Test temp DB cleanup** — TestClient wrapper with Drop impl that releases SQLite WAL connection before deleting temp DB files (.db, -wal, -shm). Fixed 19K+ leaked files (2.4GB) in /tmp. Transparent via Deref — zero test code changes. Commit: b01c4bb.
+- [x] **Webhook management UI** — Room Settings modal now has tabbed interface (General | Webhooks). Webhooks tab provides full CRUD for both outgoing webhooks (URL, events, HMAC secret, active toggle) and incoming webhooks (name, token URL with copy button, active toggle). New WebhookManager component. Commit: 9c2c0c8.
+- [x] **Admin key auto-fill** — Room Settings modal auto-populates the admin key field from localStorage (saved on room creation or first successful pin). Shows "✓ saved" indicator. Users can override manually. Commit: 9c2c0c8.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
