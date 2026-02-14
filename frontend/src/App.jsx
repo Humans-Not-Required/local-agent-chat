@@ -191,6 +191,28 @@ function linkify(text) {
   return parts.length > 0 ? parts : text;
 }
 
+// Notification sound using Web Audio API (no external files needed)
+let audioCtx = null;
+function playNotificationSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Two-tone chime: short rising pair
+    const now = audioCtx.currentTime;
+    [0, 0.12].forEach((offset, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = i === 0 ? 660 : 880; // E5 → A5
+      gain.gain.setValueAtTime(0.08, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.15);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.15);
+    });
+  } catch { /* Audio not available */ }
+}
+
 // Generate a consistent color for a sender name
 function senderColor(name) {
   let hash = 0;
@@ -508,7 +530,10 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, onReact, reactio
                 title="Edit"
               >✎</button>
               <button
-                onClick={(e) => { e.stopPropagation(); onDelete(msg.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm('Delete this message?')) onDelete(msg.id);
+                }}
                 style={{ ...styles.msgActionBtn, color: '#ef4444' }}
                 title="Delete"
               >✕</button>
@@ -667,7 +692,7 @@ function FileCard({ file, isOwn, sender, onDelete }) {
           </a>
           {isOwn && (
             <button
-              onClick={() => onDelete(file.id)}
+              onClick={() => { if (window.confirm('Delete this file?')) onDelete(file.id); }}
               style={styles.fileDeleteBtn}
               title="Delete file"
             >
@@ -902,7 +927,7 @@ function ParticipantPanel({ roomId, onClose }) {
   );
 }
 
-function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate }) {
+function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, soundEnabled, onToggleSound }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null); // { id, sender, content }
   const messagesEndRef = useRef(null);
@@ -1144,6 +1169,17 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
             title="Room settings"
           >
             ⚙️
+          </button>
+          <button
+            onClick={onToggleSound}
+            style={{
+              ...styles.iconBtn,
+              fontSize: '0.9rem',
+              padding: '4px 8px',
+            }}
+            title={soundEnabled ? 'Mute notifications' : 'Unmute notifications'}
+          >
+            {soundEnabled ? '🔔' : '🔕'}
           </button>
         </div>
       </div>
@@ -1521,6 +1557,9 @@ export default function App() {
   const [showSidebar, setShowSidebar] = useState(window.innerWidth > 768);
   const [typingUsers, setTypingUsers] = useState([]); // names of users currently typing
   const [unreadCounts, setUnreadCounts] = useState({}); // roomId -> unread count
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('chat-sound') !== 'off');
+  const senderRef = useRef(sender); // track sender for SSE callback
+  const soundEnabledRef = useRef(soundEnabled);
   const eventSourceRef = useRef(null);
   const lastSeqRef = useRef(null);
   const typingTimeoutsRef = useRef({}); // sender -> timeout id
@@ -1531,6 +1570,13 @@ export default function App() {
       lastSeenCountsRef.current = JSON.parse(localStorage.getItem('chat-last-seen-counts') || '{}');
     } catch { lastSeenCountsRef.current = {}; }
   }
+
+  // Keep refs in sync with state (for SSE callback)
+  useEffect(() => { senderRef.current = sender; }, [sender]);
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+    localStorage.setItem('chat-sound', soundEnabled ? 'on' : 'off');
+  }, [soundEnabled]);
 
   // Update document title with unread count
   useEffect(() => {
@@ -1613,6 +1659,10 @@ export default function App() {
     es.addEventListener('message', (e) => {
       try {
         const msg = JSON.parse(e.data);
+        // Play notification sound for messages from others when tab is hidden
+        if (msg.sender !== senderRef.current && soundEnabledRef.current && document.hidden) {
+          playNotificationSound();
+        }
         setMessages(prev => {
           // Deduplicate
           if (prev.some(m => m.id === msg.id)) return prev;
@@ -2042,6 +2092,8 @@ export default function App() {
           rooms={rooms}
           onSelectRoom={handleSelectRoom}
           onRoomUpdate={handleRoomUpdate}
+          soundEnabled={soundEnabled}
+          onToggleSound={() => setSoundEnabled(prev => !prev)}
         />
       </div>
       <footer style={{ textAlign: 'center', padding: '4px 16px', fontSize: '0.6rem', color: '#475569', flexShrink: 0, borderTop: '1px solid #1e293b' }}>

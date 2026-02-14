@@ -66,6 +66,7 @@
 - [x] **Fenced code blocks** — Triple-backtick code blocks (` ```lang `) rendered with dark background, monospace font, horizontal scroll, and optional language label. Code blocks bypass inline markdown processing.
 - [x] **Italic and strikethrough** — `*italic*` and `~~strikethrough~~` rendering in messages. Full inline markdown: bold, italic, strikethrough, inline code, @mentions, clickable links.
 - [x] **Room editing** — PUT /api/v1/rooms/{id} with admin key auth. Update name and/or description. Validates name (1-100 chars), catches duplicate names (409 Conflict). SSE `room_updated` event for real-time sync. 7 new tests (123 total). Commit: ad8dfdc.
+- [x] **Room settings UI** — ⚙️ button in chat header opens RoomSettingsModal. Edit room name/description with admin key auth. Shows creator info, error handling (invalid key, duplicate name), backdrop dismiss. Also fixes SSE room_updated not updating activeRoom. Commit: 8eee6a8.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
