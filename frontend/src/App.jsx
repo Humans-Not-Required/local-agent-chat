@@ -40,10 +40,72 @@ function formatDate(dateStr) {
 }
 
 // Convert URLs to clickable links and highlight @mentions
+// Render message content with fenced code blocks, then inline markdown
+function renderContent(text) {
+  if (!text) return text;
+  // Split on fenced code blocks: ```lang\n...\n``` (newline after lang is optional)
+  const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  let keyIdx = 0;
+
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    // Text before the code block — apply inline markdown
+    if (match.index > lastIndex) {
+      const before = text.slice(lastIndex, match.index);
+      parts.push(
+        React.createElement('span', { key: `pre-${keyIdx++}` }, linkify(before))
+      );
+    }
+
+    const lang = match[1];
+    const code = match[2];
+    parts.push(
+      React.createElement('div', {
+        key: `codeblock-${keyIdx++}`,
+        style: {
+          background: 'rgba(0,0,0,0.35)',
+          borderRadius: 6,
+          padding: '10px 12px',
+          margin: '6px 0',
+          overflowX: 'auto',
+          fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', monospace",
+          fontSize: '0.85em',
+          lineHeight: 1.5,
+          whiteSpace: 'pre',
+          wordBreak: 'normal',
+          position: 'relative',
+        },
+      },
+        lang ? React.createElement('div', {
+          key: `lang-${keyIdx++}`,
+          style: { fontSize: '0.7em', color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' },
+        }, lang) : null,
+        React.createElement('code', null, code)
+      )
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Text after the last code block (or all text if no code blocks)
+  if (lastIndex < text.length) {
+    const after = text.slice(lastIndex);
+    parts.push(
+      React.createElement('span', { key: `post-${keyIdx++}` }, linkify(after))
+    );
+  }
+
+  // No code blocks found — just use linkify
+  if (parts.length === 0) return linkify(text);
+  return parts;
+}
+
 function linkify(text) {
   if (!text) return text;
-  // Match: inline code, bold, URLs, or @mentions
-  const tokenRegex = /(`[^`\n]+`|\*\*[^*\n]+\*\*|https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+|@[\w.-]+)/g;
+  // Match: inline code, bold, strikethrough, italic, URLs, or @mentions
+  const tokenRegex = /(`[^`\n]+`|\*\*[^*\n]+\*\*|~~[^~\n]+~~|\*[^*\n]+\*|https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+|@[\w.-]+)/g;
   const parts = [];
   let lastIndex = 0;
   let match;
@@ -71,6 +133,21 @@ function linkify(text) {
         React.createElement('strong', {
           key: `bold-${keyIdx++}`,
         }, token.slice(2, -2))
+      );
+    } else if (token.startsWith('~~') && token.endsWith('~~')) {
+      // Strikethrough
+      parts.push(
+        React.createElement('del', {
+          key: `strike-${keyIdx++}`,
+          style: { opacity: 0.7 },
+        }, token.slice(2, -2))
+      );
+    } else if (token.startsWith('*') && token.endsWith('*') && !token.startsWith('**')) {
+      // Italic
+      parts.push(
+        React.createElement('em', {
+          key: `italic-${keyIdx++}`,
+        }, token.slice(1, -1))
       );
     } else if (token.startsWith('@')) {
       // @mention highlight
@@ -471,7 +548,7 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, onReact, reactio
         ) : (
           <>
             {msg.reply_to && <ReplyPreview replyToId={msg.reply_to} messages={allMessages} />}
-            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(msg.content)}</div>
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderContent(msg.content)}</div>
             <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
               {msg.edited_at && <span style={{ fontStyle: 'italic' }} title={`Edited: ${formatFullTimestamp(msg.edited_at)}`}>(edited)</span>}
               <span title={formatFullTimestamp(msg.created_at)}>{formatTime(msg.created_at)}</span>
