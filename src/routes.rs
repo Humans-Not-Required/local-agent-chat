@@ -560,6 +560,8 @@ pub fn send_message(
         reply_to,
         sender_type,
         seq,
+        pinned_at: None,
+        pinned_by: None,
     };
 
     // Publish event for SSE
@@ -658,7 +660,7 @@ pub fn edit_message(
     // Fetch the updated message
     let msg = conn
         .query_row(
-            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE id = ?1",
+            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE id = ?1",
             params![message_id],
             |row| {
                 let metadata_str: String = row.get(4)?;
@@ -673,6 +675,8 @@ pub fn edit_message(
                     reply_to: row.get(7)?,
                     sender_type: row.get(8)?,
                     seq: row.get(9)?,
+                    pinned_at: row.get(10)?,
+                    pinned_by: row.get(11)?,
                 })
             },
         )
@@ -811,7 +815,7 @@ pub fn get_messages(
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
     let mut sql = String::from(
-        "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE room_id = ?1",
+        "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1",
     );
     let mut param_values: Vec<String> = vec![room_id.to_string()];
     let mut idx = 2;
@@ -903,6 +907,8 @@ pub fn get_messages(
                 reply_to: row.get(7)?,
                 sender_type: row.get(8)?,
                 seq: row.get(9)?,
+                pinned_at: row.get(10)?,
+                pinned_by: row.get(11)?,
             })
         })
         .map_err(|e| {
@@ -1305,7 +1311,7 @@ pub fn message_stream(
         let conn = db.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE room_id = ?1 AND seq > ?2 ORDER BY seq ASC LIMIT 100",
+                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1 AND seq > ?2 ORDER BY seq ASC LIMIT 100",
             )
             .ok();
         if let Some(ref mut s) = stmt {
@@ -1322,6 +1328,8 @@ pub fn message_stream(
                     reply_to: row.get(7)?,
                     sender_type: row.get(8)?,
                     seq: row.get(9)?,
+                    pinned_at: row.get(10)?,
+                    pinned_by: row.get(11)?,
                 })
             })
             .ok()
@@ -1335,7 +1343,7 @@ pub fn message_stream(
         let conn = db.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
-                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY seq ASC LIMIT 100",
+                "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY seq ASC LIMIT 100",
             )
             .ok();
         if let Some(ref mut s) = stmt {
@@ -1352,6 +1360,8 @@ pub fn message_stream(
                     reply_to: row.get(7)?,
                     sender_type: row.get(8)?,
                     seq: row.get(9)?,
+                    pinned_at: row.get(10)?,
+                    pinned_by: row.get(11)?,
                 })
             })
             .ok()
@@ -1402,6 +1412,12 @@ pub fn message_stream(
                         }
                         Ok(ChatEvent::ReactionRemoved(ref r)) if r.room_id == room_id => {
                             yield Event::json(r).event("reaction_removed");
+                        }
+                        Ok(ChatEvent::MessagePinned(ref p)) if p.room_id == room_id => {
+                            yield Event::json(p).event("message_pinned");
+                        }
+                        Ok(ChatEvent::MessageUnpinned { ref id, room_id: ref rid }) if *rid == room_id => {
+                            yield Event::json(&serde_json::json!({"id": id, "room_id": rid})).event("message_unpinned");
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
@@ -1794,6 +1810,267 @@ pub fn get_room_reactions(
     }))
 }
 
+// --- Message Pinning ---
+
+#[post("/api/v1/rooms/<room_id>/messages/<message_id>/pin")]
+pub fn pin_message(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    message_id: &str,
+    admin: AdminKey,
+) -> Result<Json<PinnedMessage>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Verify room exists and admin key matches
+    let stored_key: Option<String> = conn
+        .query_row(
+            "SELECT admin_key FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Room not found"})),
+            )
+        })?;
+
+    match stored_key {
+        Some(ref key) if key == &admin.0 => {}
+        _ => {
+            return Err((
+                Status::Forbidden,
+                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
+            ));
+        }
+    }
+
+    // Verify message exists in this room
+    let msg_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE id = ?1 AND room_id = ?2",
+            params![message_id, room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    if !msg_exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Message not found in this room"})),
+        ));
+    }
+
+    // Check if already pinned
+    let already_pinned: bool = conn
+        .query_row(
+            "SELECT pinned_at FROM messages WHERE id = ?1",
+            params![message_id],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .unwrap_or(None)
+        .is_some();
+    if already_pinned {
+        return Err((
+            Status::Conflict,
+            Json(serde_json::json!({"error": "Message is already pinned"})),
+        ));
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // Pin the message
+    conn.execute(
+        "UPDATE messages SET pinned_at = ?1, pinned_by = ?2 WHERE id = ?3",
+        params![&now, "admin", message_id],
+    )
+    .map_err(|e| {
+        (
+            Status::InternalServerError,
+            Json(serde_json::json!({"error": format!("Failed to pin message: {e}")})),
+        )
+    })?;
+
+    // Fetch the pinned message
+    let pinned = conn
+        .query_row(
+            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE id = ?1",
+            params![message_id],
+            |row| {
+                let metadata_str: String = row.get(4)?;
+                Ok(PinnedMessage {
+                    id: row.get(0)?,
+                    room_id: row.get(1)?,
+                    sender: row.get(2)?,
+                    content: row.get(3)?,
+                    metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({})),
+                    created_at: row.get(5)?,
+                    edited_at: row.get(6)?,
+                    reply_to: row.get(7)?,
+                    sender_type: row.get(8)?,
+                    seq: row.get(9)?,
+                    pinned_at: row.get::<_, String>(10)?,
+                    pinned_by: row.get::<_, String>(11)?,
+                })
+            },
+        )
+        .map_err(|_| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": "Failed to fetch pinned message"})),
+            )
+        })?;
+
+    events.publish(ChatEvent::MessagePinned(pinned.clone()));
+
+    Ok(Json(pinned))
+}
+
+#[delete("/api/v1/rooms/<room_id>/messages/<message_id>/pin")]
+pub fn unpin_message(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    message_id: &str,
+    admin: AdminKey,
+) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Verify room exists and admin key matches
+    let stored_key: Option<String> = conn
+        .query_row(
+            "SELECT admin_key FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Room not found"})),
+            )
+        })?;
+
+    match stored_key {
+        Some(ref key) if key == &admin.0 => {}
+        _ => {
+            return Err((
+                Status::Forbidden,
+                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
+            ));
+        }
+    }
+
+    // Verify message exists in this room and is pinned
+    let is_pinned: bool = conn
+        .query_row(
+            "SELECT pinned_at FROM messages WHERE id = ?1 AND room_id = ?2",
+            params![message_id, room_id],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Message not found in this room"})),
+            )
+        })?
+        .is_some();
+
+    if !is_pinned {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "Message is not pinned"})),
+        ));
+    }
+
+    // Unpin the message
+    conn.execute(
+        "UPDATE messages SET pinned_at = NULL, pinned_by = NULL WHERE id = ?1",
+        params![message_id],
+    )
+    .map_err(|e| {
+        (
+            Status::InternalServerError,
+            Json(serde_json::json!({"error": format!("Failed to unpin message: {e}")})),
+        )
+    })?;
+
+    events.publish(ChatEvent::MessageUnpinned {
+        id: message_id.to_string(),
+        room_id: room_id.to_string(),
+    });
+
+    Ok(Json(serde_json::json!({
+        "status": "unpinned",
+        "message_id": message_id,
+        "room_id": room_id
+    })))
+}
+
+#[get("/api/v1/rooms/<room_id>/pins")]
+pub fn list_pins(
+    db: &State<Db>,
+    room_id: &str,
+) -> Result<Json<Vec<PinnedMessage>>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Verify room exists
+    let room_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    if !room_exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Room not found"})),
+        ));
+    }
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1 AND pinned_at IS NOT NULL ORDER BY pinned_at DESC",
+        )
+        .map_err(|e| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": format!("Query error: {e}")})),
+            )
+        })?;
+
+    let pins: Vec<PinnedMessage> = stmt
+        .query_map(params![room_id], |row| {
+            let metadata_str: String = row.get(4)?;
+            Ok(PinnedMessage {
+                id: row.get(0)?,
+                room_id: row.get(1)?,
+                sender: row.get(2)?,
+                content: row.get(3)?,
+                metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({})),
+                created_at: row.get(5)?,
+                edited_at: row.get(6)?,
+                reply_to: row.get(7)?,
+                sender_type: row.get(8)?,
+                seq: row.get(9)?,
+                pinned_at: row.get::<_, String>(10)?,
+                pinned_by: row.get::<_, String>(11)?,
+            })
+        })
+        .map_err(|e| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": format!("Query error: {e}")})),
+            )
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(Json(pins))
+}
+
 // --- File Attachments ---
 
 /// Max file size: 5MB (after base64 decode)
@@ -2133,7 +2410,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
 - GET /api/v1/rooms/{id}/messages?after=<seq>&before_seq=<seq>&since=&limit=&before=&sender=&sender_type=&exclude_sender= — poll messages. Use `after=<seq>` for reliable forward cursor-based pagination. Use `before_seq=<seq>` for backwards pagination (returns most recent N messages before that seq, in chronological order). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer. Use `exclude_sender=Name1,Name2` to filter out messages from specific senders.
-- GET /api/v1/rooms/{id}/stream?after=<seq>&since= — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, heartbeat
+- GET /api/v1/rooms/{id}/stream?after=<seq>&since= — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, heartbeat
 
 ## Typing Indicators
 - POST /api/v1/rooms/{id}/typing — notify typing (body: {"sender": "..."}). Ephemeral, not stored. Deduped server-side (2s per sender).
@@ -2152,6 +2429,12 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}/reactions?sender=...&emoji=... — remove a specific reaction
 - GET /api/v1/rooms/{id}/messages/{msg_id}/reactions — get all reactions grouped by emoji with sender lists
 - SSE events: reaction_added, reaction_removed (same stream as messages)
+
+## Pinning
+- POST /api/v1/rooms/{id}/messages/{msg_id}/pin — pin a message (admin key required). Returns the pinned message with pinned_at/pinned_by. Returns 409 if already pinned.
+- DELETE /api/v1/rooms/{id}/messages/{msg_id}/pin — unpin a message (admin key required). Returns 400 if not pinned.
+- GET /api/v1/rooms/{id}/pins — list all pinned messages in a room (newest-pinned first). No auth required for reading.
+- Messages include `pinned_at` and `pinned_by` fields when pinned (omitted when not). SSE events: message_pinned, message_unpinned.
 
 ## Files / Attachments
 - POST /api/v1/rooms/{id}/files — upload file (body: {"sender": "...", "filename": "...", "content_type": "image/png", "data": "<base64>"})

@@ -5,12 +5,13 @@ import ChatLogo from './ChatLogo';
 import SearchPanel from './SearchPanel';
 import RoomSettingsModal from './RoomSettingsModal';
 import ParticipantPanel from './ParticipantPanel';
+import PinnedPanel from './PinnedPanel';
 import TypingIndicator from './TypingIndicator';
 import DateSeparator from './DateSeparator';
 import FileCard from './FileCard';
 import MessageGroup from './MessageGroup';
 
-export default function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, soundEnabled, onToggleSound, hasMore, onLoadOlder }) {
+export default function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onPin, onUnpin, adminKey, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, soundEnabled, onToggleSound, hasMore, onLoadOlder }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const messagesEndRef = useRef(null);
@@ -23,6 +24,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
   const [showParticipants, setShowParticipants] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showPins, setShowPins] = useState(false);
   const [newMsgCount, setNewMsgCount] = useState(0);
   const prevMsgCountRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -346,6 +348,18 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
             🔍
           </button>
           <button
+            onClick={() => setShowPins(prev => !prev)}
+            style={{
+              ...styles.iconBtn,
+              background: showPins ? '#334155' : 'none',
+              fontSize: '0.9rem',
+              padding: '4px 8px',
+            }}
+            title="Pinned messages"
+          >
+            📌
+          </button>
+          <button
             onClick={() => setShowParticipants(prev => !prev)}
             style={{
               ...styles.iconBtn,
@@ -388,6 +402,17 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
           onClose={() => setShowSearch(false)}
           rooms={rooms || []}
           onSelectRoom={(room) => { onSelectRoom?.(room); setShowSearch(false); }}
+        />
+      )}
+
+      {showPins && room && (
+        <PinnedPanel
+          roomId={room.id}
+          adminKey={adminKey}
+          onUnpin={(msgId) => {
+            onUnpin?.(msgId);
+          }}
+          onClose={() => setShowPins(false)}
         />
       )}
 
@@ -458,6 +483,9 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
               onDelete={onDeleteMessage}
               onReply={handleReply}
               onReact={onReact}
+              onPin={onPin}
+              onUnpin={onUnpin}
+              hasAdminKey={!!adminKey}
               reactions={reactions}
               sender={sender}
               allMessages={messages}

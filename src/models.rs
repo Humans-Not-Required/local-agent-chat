@@ -41,6 +41,10 @@ pub struct Message {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sender_type: Option<String>,
     pub seq: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pinned_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pinned_by: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -187,6 +191,27 @@ pub struct SearchResponse {
     pub results: Vec<SearchResult>,
     pub count: usize,
     pub query: String,
+}
+
+// --- Pins ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PinnedMessage {
+    pub id: String,
+    pub room_id: String,
+    pub sender: String,
+    pub content: String,
+    pub metadata: serde_json::Value,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
+    pub seq: i64,
+    pub pinned_at: String,
+    pub pinned_by: String,
 }
 
 // --- Reactions ---

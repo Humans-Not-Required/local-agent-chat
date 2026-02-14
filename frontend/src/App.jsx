@@ -17,6 +17,9 @@ export default function App() {
   const [hasMore, setHasMore] = useState(false);
   const [reactions, setReactions] = useState({});
   const [adminKeyInfo, setAdminKeyInfo] = useState(null);
+  const [adminKeys, setAdminKeys] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('chat-admin-keys') || '{}'); } catch { return {}; }
+  });
   const [connected, setConnected] = useState(false);
   const [showSidebar, setShowSidebar] = useState(window.innerWidth > 768);
   const [typingUsers, setTypingUsers] = useState([]);
@@ -34,6 +37,14 @@ export default function App() {
       lastSeenCountsRef.current = JSON.parse(localStorage.getItem('chat-last-seen-counts') || '{}');
     } catch { lastSeenCountsRef.current = {}; }
   }
+
+  const saveAdminKey = useCallback((roomId, key) => {
+    setAdminKeys(prev => {
+      const next = { ...prev, [roomId]: key };
+      try { localStorage.setItem('chat-admin-keys', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
 
   useEffect(() => { senderRef.current = sender; }, [sender]);
   useEffect(() => {
@@ -228,6 +239,20 @@ export default function App() {
       } catch (err) { /* ignore */ }
     });
 
+    es.addEventListener('message_pinned', (e) => {
+      try {
+        const pinned = JSON.parse(e.data);
+        setMessages(prev => prev.map(m => m.id === pinned.id ? { ...m, pinned_at: pinned.pinned_at, pinned_by: pinned.pinned_by } : m));
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('message_unpinned', (e) => {
+      try {
+        const { id } = JSON.parse(e.data);
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, pinned_at: null, pinned_by: null } : m));
+      } catch (err) { /* ignore */ }
+    });
+
     es.addEventListener('room_updated', (e) => {
       try {
         const updated = JSON.parse(e.data);
@@ -370,6 +395,7 @@ export default function App() {
         await fetchRooms();
         setActiveRoom(room);
         if (room.admin_key) {
+          saveAdminKey(room.id, room.admin_key);
           setAdminKeyInfo({ roomName: room.name, adminKey: room.admin_key });
         }
       }
@@ -461,6 +487,50 @@ export default function App() {
     } catch (e) { /* ignore */ }
   };
 
+  const getAdminKey = useCallback((roomId) => {
+    if (adminKeys[roomId]) return adminKeys[roomId];
+    const key = window.prompt('Enter the admin key for this room to pin/unpin messages:');
+    if (!key) return null;
+    return key.trim();
+  }, [adminKeys]);
+
+  const handlePinMessage = async (messageId) => {
+    if (!activeRoom) return;
+    const key = getAdminKey(activeRoom.id);
+    if (!key) return;
+    try {
+      const res = await fetch(`${API}/rooms/${activeRoom.id}/messages/${messageId}/pin`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}` },
+      });
+      if (res.ok) {
+        // Save the key on success
+        saveAdminKey(activeRoom.id, key);
+      } else if (res.status === 403) {
+        alert('Invalid admin key');
+      } else if (res.status === 409) {
+        // Already pinned, no-op
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  const handleUnpinMessage = async (messageId) => {
+    if (!activeRoom) return;
+    const key = getAdminKey(activeRoom.id);
+    if (!key) return;
+    try {
+      const res = await fetch(`${API}/rooms/${activeRoom.id}/messages/${messageId}/pin`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${key}` },
+      });
+      if (res.ok) {
+        saveAdminKey(activeRoom.id, key);
+      } else if (res.status === 403) {
+        alert('Invalid admin key');
+      }
+    } catch (e) { /* ignore */ }
+  };
+
   if (!sender) {
     return <SenderModal onSet={handleSetSender} />;
   }
@@ -528,6 +598,9 @@ export default function App() {
           onDeleteFile={handleDeleteFile}
           onUploadFile={handleUploadFile}
           onReact={handleToggleReaction}
+          onPin={handlePinMessage}
+          onUnpin={handleUnpinMessage}
+          adminKey={activeRoom ? adminKeys[activeRoom.id] : null}
           onTyping={handleTyping}
           typingUsers={typingUsers}
           loading={loading}

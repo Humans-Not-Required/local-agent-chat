@@ -5,7 +5,7 @@ import ReplyPreview from './ReplyPreview';
 import ReactionChips from './ReactionChips';
 import EmojiPicker from './EmojiPicker';
 
-export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, onReact, reactions, sender, allMessages }) {
+export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, onReact, onPin, onUnpin, hasAdminKey, reactions, sender, allMessages }) {
   const [showActions, setShowActions] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(msg.content);
@@ -65,6 +65,24 @@ export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, o
             style={styles.msgActionBtn}
             title="React"
           >😀</button>
+          {hasAdminKey && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (msg.pinned_at) {
+                  onUnpin?.(msg.id);
+                } else {
+                  onPin?.(msg.id);
+                }
+                setShowActions(false);
+              }}
+              style={{
+                ...styles.msgActionBtn,
+                color: msg.pinned_at ? '#f59e0b' : undefined,
+              }}
+              title={msg.pinned_at ? 'Unpin message' : 'Pin message'}
+            >📌</button>
+          )}
           {isOwn && (
             <>
               <button
@@ -115,6 +133,14 @@ export default function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, o
           </div>
         ) : (
           <>
+            {msg.pinned_at && (
+              <div style={{
+                fontSize: '0.65rem', color: '#f59e0b', marginBottom: 4,
+                display: 'flex', alignItems: 'center', gap: 3,
+              }}>
+                <span>📌</span> Pinned
+              </div>
+            )}
             {msg.reply_to && <ReplyPreview replyToId={msg.reply_to} messages={allMessages} />}
             <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderContent(msg.content)}</div>
             <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>

@@ -76,6 +76,7 @@
 - [x] **Backward pagination (before_seq)** — `?before_seq=<seq>&limit=N` returns the most recent N messages before a given seq, in chronological order. Frontend "Load older messages" button at top of chat with scroll position preservation. 4 new tests (132 total).
 
 - [x] **Frontend component decomposition** — Monolithic 2967-line App.jsx split into 16 focused component files + utils.js + styles.js. App.jsx reduced to 550 lines (81% reduction). Build verified. Zero functional changes. Commit: 9310489.
+- [x] **Message pinning** — POST /rooms/{id}/messages/{msg_id}/pin (admin key required), DELETE to unpin, GET /rooms/{id}/pins lists pinned messages (newest-first). Messages include pinned_at/pinned_by fields. SSE events: message_pinned, message_unpinned. Frontend: 📌 indicator on pinned messages, pin/unpin action button (with admin key prompt), pinned messages panel (📌 header button). Admin keys auto-saved to localStorage on room creation and first successful pin. 12 new tests (144 total).
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)

@@ -1,4 +1,4 @@
-use crate::models::{FileInfo, Message, Reaction, RoomWithStats};
+use crate::models::{FileInfo, Message, PinnedMessage, Reaction, RoomWithStats};
 use tokio::sync::broadcast;
 
 #[derive(Debug, Clone)]
@@ -12,6 +12,8 @@ pub enum ChatEvent {
     FileDeleted { id: String, room_id: String },
     ReactionAdded(Reaction),
     ReactionRemoved(Reaction),
+    MessagePinned(PinnedMessage),
+    MessageUnpinned { id: String, room_id: String },
 }
 
 pub struct EventBus {

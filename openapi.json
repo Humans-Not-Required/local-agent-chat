@@ -578,7 +578,55 @@
           { "name": "after", "in": "query", "schema": { "type": "integer" }, "description": "Replay messages after this seq cursor (preferred over since)" }
         ],
         "responses": {
-          "200": { "description": "SSE stream with events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, heartbeat" }
+          "200": { "description": "SSE stream with events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, heartbeat" }
+        }
+      }
+    },
+    "/rooms/{room_id}/messages/{message_id}/pin": {
+      "post": {
+        "summary": "Pin a message",
+        "operationId": "pinMessage",
+        "description": "Pins a message in the room. Requires room admin key. Returns 409 if already pinned.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "message_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [{ "adminKey": [] }],
+        "responses": {
+          "200": { "description": "Pinned message with pinned_at and pinned_by fields" },
+          "403": { "description": "Invalid admin key" },
+          "404": { "description": "Room or message not found" },
+          "409": { "description": "Message already pinned" }
+        }
+      },
+      "delete": {
+        "summary": "Unpin a message",
+        "operationId": "unpinMessage",
+        "description": "Unpins a message in the room. Requires room admin key. Returns 400 if not pinned.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "message_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [{ "adminKey": [] }],
+        "responses": {
+          "200": { "description": "Unpin confirmation with status, message_id, room_id" },
+          "400": { "description": "Message is not pinned" },
+          "403": { "description": "Invalid admin key" },
+          "404": { "description": "Room or message not found" }
+        }
+      }
+    },
+    "/rooms/{room_id}/pins": {
+      "get": {
+        "summary": "List pinned messages",
+        "operationId": "listPins",
+        "description": "Returns all pinned messages in the room, newest-pinned first. No auth required.",
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Array of pinned messages with pinned_at and pinned_by fields" },
+          "404": { "description": "Room not found" }
         }
       }
     }

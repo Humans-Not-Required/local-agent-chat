@@ -95,6 +95,12 @@ impl Db {
         )
         .expect("Failed to create files table");
 
+        // Add pinned_at and pinned_by columns for message pinning
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN pinned_at TEXT;")
+            .ok();
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN pinned_by TEXT;")
+            .ok();
+
         // Message reactions table
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS message_reactions (
