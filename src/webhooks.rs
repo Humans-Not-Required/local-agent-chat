@@ -208,12 +208,12 @@ async fn deliver_webhooks(
             .header("X-Chat-Webhook-Id", &webhook_id);
 
         // HMAC-SHA256 signature if secret is set
-        if let Some(ref secret) = secret {
-            if let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes()) {
-                mac.update(body.as_bytes());
-                let signature = hex::encode(mac.finalize().into_bytes());
-                request = request.header("X-Chat-Signature", format!("sha256={}", signature));
-            }
+        if let Some(ref secret) = secret
+            && let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes())
+        {
+            mac.update(body.as_bytes());
+            let signature = hex::encode(mac.finalize().into_bytes());
+            request = request.header("X-Chat-Signature", format!("sha256={}", signature));
         }
 
         // Fire-and-forget: spawn a task for each delivery
