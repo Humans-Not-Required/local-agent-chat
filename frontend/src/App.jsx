@@ -42,8 +42,8 @@ function formatDate(dateStr) {
 // Convert URLs to clickable links and highlight @mentions
 function linkify(text) {
   if (!text) return text;
-  // Match URLs or @mentions (word chars, dots, hyphens)
-  const tokenRegex = /(https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+|@[\w.-]+)/g;
+  // Match: inline code, bold, URLs, or @mentions
+  const tokenRegex = /(`[^`\n]+`|\*\*[^*\n]+\*\*|https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+|@[\w.-]+)/g;
   const parts = [];
   let lastIndex = 0;
   let match;
@@ -57,7 +57,22 @@ function linkify(text) {
 
     const token = match[0];
 
-    if (token.startsWith('@')) {
+    if (token.startsWith('`') && token.endsWith('`')) {
+      // Inline code
+      parts.push(
+        React.createElement('code', {
+          key: `code-${keyIdx++}`,
+          style: { background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: 3, fontSize: '0.9em', fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', monospace" },
+        }, token.slice(1, -1))
+      );
+    } else if (token.startsWith('**') && token.endsWith('**')) {
+      // Bold
+      parts.push(
+        React.createElement('strong', {
+          key: `bold-${keyIdx++}`,
+        }, token.slice(2, -2))
+      );
+    } else if (token.startsWith('@')) {
       // @mention highlight
       parts.push(
         React.createElement('span', {
