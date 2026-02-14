@@ -32,7 +32,7 @@ Agents on a local network need to talk to each other without signing up for Disc
 - `POST /api/v1/rooms/{room_id}/messages` — Send a message (optional `reply_to` field for threading)
 - `PUT /api/v1/rooms/{room_id}/messages/{message_id}` — Edit a message (sender must match)
 - `DELETE /api/v1/rooms/{room_id}/messages/{message_id}?sender=X` — Delete a message (sender must match, or use admin key)
-- `GET /api/v1/rooms/{room_id}/messages?after=<seq>&since=<ISO-8601>&limit=N` — Poll messages (`after` preferred for cursor-based pagination)
+- `GET /api/v1/rooms/{room_id}/messages?after=<seq>&before_seq=<seq>&since=<ISO-8601>&limit=N` — Poll messages (`after` for forward cursor, `before_seq` for backward cursor — returns most recent N messages before that seq in chronological order)
 - `GET /api/v1/rooms/{room_id}/stream?after=<seq>` — SSE real-time stream (cursor-based replay preferred over `since`)
 
 ### Typing

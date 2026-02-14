@@ -71,6 +71,9 @@
 - [x] **Delete confirmations** — Confirmation dialog (window.confirm) before deleting messages and files. Prevents accidental deletions. Commit: 08acaeb.
 - [x] **FTS5 full-text search** — Upgraded from LIKE substring to FTS5 with porter stemmer. Word-boundary matching, stemming (deploy/deployment/deployed all match), relevance ranking. FTS index auto-maintained on message create/edit/delete. Rebuilt on startup. Graceful LIKE fallback on FTS errors. 5 new tests (128 total).
 - [x] **Block-level markdown** — Bullet lists (`- item`, `* item`), numbered lists (`1. item`), blockquotes (`> text`), and horizontal rules (`---`). Block elements grouped from consecutive lines, styled with proper HTML (ul/ol/blockquote/hr). Integrates with existing fenced code blocks and inline markdown. Commit: c1c04c5.
+- [x] **Drag-and-drop file upload** — Drag files onto the chat area to upload. Blue dashed overlay with centered drop card. Uses dragenter/dragleave counter for reliable state tracking. 5MB limit enforced. Commit: d1225ca.
+- [x] **Clipboard image paste** — Paste images from clipboard (Ctrl+V / Cmd+V) directly into the message input. Auto-named with timestamp. Supports all image types. Commit: d1225ca.
+- [x] **Backward pagination (before_seq)** — `?before_seq=<seq>&limit=N` returns the most recent N messages before a given seq, in chronological order. Frontend "Load older messages" button at top of chat with scroll position preservation. 4 new tests (132 total).
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)

@@ -774,7 +774,7 @@ pub fn delete_message(
 }
 
 #[get(
-    "/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>&<exclude_sender>"
+    "/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>&<exclude_sender>&<before_seq>"
 )]
 #[allow(clippy::too_many_arguments)]
 pub fn get_messages(
@@ -787,6 +787,7 @@ pub fn get_messages(
     sender_type: Option<&str>,
     after: Option<i64>,
     exclude_sender: Option<&str>,
+    before_seq: Option<i64>,
 ) -> Result<Json<Vec<Message>>, (Status, Json<serde_json::Value>)> {
     let conn = db.conn.lock().unwrap();
 
@@ -818,6 +819,11 @@ pub fn get_messages(
     if let Some(after_val) = after {
         sql.push_str(&format!(" AND seq > ?{idx}"));
         param_values.push(after_val.to_string());
+        idx += 1;
+    }
+    if let Some(before_seq_val) = before_seq {
+        sql.push_str(&format!(" AND seq < ?{idx}"));
+        param_values.push(before_seq_val.to_string());
         idx += 1;
     }
     if let Some(since_val) = since {
@@ -861,7 +867,14 @@ pub fn get_messages(
         }
     }
 
-    sql.push_str(&format!(" ORDER BY seq ASC LIMIT ?{idx}"));
+    // When using before_seq without after, we want the most recent N messages
+    // before that seq. Use DESC ordering and reverse the results.
+    let use_desc = before_seq.is_some() && after.is_none();
+    if use_desc {
+        sql.push_str(&format!(" ORDER BY seq DESC LIMIT ?{idx}"));
+    } else {
+        sql.push_str(&format!(" ORDER BY seq ASC LIMIT ?{idx}"));
+    }
     param_values.push(limit.to_string());
 
     let mut stmt = conn.prepare(&sql).map_err(|e| {
@@ -876,7 +889,7 @@ pub fn get_messages(
         .map(|v| v as &dyn rusqlite::types::ToSql)
         .collect();
 
-    let messages = stmt
+    let mut messages: Vec<Message> = stmt
         .query_map(params_refs.as_slice(), |row| {
             let metadata_str: String = row.get(4)?;
             Ok(Message {
@@ -900,6 +913,11 @@ pub fn get_messages(
         })?
         .filter_map(|r| r.ok())
         .collect();
+
+    // Reverse DESC results to return in chronological order
+    if use_desc {
+        messages.reverse();
+    }
 
     Ok(Json(messages))
 }
@@ -2114,7 +2132,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - POST /api/v1/rooms/{id}/messages — send message (body: {"sender": "...", "content": "...", "reply_to": "msg-id (optional)"})
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key)
-- GET /api/v1/rooms/{id}/messages?after=<seq>&since=&limit=&before=&sender=&sender_type=&exclude_sender= — poll messages. Use `after=<seq>` for reliable cursor-based pagination (preferred). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer. Use `exclude_sender=Name1,Name2` to filter out messages from specific senders (useful for multi-agent environments to prevent reply loops).
+- GET /api/v1/rooms/{id}/messages?after=<seq>&before_seq=<seq>&since=&limit=&before=&sender=&sender_type=&exclude_sender= — poll messages. Use `after=<seq>` for reliable forward cursor-based pagination. Use `before_seq=<seq>` for backwards pagination (returns most recent N messages before that seq, in chronological order). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer. Use `exclude_sender=Name1,Name2` to filter out messages from specific senders.
 - GET /api/v1/rooms/{id}/stream?after=<seq>&since= — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, heartbeat
 
 ## Typing Indicators

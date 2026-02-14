@@ -1021,7 +1021,7 @@ function ParticipantPanel({ roomId, onClose }) {
   );
 }
 
-function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, soundEnabled, onToggleSound }) {
+function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, soundEnabled, onToggleSound, hasMore, onLoadOlder }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null); // { id, sender, content }
   const messagesEndRef = useRef(null);
@@ -1030,6 +1030,7 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -1042,7 +1043,25 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
   useEffect(() => {
     setReplyTo(null);
     setNewMsgCount(0);
+    setLoadingOlder(false);
   }, [room?.id]);
+
+  // Load older messages with scroll position preservation
+  const handleLoadOlder = async () => {
+    if (loadingOlder || !onLoadOlder) return;
+    setLoadingOlder(true);
+    const el = containerRef.current;
+    const prevScrollHeight = el ? el.scrollHeight : 0;
+    await onLoadOlder();
+    // Preserve scroll position after new messages prepended
+    requestAnimationFrame(() => {
+      if (el) {
+        const newScrollHeight = el.scrollHeight;
+        el.scrollTop = newScrollHeight - prevScrollHeight;
+      }
+      setLoadingOlder(false);
+    });
+  };
 
   // Track new messages arriving while scrolled up
   useEffect(() => {
@@ -1421,6 +1440,30 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
             <div>No messages yet. Be the first to say something!</div>
           </div>
         )}
+        {/* Load older messages button */}
+        {!loading && hasMore && messages.length > 0 && (
+          <div style={{ textAlign: 'center', padding: '12px 0 4px' }}>
+            <button
+              onClick={handleLoadOlder}
+              disabled={loadingOlder}
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 6,
+                color: '#94a3b8',
+                padding: '6px 16px',
+                fontSize: '0.8rem',
+                cursor: loadingOlder ? 'default' : 'pointer',
+                opacity: loadingOlder ? 0.6 : 1,
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (!loadingOlder) e.target.style.background = 'rgba(255,255,255,0.1)'; }}
+              onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.06)'; }}
+            >
+              {loadingOlder ? '⏳ Loading...' : '↑ Load older messages'}
+            </button>
+          </div>
+        )}
         {grouped.map((item, i) => {
           if (item.type === 'date') {
             return <DateSeparator key={`date-${i}`} date={item.date} />;
@@ -1758,6 +1801,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false); // true if there may be older messages to load
   const [reactions, setReactions] = useState({}); // messageId -> [{emoji, count, senders}]
   const [adminKeyInfo, setAdminKeyInfo] = useState(null); // { roomName, adminKey }
   const [connected, setConnected] = useState(false);
@@ -1816,13 +1860,18 @@ export default function App() {
   }, []);
 
   // Fetch messages for a room
+  const INITIAL_LIMIT = 200;
+  const LOAD_MORE_LIMIT = 50;
+
   const fetchMessages = useCallback(async (roomId) => {
     setLoading(true);
+    setHasMore(false);
     try {
-      const res = await fetch(`${API}/rooms/${roomId}/messages?limit=200`);
+      const res = await fetch(`${API}/rooms/${roomId}/messages?limit=${INITIAL_LIMIT}`);
       if (res.ok) {
         const data = await res.json();
         setMessages(data);
+        setHasMore(data.length >= INITIAL_LIMIT);
         if (data.length > 0) {
           const lastMsg = data[data.length - 1];
           lastSeqRef.current = lastMsg.seq || null;
@@ -1853,6 +1902,23 @@ export default function App() {
       }
     } catch (e) { /* ignore */ }
   }, []);
+
+  // Load older messages (backward pagination)
+  const loadOlderMessages = useCallback(async () => {
+    if (!activeRoom || messages.length === 0) return;
+    const oldestSeq = messages[0].seq;
+    if (!oldestSeq) return;
+    try {
+      const res = await fetch(`${API}/rooms/${activeRoom.id}/messages?before_seq=${oldestSeq}&limit=${LOAD_MORE_LIMIT}`);
+      if (res.ok) {
+        const older = await res.json();
+        if (older.length > 0) {
+          setMessages(prev => [...older, ...prev]);
+        }
+        setHasMore(older.length >= LOAD_MORE_LIMIT);
+      }
+    } catch (e) { /* ignore */ }
+  }, [activeRoom, messages]);
 
   // SSE connection
   const connectSSE = useCallback((roomId) => {
@@ -2301,6 +2367,8 @@ export default function App() {
           onRoomUpdate={handleRoomUpdate}
           soundEnabled={soundEnabled}
           onToggleSound={() => setSoundEnabled(prev => !prev)}
+          hasMore={hasMore}
+          onLoadOlder={loadOlderMessages}
         />
       </div>
       <footer style={{ textAlign: 'center', padding: '4px 16px', fontSize: '0.6rem', color: '#475569', flexShrink: 0, borderTop: '1px solid #1e293b' }}>

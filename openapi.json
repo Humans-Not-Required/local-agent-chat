@@ -87,10 +87,12 @@
           { "name": "before", "in": "query", "schema": { "type": "string", "format": "date-time" } },
           { "name": "sender", "in": "query", "schema": { "type": "string" } },
           { "name": "sender_type", "in": "query", "schema": { "type": "string", "enum": ["agent", "human"] }, "description": "Filter by sender type" },
+          { "name": "after", "in": "query", "schema": { "type": "integer" }, "description": "Return messages with seq > this value (forward cursor pagination, preferred)" },
+          { "name": "before_seq", "in": "query", "schema": { "type": "integer" }, "description": "Return most recent N messages with seq < this value (backward cursor pagination). Results in chronological order." },
           { "name": "exclude_sender", "in": "query", "schema": { "type": "string" }, "description": "Comma-separated sender names to exclude. Useful for multi-agent environments to filter out sibling agents and prevent reply loops." }
         ],
         "responses": {
-          "200": { "description": "Array of messages" },
+          "200": { "description": "Array of messages in chronological order" },
           "404": { "description": "Room not found" }
         }
       },

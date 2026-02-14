@@ -3870,3 +3870,126 @@ fn test_update_room_updates_timestamp() {
     let updated: serde_json::Value = res.into_json().unwrap();
     assert_ne!(updated["updated_at"].as_str().unwrap(), original_updated);
 }
+
+// --- before_seq backward pagination tests ---
+
+#[test]
+fn test_before_seq_returns_older_messages() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "before-seq-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send 5 messages
+    let mut seqs: Vec<i64> = vec![];
+    for i in 1..=5 {
+        let res = client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "msg {i}"}}"#))
+            .dispatch();
+        let msg: serde_json::Value = res.into_json().unwrap();
+        seqs.push(msg["seq"].as_i64().unwrap());
+    }
+
+    // Get messages before seq of msg 4 — should return msg 1, 2, 3
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?before_seq={}",
+            seqs[3]
+        ))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 3);
+    // Results should be in chronological order (ASC)
+    assert_eq!(msgs[0]["content"], "msg 1");
+    assert_eq!(msgs[1]["content"], "msg 2");
+    assert_eq!(msgs[2]["content"], "msg 3");
+}
+
+#[test]
+fn test_before_seq_with_limit() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "before-seq-limit-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send 10 messages
+    let mut seqs: Vec<i64> = vec![];
+    for i in 1..=10 {
+        let res = client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "msg {i}"}}"#))
+            .dispatch();
+        let msg: serde_json::Value = res.into_json().unwrap();
+        seqs.push(msg["seq"].as_i64().unwrap());
+    }
+
+    // Get 3 messages before seq of msg 8 — should return msg 5, 6, 7 (most recent 3 before seq 8)
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?before_seq={}&limit=3",
+            seqs[7]
+        ))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 3);
+    assert_eq!(msgs[0]["content"], "msg 5");
+    assert_eq!(msgs[1]["content"], "msg 6");
+    assert_eq!(msgs[2]["content"], "msg 7");
+}
+
+#[test]
+fn test_before_seq_first_message() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "before-seq-first-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send 3 messages
+    let mut seqs: Vec<i64> = vec![];
+    for i in 1..=3 {
+        let res = client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "msg {i}"}}"#))
+            .dispatch();
+        let msg: serde_json::Value = res.into_json().unwrap();
+        seqs.push(msg["seq"].as_i64().unwrap());
+    }
+
+    // Get messages before first message's seq — should return empty
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/messages?before_seq={}",
+            seqs[0]
+        ))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 0);
+}
+
+#[test]
+fn test_before_seq_nonexistent_room() {
+    let client = test_client();
+    let res = client
+        .get("/api/v1/rooms/00000000-0000-0000-0000-000000000000/messages?before_seq=5")
+        .dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+}
