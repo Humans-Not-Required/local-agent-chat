@@ -75,6 +75,8 @@
 - [x] **Clipboard image paste** — Paste images from clipboard (Ctrl+V / Cmd+V) directly into the message input. Auto-named with timestamp. Supports all image types. Commit: d1225ca.
 - [x] **Backward pagination (before_seq)** — `?before_seq=<seq>&limit=N` returns the most recent N messages before a given seq, in chronological order. Frontend "Load older messages" button at top of chat with scroll position preservation. 4 new tests (132 total).
 
+- [x] **Frontend component decomposition** — Monolithic 2967-line App.jsx split into 16 focused component files + utils.js + styles.js. App.jsx reduced to 550 lines (81% reduction). Build verified. Zero functional changes. Commit: 9310489.
+
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
 - [x] Mobile viewport fix - 100dvh + -webkit-fill-available + overflow:hidden ✅ (2026-02-10)
