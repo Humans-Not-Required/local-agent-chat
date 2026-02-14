@@ -118,6 +118,13 @@ Messages include `pinned_at` and `pinned_by` fields when pinned (null/omitted wh
 
 **Delivery model:** Fire-and-forget, 5-second timeout, no retries. Webhook dispatcher runs as a background task subscribed to the EventBus.
 
+### Direct Messages (DMs)
+- `POST /api/v1/dm` — Send a direct message. Body: `{sender, recipient, content, sender_type?, metadata?}`. Auto-creates a DM room between the two participants if one doesn't exist. Returns `{message: Message, room_id: string, created: bool}`. DM rooms use deterministic naming (`dm:{sorted_a}:{sorted_b}`) so the same pair always shares one room regardless of who sends first. Rate limited: 60/min per IP.
+- `GET /api/v1/dm?sender=<name>` — List all DM conversations for a sender. Returns conversations sorted by last message time with: `other_participant`, `last_message_content`, `last_message_sender`, `last_message_at`, `message_count`, `unread_count`, `room_id`, `created_at`.
+- `GET /api/v1/dm/<room_id>` — Get DM conversation details (room_type, message_count, last_activity). Returns 404 if the room_id doesn't exist or isn't a DM room.
+
+DM rooms are hidden from `GET /api/v1/rooms` (regular room listing). All other APIs work normally with DM room IDs: messages, SSE streaming, reactions, files, threads, read positions, search, presence, webhooks.
+
 ### System
 - `GET /api/v1/health` — Health check
 - `GET /api/v1/stats` — Global stats (rooms, messages, active senders)
@@ -134,7 +141,8 @@ CREATE TABLE rooms (
     created_by TEXT DEFAULT 'anonymous',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    admin_key TEXT          -- Per-room admin key (chat_<hex>), returned only on create
+    admin_key TEXT,         -- Per-room admin key (chat_<hex>), returned only on create
+    room_type TEXT DEFAULT 'room'  -- 'room' for regular rooms, 'dm' for direct messages
 );
 ```
 
