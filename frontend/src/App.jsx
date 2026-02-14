@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { styles, injectGlobalStyles } from './styles';
-import { senderColor } from './utils';
+import { API, senderColor } from './utils';
 import { RoomList, ChatArea, SenderModal, AdminKeyModal, ProfileModal } from './components';
 import { useSSE, useChatAPI } from './hooks';
 
@@ -27,6 +27,7 @@ export default function App() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [dmConversations, setDmConversations] = useState([]);
   const [isDmView, setIsDmView] = useState(false);
+  const [profiles, setProfiles] = useState({});
 
   const senderRef = useRef(sender);
   const soundEnabledRef = useRef(soundEnabled);
@@ -72,6 +73,7 @@ export default function App() {
     setTypingUsers,
     setRooms,
     setActiveRoom,
+    setProfiles,
     markRoomRead: api.markRoomRead,
   });
 
@@ -92,6 +94,19 @@ export default function App() {
 
   // --- Initial data load + polling ---
 
+  // Fetch all profiles on mount and refresh periodically
+  const fetchProfiles = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/profiles`);
+      if (res.ok) {
+        const data = await res.json();
+        const map = {};
+        data.forEach(p => { map[p.sender] = p; });
+        setProfiles(map);
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     api.fetchRooms().then(data => {
       if (data.length > 0 && !activeRoom) {
@@ -101,10 +116,12 @@ export default function App() {
     });
     api.fetchUnread();
     api.fetchDmConversations();
+    fetchProfiles();
     const roomInterval = setInterval(api.fetchRooms, 30000);
     const unreadInterval = setInterval(api.fetchUnread, 30000);
     const dmInterval = setInterval(api.fetchDmConversations, 30000);
-    return () => { clearInterval(roomInterval); clearInterval(unreadInterval); clearInterval(dmInterval); };
+    const profileInterval = setInterval(fetchProfiles, 60000);
+    return () => { clearInterval(roomInterval); clearInterval(unreadInterval); clearInterval(dmInterval); clearInterval(profileInterval); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Active room: load data + connect SSE ---
@@ -270,6 +287,7 @@ export default function App() {
           files={files}
           sender={sender}
           reactions={reactions}
+          profiles={profiles}
           onSend={(content, replyToId) => api.handleSend(activeRoom, sender, senderType, content, replyToId, isDmView)}
           onEditMessage={(msgId, newContent) => api.handleEditMessage(activeRoom, sender, msgId, newContent)}
           onDeleteMessage={(msgId) => api.handleDeleteMessage(activeRoom, sender, msgId)}

@@ -16,7 +16,7 @@ import FileCard from './FileCard';
 import MessageGroup from './MessageGroup';
 import useFileUpload from '../hooks/useFileUpload';
 
-export default function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onPin, onUnpin, adminKey, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, onRoomArchived, soundEnabled, onToggleSound, hasMore, onLoadOlder, onlineUsers }) {
+export default function ChatArea({ room, messages, files, sender, reactions, profiles, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onPin, onUnpin, adminKey, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, onRoomArchived, soundEnabled, onToggleSound, hasMore, onLoadOlder, onlineUsers }) {
   const [replyTo, setReplyTo] = useState(null);
   const messagesEndRef = useRef(null);
   const containerRef = useRef(null);
@@ -310,6 +310,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
               sender={sender}
               allMessages={messages}
               onOpenThread={(msgId) => setThreadMessageId(msgId)}
+              profile={profiles?.[item.sender]}
             />
           );
         })}

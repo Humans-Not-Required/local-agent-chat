@@ -21,6 +21,7 @@ export default function useSSE({
   setTypingUsers,
   setRooms,
   setActiveRoom,
+  setProfiles,
   markRoomRead,
 }) {
   const [connected, setConnected] = useState(false);
@@ -206,6 +207,24 @@ export default function useSSE({
         setRooms(prev => {
           if (prev.find(r => r.id === room.id)) return prev;
           return [...prev, room];
+        });
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('profile_updated', (e) => {
+      try {
+        const profile = JSON.parse(e.data);
+        setProfiles(prev => ({ ...prev, [profile.sender]: profile }));
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('profile_deleted', (e) => {
+      try {
+        const { sender: deletedSender } = JSON.parse(e.data);
+        setProfiles(prev => {
+          const next = { ...prev };
+          delete next[deletedSender];
+          return next;
         });
       } catch (err) { /* ignore */ }
     });
