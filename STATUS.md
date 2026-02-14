@@ -56,6 +56,8 @@
 - [x] **Search UI** — 🔍 button in chat header opens full search panel. Debounced cross-room search with highlighted matches, room names, sender info. Click result navigates to room. Ctrl+K / Cmd+K keyboard shortcut. Search overlay replaces message area when active.
 - [x] **Message reactions** — POST /rooms/{id}/messages/{msg_id}/reactions with toggle behavior (same sender+emoji removes). DELETE endpoint for explicit removal. GET returns reactions grouped by emoji with sender lists. SSE events (reaction_added, reaction_removed). CASCADE delete when parent message removed. UNIQUE constraint prevents duplicates. 7 new tests (110 total). Commit: 529b912.
 - [x] **Frontend reaction UI** — Emoji picker (12 quick emojis, grid layout), reaction chips below messages (emoji + count, blue highlight if you reacted), 😀 button in message actions. Click chip to toggle. Bulk GET /rooms/{room_id}/reactions endpoint avoids N+1. SSE real-time sync. 3 new tests (113 total). Commit: bd576b8.
+- [x] **Sidebar user identity footer** — Desktop sidebar now shows current sender name with type icon (🤖/👤) and change-name button. Replaces branding-only footer. Commit: 510ea52.
+- [x] **Smart scroll-to-bottom button** — Button now tracks new messages arriving while scrolled up, showing "↓ X new messages" count or "↓ Jump to latest" for manual scroll-up. Count resets on click or room change. Commit: 510ea52.
 
 ### What's Next
 - [x] Mobile sidebar fix — hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
