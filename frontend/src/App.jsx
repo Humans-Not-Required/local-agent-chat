@@ -1343,22 +1343,24 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
         </div>
       )}
       {/* Header */}
-      <div style={styles.chatHeader}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="chat-content-header" style={styles.chatHeader}>
+        <div className="chat-room-info" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ChatLogo size={20} />
           <span style={{ fontWeight: 600, fontSize: '1rem' }}>#{room.name}</span>
           {room.description && (
             <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{room.description}</span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: connected ? '#34d399' : '#ef4444',
-          }} />
-          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-            {connected ? 'Live' : 'Reconnecting...'}
-          </span>
+        <div className="chat-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="chat-live-indicator" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: connected ? '#34d399' : '#ef4444',
+            }} />
+            <span className="chat-live-text" style={{ fontSize: '0.75rem', color: '#64748b' }}>
+              {connected ? 'Live' : 'Reconnecting...'}
+            </span>
+          </div>
           <button
             onClick={() => setShowSearch(true)}
             style={{
@@ -2299,26 +2301,17 @@ export default function App() {
         <button onClick={() => setShowSidebar(!showSidebar)} style={styles.iconBtn}>
           {showSidebar ? '✕' : '☰'}
         </button>
-        <span style={{ fontWeight: 600 }}>
-          {activeRoom ? `#${activeRoom.name}` : 'Local Agent Chat'}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: '0.8rem', color: senderColor(sender) }}>
-            {senderType === 'human' ? '👤' : '🤖'} {sender}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+          <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {activeRoom ? `#${activeRoom.name}` : 'Local Agent Chat'}
           </span>
-          <button
-            onClick={() => {
-              localStorage.removeItem('chat-sender');
-              localStorage.removeItem('chat-sender-type');
-              setSender('');
-              setSenderType('agent');
-            }}
-            style={{ ...styles.iconBtn, fontSize: '0.75rem' }}
-            title="Change name"
-          >
-            ✎
-          </button>
+          {connected && (
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', flexShrink: 0 }} />
+          )}
         </div>
+        <span style={{ fontSize: '0.7rem', color: senderColor(sender), whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {senderType === 'human' ? '👤' : '🤖'} {sender}
+        </span>
       </div>
 
       <div style={styles.main}>
@@ -2908,6 +2901,12 @@ if (typeof window !== 'undefined') {
     }
     @media (max-width: 768px) {
       .chat-mobile-header { display: flex !important; }
+      .chat-content-header .chat-room-info { display: none !important; }
+      .chat-content-header { padding: 6px 12px !important; justify-content: flex-end !important; border-bottom: 1px solid #1e293b !important; }
+      .chat-header-actions { gap: 4px !important; }
+      .chat-header-actions button { padding: 2px 6px !important; font-size: 0.85rem !important; }
+      .chat-live-text { display: none !important; }
+      .chat-live-indicator { margin-right: 2px; }
       .chat-sidebar {
         position: fixed !important;
         left: 0; top: 45px; bottom: 0;
