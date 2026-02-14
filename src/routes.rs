@@ -1470,6 +1470,76 @@ pub fn get_reactions(
     }))
 }
 
+/// Get all reactions for all messages in a room (bulk fetch)
+#[get("/api/v1/rooms/<room_id>/reactions")]
+pub fn get_room_reactions(
+    db: &State<Db>,
+    room_id: &str,
+) -> Result<Json<RoomReactionsResponse>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Verify room exists
+    let room_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|c| c > 0)
+        .unwrap_or(false);
+
+    if !room_exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Room not found"})),
+        ));
+    }
+
+    // Get all reactions for messages in this room, grouped by message_id and emoji
+    let mut stmt = conn
+        .prepare(
+            "SELECT mr.message_id, mr.emoji, GROUP_CONCAT(mr.sender, ','), COUNT(*) \
+             FROM message_reactions mr \
+             JOIN messages m ON mr.message_id = m.id AND m.room_id = ?1 \
+             GROUP BY mr.message_id, mr.emoji \
+             ORDER BY mr.message_id, MIN(mr.created_at) ASC",
+        )
+        .unwrap();
+
+    let rows: Vec<(String, String, String, i64)> = stmt
+        .query_map(params![room_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut reactions_map: std::collections::HashMap<String, Vec<ReactionSummary>> =
+        std::collections::HashMap::new();
+
+    for (message_id, emoji, senders_str, count) in rows {
+        let senders: Vec<String> = senders_str.split(',').map(|s| s.to_string()).collect();
+        reactions_map
+            .entry(message_id)
+            .or_default()
+            .push(ReactionSummary {
+                emoji,
+                count,
+                senders,
+            });
+    }
+
+    Ok(Json(RoomReactionsResponse {
+        room_id: room_id.to_string(),
+        reactions: reactions_map,
+    }))
+}
+
 // --- File Attachments ---
 
 /// Max file size: 5MB (after base64 decode)

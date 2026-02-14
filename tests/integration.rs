@@ -3251,3 +3251,110 @@ fn test_reactions_cascade_on_message_delete() {
         .dispatch();
     assert_eq!(res.status(), Status::NotFound); // Message doesn't exist anymore
 }
+
+#[test]
+fn test_get_room_reactions_bulk() {
+    let client = test_client();
+
+    // Create a room
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "bulk-reactions-test", "created_by": "Nanook"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Create two messages
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Message 1"}"#)
+        .dispatch();
+    let msg1: serde_json::Value = res.into_json().unwrap();
+    let msg1_id = msg1["id"].as_str().unwrap();
+
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "content": "Message 2"}"#)
+        .dispatch();
+    let msg2: serde_json::Value = res.into_json().unwrap();
+    let msg2_id = msg2["id"].as_str().unwrap();
+
+    // Add reactions to msg1
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg1_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "emoji": "👍"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg1_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Drift", "emoji": "👍"}"#)
+        .dispatch();
+
+    // Add reactions to msg2
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg2_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "emoji": "❤️"}"#)
+        .dispatch();
+
+    // Fetch bulk room reactions
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/reactions"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+
+    assert_eq!(body["room_id"].as_str().unwrap(), room_id);
+    let reactions = body["reactions"].as_object().unwrap();
+
+    // msg1 should have 👍 with 2 senders
+    let msg1_reactions = reactions[msg1_id].as_array().unwrap();
+    assert_eq!(msg1_reactions.len(), 1);
+    assert_eq!(msg1_reactions[0]["emoji"], "👍");
+    assert_eq!(msg1_reactions[0]["count"], 2);
+    let senders: Vec<&str> = msg1_reactions[0]["senders"].as_array().unwrap().iter().map(|s| s.as_str().unwrap()).collect();
+    assert!(senders.contains(&"Forge"));
+    assert!(senders.contains(&"Drift"));
+
+    // msg2 should have ❤️ with 1 sender
+    let msg2_reactions = reactions[msg2_id].as_array().unwrap();
+    assert_eq!(msg2_reactions.len(), 1);
+    assert_eq!(msg2_reactions[0]["emoji"], "❤️");
+    assert_eq!(msg2_reactions[0]["count"], 1);
+    assert_eq!(msg2_reactions[0]["senders"][0], "Nanook");
+}
+
+#[test]
+fn test_get_room_reactions_empty() {
+    let client = test_client();
+
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "empty-reactions-test", "created_by": "Nanook"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/reactions"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["reactions"].as_object().unwrap().len(), 0);
+}
+
+#[test]
+fn test_get_room_reactions_nonexistent_room() {
+    let client = test_client();
+
+    let res = client
+        .get("/api/v1/rooms/nonexistent-room-id/reactions")
+        .dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+}

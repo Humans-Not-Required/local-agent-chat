@@ -78,6 +78,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::add_reaction,
                 routes::remove_reaction,
                 routes::get_reactions,
+                routes::get_room_reactions,
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,

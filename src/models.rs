@@ -207,3 +207,9 @@ pub struct ReactionsResponse {
     pub message_id: String,
     pub reactions: Vec<ReactionSummary>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RoomReactionsResponse {
+    pub room_id: String,
+    pub reactions: std::collections::HashMap<String, Vec<ReactionSummary>>,
+}

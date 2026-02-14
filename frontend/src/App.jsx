@@ -225,10 +225,99 @@ function ReplyPreview({ replyToId, messages, style: extraStyle }) {
   );
 }
 
-function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
+const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '✅', '❌', '🙌', '💯', '🚀'];
+
+function EmojiPicker({ onSelect, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div ref={ref} style={{
+      position: 'absolute',
+      bottom: '100%',
+      right: 0,
+      marginBottom: 4,
+      background: '#1e293b',
+      border: '1px solid #334155',
+      borderRadius: 8,
+      padding: 6,
+      display: 'grid',
+      gridTemplateColumns: 'repeat(6, 1fr)',
+      gap: 2,
+      zIndex: 20,
+      boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+    }}>
+      {QUICK_EMOJIS.map(emoji => (
+        <button
+          key={emoji}
+          onClick={(e) => { e.stopPropagation(); onSelect(emoji); }}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '1.1rem',
+            padding: 4,
+            borderRadius: 4,
+            lineHeight: 1,
+          }}
+          onMouseEnter={e => e.target.style.background = '#334155'}
+          onMouseLeave={e => e.target.style.background = 'none'}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ReactionChips({ reactions, sender, onToggle }) {
+  if (!reactions || reactions.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+      {reactions.map(r => {
+        const isMine = r.senders.includes(sender);
+        return (
+          <button
+            key={r.emoji}
+            onClick={(e) => { e.stopPropagation(); onToggle(r.emoji); }}
+            title={r.senders.join(', ')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              padding: '2px 6px',
+              borderRadius: 10,
+              border: isMine ? '1px solid #3b82f6' : '1px solid #334155',
+              background: isMine ? 'rgba(59, 130, 246, 0.15)' : 'rgba(30, 41, 59, 0.6)',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              lineHeight: 1,
+              color: '#e2e8f0',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.target.style.background = isMine ? 'rgba(59, 130, 246, 0.25)' : '#334155'}
+            onMouseLeave={e => e.target.style.background = isMine ? 'rgba(59, 130, 246, 0.15)' : 'rgba(30, 41, 59, 0.6)'}
+          >
+            <span style={{ fontSize: '0.85rem' }}>{r.emoji}</span>
+            <span>{r.count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, onReact, reactions, sender, allMessages }) {
   const [showActions, setShowActions] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(msg.content);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const handleSaveEdit = () => {
     const trimmed = editText.trim();
@@ -252,10 +341,16 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
   // Toggle actions on click (mobile-friendly) or show on hover (desktop)
   const handleBubbleClick = (e) => {
     if (!editing) {
-      // Don't toggle if clicking inside action buttons
-      if (e.target.closest('[data-actions]')) return;
+      // Don't toggle if clicking inside action buttons or reaction chips or emoji picker
+      if (e.target.closest('[data-actions]') || e.target.closest('[data-reactions]') || e.target.closest('[data-emoji-picker]')) return;
       setShowActions(prev => !prev);
     }
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    onReact(msg.id, emoji);
+    setShowEmojiPicker(false);
+    setShowActions(false);
   };
 
   return (
@@ -266,7 +361,7 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
         maxWidth: '75%',
       }}
       onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      onMouseLeave={() => { setShowActions(false); setShowEmojiPicker(false); }}
     >
       {/* Action buttons on hover/tap */}
       {showActions && !editing && (
@@ -276,6 +371,11 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
             style={styles.msgActionBtn}
             title="Reply"
           >↩</button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(prev => !prev); }}
+            style={styles.msgActionBtn}
+            title="React"
+          >😀</button>
           {isOwn && (
             <>
               <button
@@ -289,6 +389,11 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
                 title="Delete"
               >✕</button>
             </>
+          )}
+          {showEmojiPicker && (
+            <div data-emoji-picker>
+              <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />
+            </div>
           )}
         </div>
       )}
@@ -327,20 +432,28 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, allMessages }) {
           </>
         )}
       </div>
+      {/* Reaction chips below the bubble */}
+      <div data-reactions>
+        <ReactionChips
+          reactions={reactions}
+          sender={sender}
+          onToggle={(emoji) => onReact(msg.id, emoji)}
+        />
+      </div>
     </div>
   );
 }
 
-function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, allMessages }) {
-  const sender = messages[0].sender;
-  const color = senderColor(sender);
+function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, onReact, reactions, sender, allMessages }) {
+  const msgSender = messages[0].sender;
+  const color = senderColor(msgSender);
   const msgType = messages[0].sender_type || messages[0].metadata?.sender_type;
   const typeIcon = msgType === 'human' ? '👤' : msgType === 'agent' ? '🤖' : '';
 
   return (
     <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
       <div style={{ fontSize: '0.8rem', fontWeight: 600, color, marginBottom: 4, paddingLeft: isOwn ? 0 : 4, paddingRight: isOwn ? 4 : 0 }}>
-        {typeIcon && <span style={{ marginRight: 4 }}>{typeIcon}</span>}{sender}
+        {typeIcon && <span style={{ marginRight: 4 }}>{typeIcon}</span>}{msgSender}
       </div>
       {messages.map(msg => (
         <MessageBubble
@@ -350,6 +463,9 @@ function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, allMessages 
           onEdit={onEdit}
           onDelete={onDelete}
           onReply={onReply}
+          onReact={onReact}
+          reactions={(reactions || {})[msg.id] || []}
+          sender={sender}
           allMessages={allMessages}
         />
       ))}
@@ -662,7 +778,7 @@ function ParticipantPanel({ roomId, onClose }) {
   );
 }
 
-function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onTyping, typingUsers, loading, connected, rooms, onSelectRoom }) {
+function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onTyping, typingUsers, loading, connected, rooms, onSelectRoom }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null); // { id, sender, content }
   const messagesEndRef = useRef(null);
@@ -920,6 +1036,9 @@ function ChatArea({ room, messages, files, sender, onSend, onEditMessage, onDele
               onEdit={onEditMessage}
               onDelete={onDeleteMessage}
               onReply={handleReply}
+              onReact={onReact}
+              reactions={reactions}
+              sender={sender}
               allMessages={messages}
             />
           );
@@ -1135,6 +1254,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [reactions, setReactions] = useState({}); // messageId -> [{emoji, count, senders}]
   const [adminKeyInfo, setAdminKeyInfo] = useState(null); // { roomName, adminKey }
   const [connected, setConnected] = useState(false);
   const [showSidebar, setShowSidebar] = useState(window.innerWidth > 768);
@@ -1198,6 +1318,17 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setFiles(data);
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
+  // Fetch all reactions for a room (bulk)
+  const fetchReactions = useCallback(async (roomId) => {
+    try {
+      const res = await fetch(`${API}/rooms/${roomId}/reactions`);
+      if (res.ok) {
+        const data = await res.json();
+        setReactions(data.reactions || {});
       }
     } catch (e) { /* ignore */ }
   }, []);
@@ -1266,6 +1397,46 @@ export default function App() {
       } catch (err) { /* ignore */ }
     });
 
+    es.addEventListener('reaction_added', (e) => {
+      try {
+        const r = JSON.parse(e.data);
+        setReactions(prev => {
+          const msgReactions = [...(prev[r.message_id] || [])];
+          const existing = msgReactions.find(x => x.emoji === r.emoji);
+          if (existing) {
+            if (!existing.senders.includes(r.sender)) {
+              existing.senders = [...existing.senders, r.sender];
+              existing.count = existing.senders.length;
+            }
+          } else {
+            msgReactions.push({ emoji: r.emoji, count: 1, senders: [r.sender] });
+          }
+          return { ...prev, [r.message_id]: msgReactions };
+        });
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('reaction_removed', (e) => {
+      try {
+        const r = JSON.parse(e.data);
+        setReactions(prev => {
+          const msgReactions = [...(prev[r.message_id] || [])];
+          const existing = msgReactions.find(x => x.emoji === r.emoji);
+          if (existing) {
+            existing.senders = existing.senders.filter(s => s !== r.sender);
+            existing.count = existing.senders.length;
+          }
+          const filtered = msgReactions.filter(x => x.count > 0);
+          if (filtered.length === 0) {
+            const next = { ...prev };
+            delete next[r.message_id];
+            return next;
+          }
+          return { ...prev, [r.message_id]: filtered };
+        });
+      } catch (err) { /* ignore */ }
+    });
+
     es.addEventListener('typing', (e) => {
       try {
         const { sender: typingSender } = JSON.parse(e.data);
@@ -1328,9 +1499,11 @@ export default function App() {
     // Clear all typing timeouts
     Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
     typingTimeoutsRef.current = {};
+    setReactions({});
     Promise.all([
       fetchMessages(activeRoom.id),
       fetchFiles(activeRoom.id),
+      fetchReactions(activeRoom.id),
     ]).then(() => {
       connectSSE(activeRoom.id);
     });
@@ -1492,6 +1665,18 @@ export default function App() {
     } catch (e) { /* ignore */ }
   };
 
+  const handleToggleReaction = async (messageId, emoji) => {
+    if (!activeRoom) return;
+    try {
+      await fetch(`${API}/rooms/${activeRoom.id}/messages/${messageId}/reactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender, emoji }),
+      });
+      // SSE will handle the state update
+    } catch (e) { /* ignore */ }
+  };
+
   if (!sender) {
     return <SenderModal onSet={handleSetSender} />;
   }
@@ -1554,11 +1739,13 @@ export default function App() {
           messages={messages}
           files={files}
           sender={sender}
+          reactions={reactions}
           onSend={handleSend}
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
           onDeleteFile={handleDeleteFile}
           onUploadFile={handleUploadFile}
+          onReact={handleToggleReaction}
           onTyping={handleTyping}
           typingUsers={typingUsers}
           loading={loading}
