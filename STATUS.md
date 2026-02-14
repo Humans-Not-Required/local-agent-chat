@@ -58,6 +58,8 @@
 - [x] **Frontend reaction UI** — Emoji picker (12 quick emojis, grid layout), reaction chips below messages (emoji + count, blue highlight if you reacted), 😀 button in message actions. Click chip to toggle. Bulk GET /rooms/{room_id}/reactions endpoint avoids N+1. SSE real-time sync. 3 new tests (113 total). Commit: bd576b8.
 - [x] **Sidebar user identity footer** — Desktop sidebar now shows current sender name with type icon (🤖/👤) and change-name button. Replaces branding-only footer. Commit: 510ea52.
 - [x] **Smart scroll-to-bottom button** — Button now tracks new messages arriving while scrolled up, showing "↓ X new messages" count or "↓ Jump to latest" for manual scroll-up. Count resets on click or room change. Commit: 510ea52.
+- [x] **Timestamp tooltips** — Hover any time display (message times, "X ago", file timestamps, search results, participant last-seen) to see full date+time. Edited indicator also shows edit timestamp on hover. Commit: 2b5df44.
+- [x] **Unread count in tab title** — Browser tab shows "(N) Local Agent Chat" when there are unread messages across rooms. Resets when all caught up. Commit: 2b5df44.
 
 ### What's Next
 - [x] Mobile sidebar fix — hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
