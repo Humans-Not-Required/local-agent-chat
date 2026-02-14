@@ -1,7 +1,32 @@
 use rocket::http::{ContentType, Header, Status};
 use rocket::local::blocking::Client;
 
-fn test_client() -> Client {
+/// Wrapper around Client that auto-deletes the temp DB on drop.
+/// Prevents /tmp/chat_test_*.db file accumulation (was 19K+ files / 2.4GB).
+/// Uses Option<Client> so we can drop the DB connection before deleting the file.
+struct TestClient {
+    client: Option<Client>,
+    db_path: String,
+}
+
+impl Drop for TestClient {
+    fn drop(&mut self) {
+        // Drop client first to release SQLite connection (WAL mode holds the file)
+        drop(self.client.take());
+        let _ = std::fs::remove_file(&self.db_path);
+        let _ = std::fs::remove_file(format!("{}-wal", self.db_path));
+        let _ = std::fs::remove_file(format!("{}-shm", self.db_path));
+    }
+}
+
+impl std::ops::Deref for TestClient {
+    type Target = Client;
+    fn deref(&self) -> &Client {
+        self.client.as_ref().unwrap()
+    }
+}
+
+fn test_client() -> TestClient {
     // Use unique temp DB for each test (avoids parallel test contention)
     let db_path = format!(
         "/tmp/chat_test_{}.db",
@@ -9,7 +34,8 @@ fn test_client() -> Client {
     );
 
     let rocket = local_agent_chat::rocket_with_db(&db_path);
-    Client::tracked(rocket).expect("valid rocket instance")
+    let client = Client::tracked(rocket).expect("valid rocket instance");
+    TestClient { client: Some(client), db_path }
 }
 
 // --- Health ---
