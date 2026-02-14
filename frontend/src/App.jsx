@@ -40,7 +40,105 @@ function formatDate(dateStr) {
 }
 
 // Convert URLs to clickable links and highlight @mentions
-// Render message content with fenced code blocks, then inline markdown
+// Render block-level markdown: lists, blockquotes, horizontal rules
+// Then apply inline markdown (linkify) within each block
+function renderBlocks(text, keyPrefix) {
+  if (!text) return [text];
+  const lines = text.split('\n');
+  const blocks = [];
+  let i = 0;
+  let keyIdx = 0;
+  let regularLines = [];
+
+  const kp = keyPrefix || 'blk';
+  function flushRegular() {
+    if (regularLines.length > 0) {
+      const joined = regularLines.join('\n');
+      blocks.push(React.createElement('span', { key: `${kp}-txt-${keyIdx++}` }, linkify(joined)));
+      regularLines = [];
+    }
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Horizontal rule: --- or *** or ___ (3+ identical chars, standalone line)
+    if (/^([-*_])\1{2,}\s*$/.test(line.trim())) {
+      flushRegular();
+      blocks.push(React.createElement('hr', {
+        key: `${kp}-hr-${keyIdx++}`,
+        style: { border: 'none', borderTop: '1px solid rgba(255,255,255,0.2)', margin: '8px 0' },
+      }));
+      i++;
+      continue;
+    }
+
+    // Blockquote: > text
+    if (/^>\s?/.test(line)) {
+      flushRegular();
+      const quoteLines = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        quoteLines.push(lines[i].replace(/^>\s?/, ''));
+        i++;
+      }
+      blocks.push(React.createElement('blockquote', {
+        key: `${kp}-bq-${keyIdx++}`,
+        style: {
+          borderLeft: '3px solid rgba(255,255,255,0.3)',
+          paddingLeft: 12,
+          margin: '4px 0',
+          color: 'rgba(255,255,255,0.7)',
+          fontStyle: 'italic',
+          whiteSpace: 'pre-wrap',
+        },
+      }, linkify(quoteLines.join('\n'))));
+      continue;
+    }
+
+    // Unordered list: - item or * item (requires space after marker)
+    if (/^[-*]\s+/.test(line)) {
+      flushRegular();
+      const items = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^[-*]\s+/, ''));
+        i++;
+      }
+      blocks.push(React.createElement('ul', {
+        key: `${kp}-ul-${keyIdx++}`,
+        style: { margin: '4px 0', paddingLeft: 24, listStyleType: 'disc' },
+      }, items.map((item, j) =>
+        React.createElement('li', { key: j, style: { marginBottom: 2 } }, linkify(item))
+      )));
+      continue;
+    }
+
+    // Ordered list: 1. item (requires space after period)
+    if (/^\d+\.\s+/.test(line)) {
+      flushRegular();
+      const items = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\.\s+/, ''));
+        i++;
+      }
+      blocks.push(React.createElement('ol', {
+        key: `${kp}-ol-${keyIdx++}`,
+        style: { margin: '4px 0', paddingLeft: 24 },
+      }, items.map((item, j) =>
+        React.createElement('li', { key: j, style: { marginBottom: 2 } }, linkify(item))
+      )));
+      continue;
+    }
+
+    // Regular line — accumulate for batch linkify
+    regularLines.push(line);
+    i++;
+  }
+
+  flushRegular();
+  return blocks;
+}
+
+// Render message content with fenced code blocks, then block/inline markdown
 function renderContent(text) {
   if (!text) return text;
   // Split on fenced code blocks: ```lang\n...\n``` (newline after lang is optional)
@@ -51,12 +149,10 @@ function renderContent(text) {
   let keyIdx = 0;
 
   while ((match = codeBlockRegex.exec(text)) !== null) {
-    // Text before the code block — apply inline markdown
+    // Text before the code block — apply block + inline markdown
     if (match.index > lastIndex) {
       const before = text.slice(lastIndex, match.index);
-      parts.push(
-        React.createElement('span', { key: `pre-${keyIdx++}` }, linkify(before))
-      );
+      parts.push(...renderBlocks(before, `pre-${keyIdx++}`));
     }
 
     const lang = match[1];
@@ -92,13 +188,11 @@ function renderContent(text) {
   // Text after the last code block (or all text if no code blocks)
   if (lastIndex < text.length) {
     const after = text.slice(lastIndex);
-    parts.push(
-      React.createElement('span', { key: `post-${keyIdx++}` }, linkify(after))
-    );
+    parts.push(...renderBlocks(after, `post-${keyIdx++}`));
   }
 
-  // No code blocks found — just use linkify
-  if (parts.length === 0) return linkify(text);
+  // No code blocks found — just use block rendering
+  if (parts.length === 0) return renderBlocks(text);
   return parts;
 }
 
