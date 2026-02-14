@@ -66,7 +66,7 @@ pub fn send_dm(
     if sender.is_empty() || sender.len() > 100 || recipient.is_empty() || recipient.len() > 100 {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "sender and recipient must be 1-100 characters"})),
+            Json(serde_json::json!({"error": "Sender and recipient must be 1-100 characters"})),
         ));
     }
 
@@ -180,7 +180,7 @@ pub fn list_dm_conversations(
     if sender.is_empty() || sender.len() > 100 {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "sender must be 1-100 characters"})),
+            Json(serde_json::json!({"error": "Sender must be 1-100 characters"})),
         ));
     }
 

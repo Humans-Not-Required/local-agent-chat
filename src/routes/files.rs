@@ -281,7 +281,7 @@ pub fn delete_file(
         let sender = sender.ok_or_else(|| {
             (
                 Status::BadRequest,
-                Json(serde_json::json!({"error": "sender query parameter required (or use room admin key)"})),
+                Json(serde_json::json!({"error": "Sender query parameter required (or use room admin key)"})),
             )
         })?;
         if sender != existing_sender {

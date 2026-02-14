@@ -23,20 +23,20 @@ pub fn add_reaction(
     if sender.is_empty() || sender.len() > 100 {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "sender must be 1-100 characters"})),
+            Json(serde_json::json!({"error": "Sender must be 1-100 characters"})),
         ));
     }
     if emoji.is_empty() {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "emoji must not be empty"})),
+            Json(serde_json::json!({"error": "Emoji must not be empty"})),
         ));
     }
     // Limit emoji length (single emoji or short code, max 32 chars)
     if emoji.len() > 32 {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "emoji too long (max 32 characters)"})),
+            Json(serde_json::json!({"error": "Emoji too long (max 32 characters)"})),
         ));
     }
 
@@ -130,7 +130,7 @@ pub fn remove_reaction(
     if sender.is_empty() || emoji.is_empty() {
         return Err((
             Status::BadRequest,
-            Json(serde_json::json!({"error": "sender and emoji are required"})),
+            Json(serde_json::json!({"error": "Sender and emoji are required"})),
         ));
     }
 
