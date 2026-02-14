@@ -237,6 +237,55 @@ pub struct GlobalPresenceResponse {
     pub total_online: usize,
 }
 
+// --- Webhooks ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Webhook {
+    pub id: String,
+    pub room_id: String,
+    pub url: String,
+    pub events: String,
+    pub created_by: String,
+    pub created_at: String,
+    pub active: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateWebhook {
+    pub url: String,
+    #[serde(default = "default_webhook_events")]
+    pub events: String,
+    #[serde(default)]
+    pub secret: Option<String>,
+    #[serde(default = "default_anonymous")]
+    pub created_by: String,
+}
+
+fn default_webhook_events() -> String {
+    "*".to_string()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateWebhook {
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub events: Option<String>,
+    #[serde(default)]
+    pub secret: Option<String>,
+    #[serde(default)]
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WebhookDelivery {
+    pub event: String,
+    pub room_id: String,
+    pub room_name: String,
+    pub data: serde_json::Value,
+    pub timestamp: String,
+}
+
 // --- Reactions ---
 
 #[derive(Debug, Deserialize)]

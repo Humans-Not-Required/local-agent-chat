@@ -629,6 +629,103 @@
           "404": { "description": "Room not found" }
         }
       }
+    },
+    "/rooms/{room_id}/webhooks": {
+      "post": {
+        "summary": "Create webhook",
+        "operationId": "createWebhook",
+        "description": "Register a webhook URL to receive event notifications for this room. Requires room admin key.",
+        "security": [{ "adminKey": [] }],
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": { "type": "string", "description": "HTTP(S) URL to POST events to" },
+                  "events": { "type": "string", "default": "*", "description": "Comma-separated event types or '*' for all. Valid: message, message_edited, message_deleted, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, presence_joined, presence_left, room_updated" },
+                  "secret": { "type": "string", "description": "Optional HMAC-SHA256 secret for payload signing (X-Chat-Signature header)" },
+                  "created_by": { "type": "string", "default": "anonymous" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Webhook created with id, url, events, has_secret, active" },
+          "400": { "description": "Invalid URL or event type" },
+          "403": { "description": "Invalid admin key" },
+          "404": { "description": "Room not found" }
+        }
+      },
+      "get": {
+        "summary": "List webhooks",
+        "operationId": "listWebhooks",
+        "description": "List all webhooks registered for this room. Requires room admin key. Newest first.",
+        "security": [{ "adminKey": [] }],
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Array of webhooks (id, room_id, url, events, created_by, created_at, active)" },
+          "403": { "description": "Invalid admin key" },
+          "404": { "description": "Room not found" }
+        }
+      }
+    },
+    "/rooms/{room_id}/webhooks/{webhook_id}": {
+      "put": {
+        "summary": "Update webhook",
+        "operationId": "updateWebhook",
+        "description": "Update a webhook's URL, events filter, secret, or active status. Requires room admin key.",
+        "security": [{ "adminKey": [] }],
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "webhook_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": { "type": "string" },
+                  "events": { "type": "string" },
+                  "secret": { "type": "string" },
+                  "active": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Webhook updated" },
+          "400": { "description": "Invalid URL or no fields to update" },
+          "403": { "description": "Invalid admin key" },
+          "404": { "description": "Room or webhook not found" }
+        }
+      },
+      "delete": {
+        "summary": "Delete webhook",
+        "operationId": "deleteWebhook",
+        "description": "Remove a webhook. Requires room admin key.",
+        "security": [{ "adminKey": [] }],
+        "parameters": [
+          { "name": "room_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "webhook_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Webhook deleted" },
+          "403": { "description": "Invalid admin key" },
+          "404": { "description": "Room or webhook not found" }
+        }
+      }
     }
   },
   "components": {
@@ -636,7 +733,7 @@
       "adminKey": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Per-room admin key (format: chat_<hex>). Returned only on room creation. Required for room deletion and message moderation."
+        "description": "Per-room admin key (format: chat_<hex>). Returned only on room creation. Required for room deletion, message moderation, and webhook management."
       }
     }
   }

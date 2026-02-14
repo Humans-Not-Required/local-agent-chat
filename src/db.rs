@@ -116,6 +116,23 @@ impl Db {
         )
         .expect("Failed to create message_reactions table");
 
+        // Webhooks table for event notifications
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS webhooks (
+                id TEXT PRIMARY KEY,
+                room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                url TEXT NOT NULL,
+                events TEXT NOT NULL DEFAULT '*',
+                secret TEXT,
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE INDEX IF NOT EXISTS idx_webhooks_room ON webhooks(room_id);
+            CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(active);",
+        )
+        .expect("Failed to create webhooks table");
+
         // Backfill seq for existing messages that don't have one
         let needs_seq_backfill: i64 = conn
             .query_row("SELECT COUNT(*) FROM messages WHERE seq IS NULL", [], |r| {

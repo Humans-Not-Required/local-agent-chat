@@ -78,6 +78,7 @@
 - [x] **Frontend component decomposition** — Monolithic 2967-line App.jsx split into 16 focused component files + utils.js + styles.js. App.jsx reduced to 550 lines (81% reduction). Build verified. Zero functional changes. Commit: 9310489.
 - [x] **Message pinning** — POST /rooms/{id}/messages/{msg_id}/pin (admin key required), DELETE to unpin, GET /rooms/{id}/pins lists pinned messages (newest-first). Messages include pinned_at/pinned_by fields. SSE events: message_pinned, message_unpinned. Frontend: 📌 indicator on pinned messages, pin/unpin action button (with admin key prompt), pinned messages panel (📌 header button). Admin keys auto-saved to localStorage on room creation and first successful pin. 12 new tests (144 total).
 - [x] **User presence / online status** — SSE stream now accepts optional `?sender=<name>&sender_type=<type>` query params to register presence. GET /rooms/{id}/presence lists connected users. GET /presence shows global cross-room presence with unique sender count. Ref-counted connections (multiple tabs work correctly). RAII guard auto-removes presence on disconnect. SSE events: presence_joined, presence_left. 11 new tests (155 total). Commit: be1e885.
+- [x] **Webhooks** — Register webhook URLs to receive event notifications. CRUD API (POST/GET/PUT/DELETE /rooms/{id}/webhooks) with admin key auth. Event filtering (all or comma-separated types: message, message_edited, message_deleted, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, presence_joined, presence_left, room_updated). Optional HMAC-SHA256 signing (X-Chat-Signature header). Background dispatcher subscribes to EventBus, fire-and-forget delivery (5s timeout). CASCADE delete on room removal. 18 new tests (173 total).
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
@@ -89,7 +90,7 @@
 - [x] **Auto-expanding message input** - Textarea grows as text is entered (up to ~6 lines / 160px max), shrinks back after send. Buttons align to bottom of input area. Smooth transition. Works on all screen sizes ✅ (2026-02-11)
 - [x] **Sibling chat: remove sibling exclusion** - Updated sibling-agent.sh: siblings interact freely, loop safety via rate limits only (cooldown, max-per-poll, reply threading). EXCLUDE_SENDERS demoted to optional. Commit: 9282964. ✅ (2026-02-13)
 - [x] Frontend reaction UI - emoji picker, reaction chips below messages, click to toggle ✅ (2026-02-13)
-- [ ] Frontend presence UI — online indicators in participants panel, online count in sidebar
+- [x] Frontend presence UI — online indicators in participants panel, online count badge on 👥 button. SSE stream sends sender/sender_type for presence. Online-first sorting. Commit: 2fb86db. ✅
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener with presence)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)

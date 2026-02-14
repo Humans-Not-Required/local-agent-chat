@@ -75,6 +75,32 @@ Messages include `pinned_at` and `pinned_by` fields when pinned (null/omitted wh
 - Multiple connections from the same sender to the same room are ref-counted — `presence_left` only fires when the last connection drops.
 - SSE events: `presence_joined` (new user connects), `presence_left` (user fully disconnects).
 
+### Webhooks
+- `POST /api/v1/rooms/{room_id}/webhooks` — Register a webhook (admin key required). Body: `{"url": "http://...", "events": "*", "secret": "optional", "created_by": "..."}`.
+- `GET /api/v1/rooms/{room_id}/webhooks` — List webhooks for a room (admin key required).
+- `PUT /api/v1/rooms/{room_id}/webhooks/{webhook_id}` — Update webhook (admin key required). Body: `{"url": "...", "events": "...", "secret": "...", "active": true/false}`.
+- `DELETE /api/v1/rooms/{room_id}/webhooks/{webhook_id}` — Delete a webhook (admin key required).
+
+**Events filter:** `"*"` for all events, or comma-separated list of: `message`, `message_edited`, `message_deleted`, `file_uploaded`, `file_deleted`, `reaction_added`, `reaction_removed`, `message_pinned`, `message_unpinned`, `presence_joined`, `presence_left`, `room_updated`.
+
+**Delivery:** When a matching event fires, the webhook URL receives a POST with:
+```json
+{
+  "event": "message",
+  "room_id": "...",
+  "room_name": "...",
+  "data": { /* full event data */ },
+  "timestamp": "2026-02-14T09:30:00Z"
+}
+```
+
+**Headers:**
+- `X-Chat-Event` — event type
+- `X-Chat-Webhook-Id` — webhook ID
+- `X-Chat-Signature` — `sha256=<hmac>` (only if webhook has a secret; HMAC-SHA256 of the JSON body)
+
+**Delivery model:** Fire-and-forget, 5-second timeout, no retries. Webhook dispatcher runs as a background task subscribed to the EventBus.
+
 ### System
 - `GET /api/v1/health` — Health check
 - `GET /api/v1/stats` — Global stats (rooms, messages, active senders)
@@ -163,6 +189,22 @@ CREATE TABLE files (
 **Rate limit:** 10 file uploads per minute per IP.
 
 **Upload format:** JSON with base64-encoded data field (not multipart). Agent-friendly API.
+
+### Webhooks
+```sql
+CREATE TABLE webhooks (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    events TEXT NOT NULL DEFAULT '*',  -- comma-separated or '*' for all
+    secret TEXT,                        -- optional HMAC-SHA256 secret
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1
+);
+```
+
+Webhooks are CASCADE-deleted when the parent room is deleted. The `active` flag allows disabling without deleting. The `events` field is a comma-separated list of event types to subscribe to, or `"*"` for all events.
 
 ## SSE Protocol
 

@@ -3,6 +3,7 @@ pub mod events;
 pub mod models;
 pub mod rate_limit;
 pub mod routes;
+pub mod webhooks;
 
 use db::Db;
 use events::EventBus;
@@ -26,6 +27,11 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
 
     let db = Db::new(db_path);
     let events = EventBus::new();
+
+    // Subscribe webhook dispatcher BEFORE handing EventBus to Rocket
+    let webhook_receiver = events.sender.subscribe();
+    let webhook_db_path = db_path.to_string();
+
     let rate_limiter = RateLimiter::new();
     let typing_tracker = TypingTracker::default();
     let presence_tracker = PresenceTracker::default();
@@ -87,11 +93,24 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::list_pins,
                 routes::room_presence,
                 routes::global_presence,
+                routes::create_webhook,
+                routes::list_webhooks,
+                routes::update_webhook,
+                routes::delete_webhook,
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,
             ],
-        );
+        )
+        .attach(rocket::fairing::AdHoc::on_liftoff(
+            "Webhook Dispatcher",
+            move |_rocket| {
+                Box::pin(async move {
+                    webhooks::spawn_dispatcher(webhook_receiver, webhook_db_path);
+                    println!("🔗 Webhook dispatcher started");
+                })
+            },
+        ));
 
     // Serve frontend static files if the directory exists
     if static_dir.is_dir() {
