@@ -198,6 +198,10 @@ impl Db {
         conn.execute_batch("ALTER TABLE rooms ADD COLUMN room_type TEXT DEFAULT 'room';")
             .ok();
 
+        // Add archived_at column for room archiving
+        conn.execute_batch("ALTER TABLE rooms ADD COLUMN archived_at TEXT;")
+            .ok();
+
         // Backfill admin_key for existing rooms that don't have one
         let mut stmt = conn
             .prepare("SELECT id FROM rooms WHERE admin_key IS NULL")

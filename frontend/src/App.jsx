@@ -312,6 +312,24 @@ export default function App() {
       } catch (err) { /* ignore */ }
     });
 
+    es.addEventListener('room_archived', (e) => {
+      try {
+        const room = JSON.parse(e.data);
+        setRooms(prev => prev.filter(r => r.id !== room.id));
+        setActiveRoom(prev => prev && prev.id === room.id ? null : prev);
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('room_unarchived', (e) => {
+      try {
+        const room = JSON.parse(e.data);
+        setRooms(prev => {
+          if (prev.find(r => r.id === room.id)) return prev;
+          return [...prev, room];
+        });
+      } catch (err) { /* ignore */ }
+    });
+
     es.addEventListener('typing', (e) => {
       try {
         const { sender: typingSender } = JSON.parse(e.data);
@@ -437,6 +455,20 @@ export default function App() {
   const handleRoomUpdate = useCallback((updated) => {
     setRooms(prev => prev.map(r => r.id === updated.id ? { ...r, ...updated } : r));
     setActiveRoom(prev => prev && prev.id === updated.id ? { ...prev, ...updated } : prev);
+  }, []);
+
+  const handleRoomArchived = useCallback((updated) => {
+    if (updated.archived_at) {
+      // Room was archived — remove from list, deselect if active
+      setRooms(prev => prev.filter(r => r.id !== updated.id));
+      setActiveRoom(prev => prev && prev.id === updated.id ? null : prev);
+    } else {
+      // Room was unarchived — add back to list
+      setRooms(prev => {
+        if (prev.find(r => r.id === updated.id)) return prev.map(r => r.id === updated.id ? { ...r, ...updated } : r);
+        return [...prev, updated];
+      });
+    }
   }, []);
 
   const markRoomRead = useCallback((roomId, seq) => {
@@ -738,6 +770,7 @@ export default function App() {
           rooms={rooms}
           onSelectRoom={handleSelectRoom}
           onRoomUpdate={handleRoomUpdate}
+          onRoomArchived={handleRoomArchived}
           soundEnabled={soundEnabled}
           onToggleSound={() => setSoundEnabled(prev => !prev)}
           hasMore={hasMore}

@@ -69,6 +69,8 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::list_rooms,
                 routes::get_room,
                 routes::update_room,
+                routes::archive_room,
+                routes::unarchive_room,
                 routes::delete_room,
                 routes::send_message,
                 routes::edit_message,

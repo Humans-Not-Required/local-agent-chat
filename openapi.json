@@ -44,7 +44,19 @@
           "200": {
             "description": "Array of rooms with stats"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Include archived rooms in the list (default: false)"
+          }
+        ]
       },
       "post": {
         "summary": "Create a room",
@@ -2262,6 +2274,98 @@
         "responses": {
           "200": {
             "description": "DM conversations list"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/archive": {
+      "post": {
+        "summary": "Archive a room",
+        "description": "Archive a room, hiding it from the default room list. Requires admin key.",
+        "operationId": "archiveRoom",
+        "tags": [
+          "rooms"
+        ],
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Room archived successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomWithStats"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid admin key"
+          },
+          "404": {
+            "description": "Room not found"
+          },
+          "409": {
+            "description": "Room is already archived"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/unarchive": {
+      "post": {
+        "summary": "Unarchive a room",
+        "description": "Restore an archived room to active status. Requires admin key.",
+        "operationId": "unarchiveRoom",
+        "tags": [
+          "rooms"
+        ],
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Room unarchived successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomWithStats"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid admin key"
+          },
+          "404": {
+            "description": "Room not found"
+          },
+          "409": {
+            "description": "Room is not archived"
           }
         }
       }

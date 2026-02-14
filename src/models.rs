@@ -24,6 +24,8 @@ pub struct RoomWithStats {
     pub last_message_sender: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_message_preview: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

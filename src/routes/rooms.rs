@@ -60,19 +60,28 @@ pub fn create_room(
     }
 }
 
-#[get("/api/v1/rooms")]
-pub fn list_rooms(db: &State<Db>) -> Json<Vec<RoomWithStats>> {
+#[get("/api/v1/rooms?<include_archived>")]
+pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>) -> Json<Vec<RoomWithStats>> {
     let conn = db.conn.lock().unwrap();
-    let mut stmt = conn
-        .prepare(
-            "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
-                    (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
-                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
-                    (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
-                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview
-             FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' ORDER BY last_activity IS NULL, last_activity DESC, r.name",
-        )
-        .unwrap();
+    let include = include_archived.unwrap_or(false);
+    let sql = if include {
+        "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
+                (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
+                (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                r.archived_at
+         FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' ORDER BY last_activity IS NULL, last_activity DESC, r.name"
+    } else {
+        "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
+                (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
+                (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                r.archived_at
+         FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' AND r.archived_at IS NULL ORDER BY last_activity IS NULL, last_activity DESC, r.name"
+    };
+    let mut stmt = conn.prepare(sql).unwrap();
     let rooms = stmt
         .query_map([], |row| {
             Ok(RoomWithStats {
@@ -86,6 +95,7 @@ pub fn list_rooms(db: &State<Db>) -> Json<Vec<RoomWithStats>> {
                 last_activity: row.get(7)?,
                 last_message_sender: row.get(8)?,
                 last_message_preview: row.get(9)?,
+                archived_at: row.get(10)?,
             })
         })
         .unwrap()
@@ -105,7 +115,8 @@ pub fn get_room(
                 (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
                 (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
                 (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
-                (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview
+                (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                r.archived_at
          FROM rooms r WHERE r.id = ?1",
         params![room_id],
         |row| {
@@ -120,6 +131,7 @@ pub fn get_room(
                 last_activity: row.get(7)?,
                 last_message_sender: row.get(8)?,
                 last_message_preview: row.get(9)?,
+                archived_at: row.get(10)?,
             })
         },
     )
@@ -238,7 +250,8 @@ pub fn update_room(
                     (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
                     (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
                     (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
-                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview
+                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                    r.archived_at
              FROM rooms r WHERE r.id = ?1",
             params![room_id],
             |row| {
@@ -253,6 +266,7 @@ pub fn update_room(
                     last_activity: row.get(7)?,
                     last_message_sender: row.get(8)?,
                     last_message_preview: row.get(9)?,
+                    archived_at: row.get(10)?,
                 })
             },
         )
@@ -265,6 +279,190 @@ pub fn update_room(
 
     // Publish SSE event
     events.publish(ChatEvent::RoomUpdated(room.clone()));
+
+    Ok(Json(room))
+}
+
+#[post("/api/v1/rooms/<room_id>/archive")]
+pub fn archive_room(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    admin: AdminKey,
+) -> Result<Json<RoomWithStats>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Verify room exists and admin key matches
+    let row: (Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT admin_key, archived_at FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Room not found"})),
+            )
+        })?;
+
+    match row.0 {
+        Some(ref key) if key == &admin.0 => {}
+        _ => {
+            return Err((
+                Status::Forbidden,
+                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
+            ));
+        }
+    }
+
+    // Check if already archived
+    if row.1.is_some() {
+        return Err((
+            Status::Conflict,
+            Json(serde_json::json!({"error": "Room is already archived"})),
+        ));
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE rooms SET archived_at = ?1, updated_at = ?1 WHERE id = ?2",
+        params![&now, room_id],
+    )
+    .map_err(|e| {
+        (
+            Status::InternalServerError,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
+
+    // Fetch updated room
+    let room = conn
+        .query_row(
+            "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
+                    (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
+                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                    (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                    r.archived_at
+             FROM rooms r WHERE r.id = ?1",
+            params![room_id],
+            |row| {
+                Ok(RoomWithStats {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    created_by: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    message_count: row.get(6)?,
+                    last_activity: row.get(7)?,
+                    last_message_sender: row.get(8)?,
+                    last_message_preview: row.get(9)?,
+                    archived_at: row.get(10)?,
+                })
+            },
+        )
+        .map_err(|_| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": "Failed to fetch room"})),
+            )
+        })?;
+
+    events.publish(ChatEvent::RoomArchived(room.clone()));
+
+    Ok(Json(room))
+}
+
+#[post("/api/v1/rooms/<room_id>/unarchive")]
+pub fn unarchive_room(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    admin: AdminKey,
+) -> Result<Json<RoomWithStats>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Verify room exists and admin key matches
+    let row: (Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT admin_key, archived_at FROM rooms WHERE id = ?1",
+            params![room_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Room not found"})),
+            )
+        })?;
+
+    match row.0 {
+        Some(ref key) if key == &admin.0 => {}
+        _ => {
+            return Err((
+                Status::Forbidden,
+                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
+            ));
+        }
+    }
+
+    // Check if not archived
+    if row.1.is_none() {
+        return Err((
+            Status::Conflict,
+            Json(serde_json::json!({"error": "Room is not archived"})),
+        ));
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE rooms SET archived_at = NULL, updated_at = ?1 WHERE id = ?2",
+        params![&now, room_id],
+    )
+    .map_err(|e| {
+        (
+            Status::InternalServerError,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
+
+    // Fetch updated room
+    let room = conn
+        .query_row(
+            "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
+                    (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
+                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                    (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                    r.archived_at
+             FROM rooms r WHERE r.id = ?1",
+            params![room_id],
+            |row| {
+                Ok(RoomWithStats {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    created_by: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    message_count: row.get(6)?,
+                    last_activity: row.get(7)?,
+                    last_message_sender: row.get(8)?,
+                    last_message_preview: row.get(9)?,
+                    archived_at: row.get(10)?,
+                })
+            },
+        )
+        .map_err(|_| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": "Failed to fetch room"})),
+            )
+        })?;
+
+    events.publish(ChatEvent::RoomUnarchived(room.clone()));
 
     Ok(Json(room))
 }

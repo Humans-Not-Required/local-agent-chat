@@ -19,6 +19,8 @@ pub enum ChatEvent {
     ReadPositionUpdated(ReadPosition),
     ProfileUpdated(Profile),
     ProfileDeleted { sender: String },
+    RoomArchived(RoomWithStats),
+    RoomUnarchived(RoomWithStats),
 }
 
 pub struct EventBus {

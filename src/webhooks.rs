@@ -120,6 +120,16 @@ fn event_to_payload(event: &ChatEvent) -> Option<(String, String, serde_json::Va
             room.id.clone(),
             serde_json::to_value(room).unwrap_or_default(),
         )),
+        ChatEvent::RoomArchived(room) => Some((
+            "room_archived".to_string(),
+            room.id.clone(),
+            serde_json::to_value(room).unwrap_or_default(),
+        )),
+        ChatEvent::RoomUnarchived(room) => Some((
+            "room_unarchived".to_string(),
+            room.id.clone(),
+            serde_json::to_value(room).unwrap_or_default(),
+        )),
     }
 }
 

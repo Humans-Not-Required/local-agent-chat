@@ -181,6 +181,12 @@ pub fn message_stream(
                         Ok(ChatEvent::ProfileDeleted { ref sender }) => {
                             yield Event::json(&serde_json::json!({"sender": sender})).event("profile_deleted");
                         }
+                        Ok(ChatEvent::RoomArchived(ref r)) if r.id == room_id => {
+                            yield Event::json(r).event("room_archived");
+                        }
+                        Ok(ChatEvent::RoomUnarchived(ref r)) if r.id == room_id => {
+                            yield Event::json(r).event("room_unarchived");
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
                     }

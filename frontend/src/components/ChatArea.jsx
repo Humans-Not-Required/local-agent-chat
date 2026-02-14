@@ -13,7 +13,7 @@ import DateSeparator from './DateSeparator';
 import FileCard from './FileCard';
 import MessageGroup from './MessageGroup';
 
-export default function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onPin, onUnpin, adminKey, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, soundEnabled, onToggleSound, hasMore, onLoadOlder, onlineUsers }) {
+export default function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMessage, onDeleteMessage, onDeleteFile, onUploadFile, onReact, onPin, onUnpin, adminKey, onTyping, typingUsers, loading, connected, rooms, onSelectRoom, onRoomUpdate, onRoomArchived, soundEnabled, onToggleSound, hasMore, onLoadOlder, onlineUsers }) {
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const messagesEndRef = useRef(null);
@@ -501,6 +501,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
           room={room}
           onClose={() => setShowSettings(false)}
           onUpdated={(updated) => { onRoomUpdate?.(updated); }}
+          onRoomArchived={(updated) => { onRoomArchived?.(updated); }}
         />
       )}
 

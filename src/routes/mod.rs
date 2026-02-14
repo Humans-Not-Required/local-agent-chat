@@ -31,7 +31,7 @@ pub use presence::{global_presence, room_presence};
 pub use profiles::{delete_profile, get_profile, list_profiles, upsert_profile};
 pub use read_positions::{get_read_positions, get_unread, update_read_position};
 pub use reactions::{add_reaction, get_reactions, get_room_reactions, remove_reaction};
-pub use rooms::{create_room, delete_room, get_room, list_rooms, update_room};
+pub use rooms::{archive_room, create_room, delete_room, get_room, list_rooms, unarchive_room, update_room};
 pub use search::{activity_feed, search_messages};
 pub use stream::message_stream;
 pub use threads::get_thread;
