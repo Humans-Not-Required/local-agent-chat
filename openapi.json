@@ -1603,6 +1603,180 @@
         }
       }
     },
+    "/rooms/{room_id}/incoming-webhooks": {
+      "post": {
+        "summary": "Create incoming webhook",
+        "description": "Create an incoming webhook for a room. External systems can then POST messages into this room using the returned token URL. Requires room admin key.",
+        "tags": ["Incoming Webhooks"],
+        "parameters": [
+          {"name": "room_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "security": [{"AdminKey": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {"type": "string", "description": "Webhook display name (used as default sender)", "minLength": 1, "maxLength": 100},
+                  "created_by": {"type": "string", "default": "anonymous"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Incoming webhook created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {"type": "string"},
+                    "room_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "token": {"type": "string", "description": "Webhook token (whk_<hex>). Shown once."},
+                    "url": {"type": "string", "description": "POST to this URL to send messages"},
+                    "created_by": {"type": "string"},
+                    "created_at": {"type": "string", "format": "date-time"},
+                    "active": {"type": "boolean"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"description": "Invalid name"},
+          "403": {"description": "Invalid admin key"},
+          "404": {"description": "Room not found"}
+        }
+      },
+      "get": {
+        "summary": "List incoming webhooks",
+        "description": "List all incoming webhooks for a room. Requires room admin key.",
+        "tags": ["Incoming Webhooks"],
+        "parameters": [
+          {"name": "room_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "security": [{"AdminKey": []}],
+        "responses": {
+          "200": {
+            "description": "List of incoming webhooks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {"type": "string"},
+                      "room_id": {"type": "string"},
+                      "name": {"type": "string"},
+                      "token": {"type": "string"},
+                      "url": {"type": "string"},
+                      "created_by": {"type": "string"},
+                      "created_at": {"type": "string", "format": "date-time"},
+                      "active": {"type": "boolean"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {"description": "Invalid admin key"},
+          "404": {"description": "Room not found"}
+        }
+      }
+    },
+    "/rooms/{room_id}/incoming-webhooks/{webhook_id}": {
+      "put": {
+        "summary": "Update incoming webhook",
+        "description": "Update an incoming webhook's name or active status. Requires room admin key.",
+        "tags": ["Incoming Webhooks"],
+        "parameters": [
+          {"name": "room_id", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "webhook_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "security": [{"AdminKey": []}],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string", "minLength": 1, "maxLength": 100},
+                  "active": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Webhook updated"},
+          "400": {"description": "No fields to update or invalid name"},
+          "403": {"description": "Invalid admin key"},
+          "404": {"description": "Room or webhook not found"}
+        }
+      },
+      "delete": {
+        "summary": "Delete incoming webhook",
+        "description": "Remove an incoming webhook. Requires room admin key.",
+        "tags": ["Incoming Webhooks"],
+        "parameters": [
+          {"name": "room_id", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "webhook_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "security": [{"AdminKey": []}],
+        "responses": {
+          "200": {"description": "Webhook deleted"},
+          "403": {"description": "Invalid admin key"},
+          "404": {"description": "Room or webhook not found"}
+        }
+      }
+    },
+    "/hook/{token}": {
+      "post": {
+        "summary": "Post message via incoming webhook",
+        "description": "Post a message into a room using a webhook token. No authentication header needed — the token IS the auth. This is the universal integration endpoint: give the URL to any external system and it can send messages.",
+        "tags": ["Incoming Webhooks"],
+        "parameters": [
+          {"name": "token", "in": "path", "required": true, "schema": {"type": "string"}, "description": "Webhook token (whk_<hex>)"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["content"],
+                "properties": {
+                  "content": {"type": "string", "description": "Message content", "minLength": 1, "maxLength": 10000},
+                  "sender": {"type": "string", "description": "Sender name (defaults to webhook name)"},
+                  "sender_type": {"type": "string", "enum": ["agent", "human"], "description": "Sender type (defaults to 'agent')"},
+                  "metadata": {"type": "object", "description": "Optional metadata JSON"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Message"}
+              }
+            }
+          },
+          "400": {"description": "Invalid content (empty or too long)"},
+          "403": {"description": "Webhook is disabled"},
+          "404": {"description": "Invalid token or room no longer exists"},
+          "429": {"description": "Rate limited (60/min per token)"}
+        }
+      }
+    },
     "/rooms/{room_id}/messages/{message_id}/thread": {
       "get": {
         "summary": "Get message thread",

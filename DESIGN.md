@@ -118,6 +118,21 @@ Messages include `pinned_at` and `pinned_by` fields when pinned (null/omitted wh
 
 **Delivery model:** Fire-and-forget, 5-second timeout, no retries. Webhook dispatcher runs as a background task subscribed to the EventBus.
 
+### Incoming Webhooks
+- `POST /api/v1/rooms/{room_id}/incoming-webhooks` — Create an incoming webhook (admin key required). Body: `{"name": "CI Alerts", "created_by": "..."}`. Returns the webhook with token and URL.
+- `GET /api/v1/rooms/{room_id}/incoming-webhooks` — List incoming webhooks for a room (admin key required).
+- `PUT /api/v1/rooms/{room_id}/incoming-webhooks/{id}` — Update name/active (admin key required). Body: `{"name": "...", "active": true/false}`.
+- `DELETE /api/v1/rooms/{room_id}/incoming-webhooks/{id}` — Delete an incoming webhook (admin key required).
+- `POST /api/v1/hook/{token}` — Post a message via webhook token. **No auth header needed** — the token IS the auth. Body: `{"content": "...", "sender": "optional", "sender_type": "optional", "metadata": {}}`. Only `content` is required. Default sender falls back to the webhook name. Default sender_type: `"agent"`.
+
+**Token format:** `whk_<32 hex chars>` (generated on creation, shown once).
+
+**Integration pattern:** Create an incoming webhook for a room → give the token URL to any external system → that system can POST messages with zero knowledge of the chat API. Universal notification sink.
+
+**Rate limit:** 60 messages/min per webhook token.
+
+**Cascade:** Incoming webhooks are deleted when the parent room is deleted.
+
 ### Mentions
 - `GET /api/v1/mentions?target=<name>&after=<seq>&room_id=<uuid>&limit=N` — Find messages that @mention the target sender across all rooms. Excludes self-mentions (messages where sender == target). Results ordered by seq descending (newest first). Use `after=<seq>` for cursor-based pagination to efficiently poll for new mentions.
 - `GET /api/v1/mentions/unread?target=<name>` — Get unread mention counts per room, using read positions as the baseline. Returns `{target, rooms: [{room_id, room_name, mention_count, oldest_seq, newest_seq}], total_unread}`. A mention is "unread" if its seq is greater than the target's `last_read_seq` for that room. Designed for agents that poll periodically rather than maintaining persistent SSE connections.
@@ -267,6 +282,23 @@ CREATE TABLE webhooks (
 ```
 
 Webhooks are CASCADE-deleted when the parent room is deleted. The `active` flag allows disabling without deleting. The `events` field is a comma-separated list of event types to subscribe to, or `"*"` for all events.
+
+### Incoming Webhooks
+```sql
+CREATE TABLE incoming_webhooks (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX idx_incoming_webhooks_token ON incoming_webhooks(token);
+CREATE INDEX idx_incoming_webhooks_room ON incoming_webhooks(room_id);
+```
+
+Incoming webhooks provide the inverse of outgoing webhooks: external systems POST messages *into* a room using a simple token URL (`/api/v1/hook/{token}`). Token format: `whk_<32 hex chars>`. The token is shown once on creation. Messages posted via incoming webhooks are full first-class messages — they appear in room history, trigger SSE events, fire outgoing webhooks, and are FTS-indexed.
 
 ## SSE Protocol
 

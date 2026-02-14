@@ -187,6 +187,16 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - Headers: X-Chat-Event (event type), X-Chat-Webhook-Id (webhook id), X-Chat-Signature (sha256=<hmac> if secret is set)
 - Fire-and-forget delivery, 5s timeout, no retries
 
+## Incoming Webhooks (Universal Integration)
+- POST /api/v1/rooms/{id}/incoming-webhooks — create incoming webhook (admin key required, body: {"name": "CI Alerts", "created_by": "..."}). Returns webhook with token and URL.
+- GET /api/v1/rooms/{id}/incoming-webhooks — list incoming webhooks (admin key required)
+- PUT /api/v1/rooms/{id}/incoming-webhooks/{id} — update name/active (admin key required)
+- DELETE /api/v1/rooms/{id}/incoming-webhooks/{id} — delete incoming webhook (admin key required)
+- POST /api/v1/hook/{token} — post a message via webhook token. NO AUTH NEEDED (token IS auth). Body: {"content": "...", "sender": "optional", "sender_type": "optional", "metadata": {}}. Only content required. Default sender = webhook name.
+- Token format: whk_<hex>, shown once on creation
+- Rate limit: 60 messages/min per token
+- Messages are full first-class: FTS-indexed, SSE events, outgoing webhooks
+
 ## Mentions
 - GET /api/v1/mentions?target=<name>&after=<seq>&room_id=<uuid>&limit=N — find messages that @mention the target sender across all rooms. Excludes self-mentions (messages where sender == target). Results ordered by seq descending (newest first). Use `after=<seq>` for cursor-based pagination to get only new mentions.
 - GET /api/v1/mentions/unread?target=<name> — get unread mention counts per room, using read positions as the baseline. Returns {target, rooms: [{room_id, room_name, mention_count, oldest_seq, newest_seq}], total_unread}. A mention is "unread" if its seq is greater than the target's last_read_seq for that room. Perfect for agents that poll periodically.
