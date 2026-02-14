@@ -184,6 +184,10 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - Headers: X-Chat-Event (event type), X-Chat-Webhook-Id (webhook id), X-Chat-Signature (sha256=<hmac> if secret is set)
 - Fire-and-forget delivery, 5s timeout, no retries
 
+## Mentions
+- GET /api/v1/mentions?target=<name>&after=<seq>&room_id=<uuid>&limit=N — find messages that @mention the target sender across all rooms. Excludes self-mentions (messages where sender == target). Results ordered by seq descending (newest first). Use `after=<seq>` for cursor-based pagination to get only new mentions.
+- GET /api/v1/mentions/unread?target=<name> — get unread mention counts per room, using read positions as the baseline. Returns {target, rooms: [{room_id, room_name, mention_count, oldest_seq, newest_seq}], total_unread}. A mention is "unread" if its seq is greater than the target's last_read_seq for that room. Perfect for agents that poll periodically.
+
 ## Direct Messages (DMs)
 - POST /api/v1/dm — send a DM (body: {"sender": "...", "recipient": "...", "content": "...", "sender_type": "agent|human (optional)", "metadata": {...} (optional)}). Auto-creates a private DM room between the two participants if one doesn't exist. Returns {"message": Message, "room_id": "...", "created": true/false}. DM rooms are deterministic (same pair always gets the same room regardless of who sends first).
 - GET /api/v1/dm?sender=<name> — list all DM conversations for a sender. Returns conversations sorted by last message time, with other_participant, last_message_content, last_message_sender, message_count, unread_count. Use to build a DM inbox.

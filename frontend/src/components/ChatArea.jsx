@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { styles } from '../styles';
-import { formatDate, senderColor } from '../utils';
+import { API, formatDate, senderColor } from '../utils';
 import ChatLogo from './ChatLogo';
+import MentionsPanel from './MentionsPanel';
 import SearchPanel from './SearchPanel';
 import RoomSettingsModal from './RoomSettingsModal';
 import ParticipantPanel from './ParticipantPanel';
@@ -31,6 +32,8 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
   const [threadMessageId, setThreadMessageId] = useState(null);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionCount, setMentionCount] = useState(0);
 
   useEffect(() => {
     setReplyTo(null);
@@ -38,6 +41,23 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
     setLoadingOlder(false);
     setThreadMessageId(null);
   }, [room?.id]);
+
+  // Poll unread mention count
+  useEffect(() => {
+    if (!sender) return;
+    const fetchMentionCount = async () => {
+      try {
+        const res = await fetch(`${API}/mentions/unread?target=${encodeURIComponent(sender)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMentionCount(data.total_unread || 0);
+        }
+      } catch (e) { /* ignore */ }
+    };
+    fetchMentionCount();
+    const interval = setInterval(fetchMentionCount, 30000);
+    return () => clearInterval(interval);
+  }, [sender]);
 
   const handleLoadOlder = async () => {
     if (loadingOlder || !onLoadOlder) return;
@@ -339,6 +359,31 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
             </span>
           </div>
           <button
+            onClick={() => setShowMentions(prev => !prev)}
+            style={{
+              ...styles.iconBtn,
+              background: showMentions ? '#334155' : 'none',
+              fontSize: '0.9rem',
+              padding: '4px 8px',
+              position: 'relative',
+            }}
+            title={`Mentions${mentionCount > 0 ? ` (${mentionCount} unread)` : ''}`}
+          >
+            @
+            {mentionCount > 0 && (
+              <span style={{
+                position: 'absolute', top: -2, right: -2,
+                background: '#7c3aed', color: '#fff',
+                fontSize: '0.55rem', fontWeight: 700,
+                borderRadius: '50%', minWidth: 14, height: 14,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '0 3px',
+              }}>
+                {mentionCount > 99 ? '99+' : mentionCount}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setShowSearch(true)}
             style={{
               ...styles.iconBtn,
@@ -421,6 +466,15 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
         />
       )}
 
+      {showMentions && (
+        <MentionsPanel
+          sender={sender}
+          onClose={() => setShowMentions(false)}
+          rooms={rooms || []}
+          onSelectRoom={(room) => { onSelectRoom?.(room); setShowMentions(false); }}
+        />
+      )}
+
       {showPins && room && (
         <PinnedPanel
           roomId={room.id}
@@ -450,7 +504,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
         />
       )}
 
-      {!showSearch && (
+      {!showSearch && !showMentions && (
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
       <div ref={containerRef} onScroll={handleScroll} style={styles.messageContainer}>
         {loading && (
@@ -527,9 +581,9 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
       </div>
       )}
 
-      {!showSearch && <TypingIndicator typingUsers={typingUsers} />}
+      {!showSearch && !showMentions && <TypingIndicator typingUsers={typingUsers} />}
 
-      {!showSearch && !autoScroll && (
+      {!showSearch && !showMentions && !autoScroll && (
         <button
           onClick={() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -544,7 +598,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
         </button>
       )}
 
-      {!showSearch && replyTo && (
+      {!showSearch && !showMentions && replyTo && (
         <div style={styles.replyBar}>
           <div style={{ width: 3, background: senderColor(replyTo.sender), borderRadius: 2, flexShrink: 0 }} />
           <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -559,7 +613,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
         </div>
       )}
 
-      {!showSearch && (
+      {!showSearch && !showMentions && (
       <form onSubmit={handleSubmit} style={styles.inputArea}>
         <input
           ref={fileInputRef}

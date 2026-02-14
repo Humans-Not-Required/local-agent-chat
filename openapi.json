@@ -2017,6 +2017,254 @@
           }
         }
       }
+    },
+    "/mentions": {
+      "get": {
+        "summary": "Get @mentions for a target sender",
+        "description": "Returns messages that @mention the target sender across all rooms. Excludes self-mentions. Results ordered by seq descending (newest first). Use after cursor for efficient polling.",
+        "tags": [
+          "Mentions"
+        ],
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The sender name to search mentions for"
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Only return mentions with seq > this value (cursor-based pagination)"
+          },
+          {
+            "name": "room_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filter mentions to a specific room"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 200
+            },
+            "description": "Maximum number of mentions to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mentions list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "target": {
+                      "type": "string"
+                    },
+                    "mentions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "message_id": {
+                            "type": "string"
+                          },
+                          "room_id": {
+                            "type": "string"
+                          },
+                          "room_name": {
+                            "type": "string"
+                          },
+                          "sender": {
+                            "type": "string"
+                          },
+                          "sender_type": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "edited_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "reply_to": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "seq": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid target parameter"
+          }
+        }
+      }
+    },
+    "/mentions/unread": {
+      "get": {
+        "summary": "Get unread @mention counts",
+        "description": "Returns unread mention counts per room, using read positions as the baseline. A mention is unread if its seq is greater than the target's last_read_seq for that room. Perfect for agents that poll periodically.",
+        "tags": [
+          "Mentions"
+        ],
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The sender name to check unread mentions for"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unread mentions summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "target": {
+                      "type": "string"
+                    },
+                    "rooms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "room_id": {
+                            "type": "string"
+                          },
+                          "room_name": {
+                            "type": "string"
+                          },
+                          "mention_count": {
+                            "type": "integer"
+                          },
+                          "oldest_seq": {
+                            "type": "integer"
+                          },
+                          "newest_seq": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "total_unread": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid target parameter"
+          }
+        }
+      }
+    },
+    "/dm": {
+      "post": {
+        "summary": "Send a direct message",
+        "tags": [
+          "Direct Messages"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sender",
+                  "recipient",
+                  "content"
+                ],
+                "properties": {
+                  "sender": {
+                    "type": "string"
+                  },
+                  "recipient": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  },
+                  "sender_type": {
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "DM sent successfully"
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        }
+      },
+      "get": {
+        "summary": "List DM conversations",
+        "tags": [
+          "Direct Messages"
+        ],
+        "parameters": [
+          {
+            "name": "sender",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "DM conversations list"
+          }
+        }
+      }
     }
   },
   "components": {

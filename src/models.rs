@@ -394,6 +394,48 @@ pub struct DmSendResponse {
     pub created: bool, // true if a new DM room was created
 }
 
+// --- Mentions ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MentionResult {
+    pub message_id: String,
+    pub room_id: String,
+    pub room_name: String,
+    pub sender: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_type: Option<String>,
+    pub content: String,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<String>,
+    pub seq: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MentionsResponse {
+    pub target: String,
+    pub mentions: Vec<MentionResult>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UnreadMentionRoom {
+    pub room_id: String,
+    pub room_name: String,
+    pub mention_count: i64,
+    pub oldest_seq: i64,
+    pub newest_seq: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UnreadMentionsResponse {
+    pub target: String,
+    pub rooms: Vec<UnreadMentionRoom>,
+    pub total_unread: i64,
+}
+
 // --- Profiles ---
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

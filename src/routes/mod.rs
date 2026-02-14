@@ -3,6 +3,7 @@
 
 mod dm;
 mod files;
+mod mentions;
 mod messages;
 mod participants;
 mod pins;
@@ -21,6 +22,7 @@ mod webhook_routes;
 // --- Re-exports (all route functions used by lib.rs mount) ---
 
 pub use dm::{send_dm, list_dm_conversations, get_dm_conversation};
+pub use mentions::{get_mentions, get_unread_mentions};
 pub use files::{delete_file, download_file, file_info, list_files, upload_file};
 pub use messages::{delete_message, edit_message, get_messages, send_message};
 pub use participants::room_participants;

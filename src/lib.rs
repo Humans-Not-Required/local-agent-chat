@@ -108,6 +108,8 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
                 routes::send_dm,
                 routes::list_dm_conversations,
                 routes::get_dm_conversation,
+                routes::get_mentions,
+                routes::get_unread_mentions,
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,

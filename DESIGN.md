@@ -118,6 +118,10 @@ Messages include `pinned_at` and `pinned_by` fields when pinned (null/omitted wh
 
 **Delivery model:** Fire-and-forget, 5-second timeout, no retries. Webhook dispatcher runs as a background task subscribed to the EventBus.
 
+### Mentions
+- `GET /api/v1/mentions?target=<name>&after=<seq>&room_id=<uuid>&limit=N` — Find messages that @mention the target sender across all rooms. Excludes self-mentions (messages where sender == target). Results ordered by seq descending (newest first). Use `after=<seq>` for cursor-based pagination to efficiently poll for new mentions.
+- `GET /api/v1/mentions/unread?target=<name>` — Get unread mention counts per room, using read positions as the baseline. Returns `{target, rooms: [{room_id, room_name, mention_count, oldest_seq, newest_seq}], total_unread}`. A mention is "unread" if its seq is greater than the target's `last_read_seq` for that room. Designed for agents that poll periodically rather than maintaining persistent SSE connections.
+
 ### Direct Messages (DMs)
 - `POST /api/v1/dm` — Send a direct message. Body: `{sender, recipient, content, sender_type?, metadata?}`. Auto-creates a DM room between the two participants if one doesn't exist. Returns `{message: Message, room_id: string, created: bool}`. DM rooms use deterministic naming (`dm:{sorted_a}:{sorted_b}`) so the same pair always shares one room regardless of who sends first. Rate limited: 60/min per IP.
 - `GET /api/v1/dm?sender=<name>` — List all DM conversations for a sender. Returns conversations sorted by last message time with: `other_participant`, `last_message_content`, `last_message_sender`, `last_message_at`, `message_count`, `unread_count`, `room_id`, `created_at`.
