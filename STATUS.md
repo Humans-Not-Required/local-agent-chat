@@ -82,6 +82,7 @@
 
 - [x] **Backend route decomposition** — Monolithic 3032-line `src/routes.rs` split into 14 focused module files under `src/routes/`. Shared types (ClientIp, AdminKey, TypingTracker, PresenceTracker) in mod.rs; domain routes in individual files (rooms, messages, search, stream, reactions, pins, presence, files, webhooks, typing, participants, system). Zero functional changes. All 173 tests pass. Commit: eb0961a.
 - [x] **Thread view API + frontend** — GET /rooms/{id}/messages/{msg_id}/thread walks up reply_to chain to find root, collects all descendants with depth info, returns chronological thread. Frontend ThreadPanel (🧵) with root message, nested replies, inline reply input. Thread reply count indicators ("🧵 N replies") on messages with replies. Clickable ReplyPreview opens thread panel. 🧵 action button on all messages. 7 new tests (180 total).
+- [x] **Server-side read positions** — `read_positions` table tracks each sender's last_read_seq per room. PUT /rooms/{id}/read (UPSERT, only increases), GET /rooms/{id}/read, GET /unread?sender=<name> (cross-room unread counts using COUNT-based calculation for global seq correctness). SSE event: read_position_updated. Frontend replaced localStorage unread tracking with API calls — auto-marks read on room enter, debounced on SSE messages (1s), marks on tab visibility. CASCADE delete on room removal. 13 new tests (193 total). Commit: 0f4e3cd.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
