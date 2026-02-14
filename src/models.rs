@@ -176,3 +176,34 @@ pub struct SearchResponse {
     pub count: usize,
     pub query: String,
 }
+
+// --- Reactions ---
+
+#[derive(Debug, Deserialize)]
+pub struct AddReaction {
+    pub sender: String,
+    pub emoji: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Reaction {
+    pub id: String,
+    pub message_id: String,
+    pub room_id: String,
+    pub sender: String,
+    pub emoji: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReactionSummary {
+    pub emoji: String,
+    pub count: i64,
+    pub senders: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReactionsResponse {
+    pub message_id: String,
+    pub reactions: Vec<ReactionSummary>,
+}

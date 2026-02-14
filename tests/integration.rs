@@ -2964,3 +2964,290 @@ fn test_search_cross_room() {
     assert!(room_names.contains(&"search-cross-1"));
     assert!(room_names.contains(&"search-cross-2"));
 }
+
+// --- Reactions ---
+
+#[test]
+fn test_add_reaction() {
+    let client = test_client();
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "react-room-1"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let msg: serde_json::Value = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "React to this!"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let msg_id = msg["id"].as_str().unwrap();
+
+    // Add a reaction
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "emoji": "👍"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let reaction: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(reaction["sender"].as_str().unwrap(), "Forge");
+    assert_eq!(reaction["emoji"].as_str().unwrap(), "👍");
+    assert_eq!(reaction["message_id"].as_str().unwrap(), msg_id);
+    assert_eq!(reaction["room_id"].as_str().unwrap(), room_id);
+    assert!(!reaction["created_at"].as_str().unwrap().is_empty());
+}
+
+#[test]
+fn test_get_reactions_grouped() {
+    let client = test_client();
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "react-room-2"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let msg: serde_json::Value = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Multiple reactions"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let msg_id = msg["id"].as_str().unwrap();
+
+    // Add multiple reactions
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "emoji": "👍"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Drift", "emoji": "👍"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Lux", "emoji": "❤️"}"#)
+        .dispatch();
+
+    // Get reactions
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["message_id"].as_str().unwrap(), msg_id);
+    let reactions = body["reactions"].as_array().unwrap();
+    assert_eq!(reactions.len(), 2);
+
+    // 👍 should have 2 senders
+    let thumbs = reactions.iter().find(|r| r["emoji"] == "👍").unwrap();
+    assert_eq!(thumbs["count"].as_i64().unwrap(), 2);
+    let senders: Vec<&str> = thumbs["senders"].as_array().unwrap().iter().map(|s| s.as_str().unwrap()).collect();
+    assert!(senders.contains(&"Forge"));
+    assert!(senders.contains(&"Drift"));
+
+    // ❤️ should have 1 sender
+    let heart = reactions.iter().find(|r| r["emoji"] == "❤️").unwrap();
+    assert_eq!(heart["count"].as_i64().unwrap(), 1);
+}
+
+#[test]
+fn test_reaction_toggle() {
+    let client = test_client();
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "react-room-3"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let msg: serde_json::Value = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Toggle test"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let msg_id = msg["id"].as_str().unwrap();
+
+    // Add reaction
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "emoji": "🎉"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let r1: serde_json::Value = res.into_json().unwrap();
+    assert!(!r1["created_at"].as_str().unwrap().is_empty()); // Has timestamp = was added
+
+    // Toggle same reaction (should remove)
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "emoji": "🎉"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let r2: serde_json::Value = res.into_json().unwrap();
+    assert!(r2["created_at"].as_str().unwrap().is_empty()); // Empty timestamp = was removed
+
+    // Verify no reactions remain
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["reactions"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn test_remove_reaction_via_delete() {
+    let client = test_client();
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "react-room-4"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let msg: serde_json::Value = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Delete reaction test"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let msg_id = msg["id"].as_str().unwrap();
+
+    // Add reaction
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Drift", "emoji": "🔥"}"#)
+        .dispatch();
+
+    // Delete via DELETE endpoint
+    let encoded_emoji = urlencoding::encode("🔥");
+    let res = client
+        .delete(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions?sender=Drift&emoji={encoded_emoji}"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["status"].as_str().unwrap(), "removed");
+
+    // Verify gone
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["reactions"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn test_reaction_nonexistent_message() {
+    let client = test_client();
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "react-room-5"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages/fake-id/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "emoji": "👍"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+}
+
+#[test]
+fn test_reaction_empty_sender() {
+    let client = test_client();
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "react-room-6"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let msg: serde_json::Value = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Test"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let msg_id = msg["id"].as_str().unwrap();
+
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "", "emoji": "👍"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_reactions_cascade_on_message_delete() {
+    let client = test_client();
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "react-room-7"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let msg: serde_json::Value = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Nanook", "content": "Will be deleted"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let msg_id = msg["id"].as_str().unwrap();
+
+    // Add reactions
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Forge", "emoji": "👍"}"#)
+        .dispatch();
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Drift", "emoji": "❤️"}"#)
+        .dispatch();
+
+    // Delete the message
+    let res = client
+        .delete(format!("/api/v1/rooms/{room_id}/messages/{msg_id}?sender=Nanook"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // Reactions should be gone (CASCADE)
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages/{msg_id}/reactions"))
+        .dispatch();
+    assert_eq!(res.status(), Status::NotFound); // Message doesn't exist anymore
+}

@@ -1143,6 +1143,12 @@ pub fn message_stream(
                         Ok(ChatEvent::FileDeleted { ref id, room_id: ref rid }) if *rid == room_id => {
                             yield Event::json(&serde_json::json!({"id": id, "room_id": rid})).event("file_deleted");
                         }
+                        Ok(ChatEvent::ReactionAdded(ref r)) if r.room_id == room_id => {
+                            yield Event::json(r).event("reaction_added");
+                        }
+                        Ok(ChatEvent::ReactionRemoved(ref r)) if r.room_id == room_id => {
+                            yield Event::json(r).event("reaction_removed");
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
                     }
@@ -1223,6 +1229,245 @@ pub fn room_participants(
         .collect();
 
     Ok(Json(participants))
+}
+
+// --- Message Reactions ---
+
+#[post(
+    "/api/v1/rooms/<room_id>/messages/<message_id>/reactions",
+    format = "json",
+    data = "<body>"
+)]
+pub fn add_reaction(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    message_id: &str,
+    body: Json<AddReaction>,
+) -> Result<Json<Reaction>, (Status, Json<serde_json::Value>)> {
+    let sender = body.sender.trim();
+    let emoji = body.emoji.trim();
+    if sender.is_empty() {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "sender must not be empty"})),
+        ));
+    }
+    if emoji.is_empty() {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "emoji must not be empty"})),
+        ));
+    }
+    // Limit emoji length (single emoji or short code, max 32 chars)
+    if emoji.len() > 32 {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "emoji too long (max 32 characters)"})),
+        ));
+    }
+
+    let conn = db.conn.lock().unwrap();
+
+    // Verify message exists and belongs to this room
+    let msg_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE id = ?1 AND room_id = ?2",
+            params![message_id, room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    if !msg_exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Message not found in this room"})),
+        ));
+    }
+
+    // Check if reaction already exists (toggle behavior)
+    let existing_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM message_reactions WHERE message_id = ?1 AND sender = ?2 AND emoji = ?3",
+            params![message_id, sender, emoji],
+            |r| r.get(0),
+        )
+        .ok();
+
+    if let Some(existing) = existing_id {
+        // Remove existing reaction (toggle off)
+        conn.execute(
+            "DELETE FROM message_reactions WHERE id = ?1",
+            params![&existing],
+        )
+        .ok();
+        let reaction = Reaction {
+            id: existing,
+            message_id: message_id.to_string(),
+            room_id: room_id.to_string(),
+            sender: sender.to_string(),
+            emoji: emoji.to_string(),
+            created_at: String::new(),
+        };
+        events.publish(ChatEvent::ReactionRemoved(reaction.clone()));
+        // Return the removed reaction with a note
+        return Ok(Json(reaction));
+    }
+
+    // Add new reaction
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO message_reactions (id, message_id, sender, emoji, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![&id, message_id, sender, emoji, &now],
+    )
+    .map_err(|e| {
+        (
+            Status::InternalServerError,
+            Json(serde_json::json!({"error": format!("Failed to add reaction: {e}")})),
+        )
+    })?;
+
+    let reaction = Reaction {
+        id,
+        message_id: message_id.to_string(),
+        room_id: room_id.to_string(),
+        sender: sender.to_string(),
+        emoji: emoji.to_string(),
+        created_at: now,
+    };
+
+    events.publish(ChatEvent::ReactionAdded(reaction.clone()));
+
+    Ok(Json(reaction))
+}
+
+#[delete("/api/v1/rooms/<room_id>/messages/<message_id>/reactions?<sender>&<emoji>")]
+pub fn remove_reaction(
+    db: &State<Db>,
+    events: &State<EventBus>,
+    room_id: &str,
+    message_id: &str,
+    sender: &str,
+    emoji: &str,
+) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+    let sender = sender.trim();
+    let emoji = emoji.trim();
+    if sender.is_empty() || emoji.is_empty() {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "sender and emoji are required"})),
+        ));
+    }
+
+    let conn = db.conn.lock().unwrap();
+
+    // Verify message exists in this room
+    let msg_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE id = ?1 AND room_id = ?2",
+            params![message_id, room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    if !msg_exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Message not found in this room"})),
+        ));
+    }
+
+    // Find and delete the reaction
+    let reaction_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM message_reactions WHERE message_id = ?1 AND sender = ?2 AND emoji = ?3",
+            params![message_id, sender, emoji],
+            |r| r.get(0),
+        )
+        .ok();
+
+    match reaction_id {
+        Some(rid) => {
+            conn.execute(
+                "DELETE FROM message_reactions WHERE id = ?1",
+                params![&rid],
+            )
+            .ok();
+
+            let reaction = Reaction {
+                id: rid,
+                message_id: message_id.to_string(),
+                room_id: room_id.to_string(),
+                sender: sender.to_string(),
+                emoji: emoji.to_string(),
+                created_at: String::new(),
+            };
+            events.publish(ChatEvent::ReactionRemoved(reaction));
+
+            Ok(Json(serde_json::json!({"status": "removed"})))
+        }
+        None => Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Reaction not found"})),
+        )),
+    }
+}
+
+#[get("/api/v1/rooms/<room_id>/messages/<message_id>/reactions")]
+pub fn get_reactions(
+    db: &State<Db>,
+    room_id: &str,
+    message_id: &str,
+) -> Result<Json<ReactionsResponse>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn.lock().unwrap();
+
+    // Verify message exists in this room
+    let msg_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE id = ?1 AND room_id = ?2",
+            params![message_id, room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+    if !msg_exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Message not found in this room"})),
+        ));
+    }
+
+    // Get grouped reactions
+    let mut stmt = conn
+        .prepare(
+            "SELECT emoji, GROUP_CONCAT(sender, ','), COUNT(*) \
+             FROM message_reactions WHERE message_id = ?1 \
+             GROUP BY emoji ORDER BY MIN(created_at) ASC",
+        )
+        .unwrap();
+
+    let reactions: Vec<ReactionSummary> = stmt
+        .query_map(params![message_id], |row| {
+            let emoji: String = row.get(0)?;
+            let senders_str: String = row.get(1)?;
+            let count: i64 = row.get(2)?;
+            let senders: Vec<String> = senders_str.split(',').map(|s| s.to_string()).collect();
+            Ok(ReactionSummary {
+                emoji,
+                count,
+                senders,
+            })
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(Json(ReactionsResponse {
+        message_id: message_id.to_string(),
+        reactions,
+    }))
 }
 
 // --- File Attachments ---
@@ -1577,6 +1822,12 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 
 ## Participants
 - GET /api/v1/rooms/{id}/participants — list unique senders in a room with stats (sender, sender_type, message_count, first_seen, last_seen). Sorted by last_seen descending (most recent first). Derived from message history.
+
+## Reactions
+- POST /api/v1/rooms/{id}/messages/{msg_id}/reactions — add emoji reaction (body: {"sender": "...", "emoji": "👍"}). Toggle behavior: if the same sender+emoji already exists, it's removed instead.
+- DELETE /api/v1/rooms/{id}/messages/{msg_id}/reactions?sender=...&emoji=... — remove a specific reaction
+- GET /api/v1/rooms/{id}/messages/{msg_id}/reactions — get all reactions grouped by emoji with sender lists
+- SSE events: reaction_added, reaction_removed (same stream as messages)
 
 ## Files / Attachments
 - POST /api/v1/rooms/{id}/files — upload file (body: {"sender": "...", "filename": "...", "content_type": "image/png", "data": "<base64>"})

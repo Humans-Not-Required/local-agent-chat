@@ -95,6 +95,21 @@ impl Db {
         )
         .expect("Failed to create files table");
 
+        // Message reactions table
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS message_reactions (
+                id TEXT PRIMARY KEY,
+                message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                sender TEXT NOT NULL,
+                emoji TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(message_id, sender, emoji)
+            );
+            CREATE INDEX IF NOT EXISTS idx_reactions_message ON message_reactions(message_id);
+            CREATE INDEX IF NOT EXISTS idx_reactions_sender ON message_reactions(sender);",
+        )
+        .expect("Failed to create message_reactions table");
+
         // Backfill seq for existing messages that don't have one
         let needs_seq_backfill: i64 = conn
             .query_row("SELECT COUNT(*) FROM messages WHERE seq IS NULL", [], |r| {
