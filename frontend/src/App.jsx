@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { styles, injectGlobalStyles } from './styles';
 import { API, senderColor, playNotificationSound } from './utils';
-import { RoomList, ChatArea, SenderModal, AdminKeyModal } from './components';
+import { RoomList, ChatArea, SenderModal, AdminKeyModal, ProfileModal } from './components';
 
 // Inject global CSS on load
 injectGlobalStyles();
@@ -26,6 +26,7 @@ export default function App() {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('chat-sound') !== 'off');
   const [onlineUsers, setOnlineUsers] = useState([]);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const senderRef = useRef(sender);
   const soundEnabledRef = useRef(soundEnabled);
   const eventSourceRef = useRef(null);
@@ -608,6 +609,12 @@ export default function App() {
           onDismiss={() => setAdminKeyInfo(null)}
         />
       )}
+      {showProfileModal && (
+        <ProfileModal
+          sender={sender}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
       {/* Mobile header */}
       <div className="chat-mobile-header" data-mobile-header style={styles.mobileHeader}>
         <button onClick={() => setShowSidebar(!showSidebar)} style={styles.iconBtn}>
@@ -647,6 +654,7 @@ export default function App() {
                 setSender('');
                 setSenderType('agent');
               }}
+              onEditProfile={() => setShowProfileModal(true)}
             />
           </>
         )}

@@ -3,7 +3,7 @@ import { styles } from '../styles';
 import { timeAgo, formatFullTimestamp, senderColor } from '../utils';
 import ChatLogo from './ChatLogo';
 
-export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, onChangeSender }) {
+export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, onChangeSender, onEditProfile }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -103,6 +103,13 @@ export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, un
               {sender}
             </span>
           </div>
+          <button
+            onClick={onEditProfile}
+            style={{ ...styles.iconBtn, fontSize: '0.75rem', padding: '2px 8px', border: 'none' }}
+            title="Edit profile"
+          >
+            👤
+          </button>
           <button
             onClick={onChangeSender}
             style={{ ...styles.iconBtn, fontSize: '0.75rem', padding: '2px 8px', border: 'none' }}
