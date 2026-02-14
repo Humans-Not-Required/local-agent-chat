@@ -54,6 +54,7 @@
 - [x] **Input bar height fix** — Attach button, textarea, and send button normalized to consistent 44px height using box-sizing: border-box. Buttons use flexbox centering. Auto-resize updated for border-box mode. (95 tests)
 - [x] **Cross-room message search** — GET /api/v1/search?q=... with optional room_id/sender/sender_type/limit filters. Returns newest-first results with room context. Added 8 integration tests. (103 tests)
 - [x] **Search UI** — 🔍 button in chat header opens full search panel. Debounced cross-room search with highlighted matches, room names, sender info. Click result navigates to room. Ctrl+K / Cmd+K keyboard shortcut. Search overlay replaces message area when active.
+- [x] **Message reactions** — POST /rooms/{id}/messages/{msg_id}/reactions with toggle behavior (same sender+emoji removes). DELETE endpoint for explicit removal. GET returns reactions grouped by emoji with sender lists. SSE events (reaction_added, reaction_removed). CASCADE delete when parent message removed. UNIQUE constraint prevents duplicates. 7 new tests (110 total). Commit: 529b912.
 
 ### What's Next
 - [x] Mobile sidebar fix — hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
@@ -64,6 +65,7 @@
 - [x] **ChatLogo SVG component** — Favicon SVG extracted into reusable component. Visible in sidebar header, login modal, empty state, chat room header, and sidebar footer branding. Replaces emoji placeholders with consistent visual identity ✅ (2026-02-11)
 - [x] **Auto-expanding message input** — Textarea grows as text is entered (up to ~6 lines / 160px max), shrinks back after send. Buttons align to bottom of input area. Smooth transition. Works on all screen sizes ✅ (2026-02-11)
 - [x] **Sibling chat: remove sibling exclusion** — Updated sibling-agent.sh: siblings interact freely, loop safety via rate limits only (cooldown, max-per-poll, reply threading). EXCLUDE_SENDERS demoted to optional. Commit: 9282964. ✅ (2026-02-13)
+- [ ] Frontend reaction UI — emoji picker, reaction chips below messages, click to toggle
 - [ ] Connect Nanook as persistent user (scheduled polling or SSE listener)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [ ] mDNS auto-discovery (agents find the service automatically)
