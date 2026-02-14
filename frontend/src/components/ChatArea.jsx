@@ -3,6 +3,7 @@ import { styles } from '../styles';
 import { API, formatDate, senderColor } from '../utils';
 import ChatLogo from './ChatLogo';
 import MentionsPanel from './MentionsPanel';
+import MentionAutocomplete from './MentionAutocomplete';
 import SearchPanel from './SearchPanel';
 import RoomSettingsModal from './RoomSettingsModal';
 import ParticipantPanel from './ParticipantPanel';
@@ -34,6 +35,10 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
   const [threadMessageId, setThreadMessageId] = useState(null);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionCount, setMentionCount] = useState(0);
+  const [participants, setParticipants] = useState([]);
+  const [mentionQuery, setMentionQuery] = useState(null); // null = closed, string = active query
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionStartRef = useRef(null); // cursor position where @ was typed
 
   useEffect(() => {
     setReplyTo(null);
@@ -58,6 +63,89 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
     const interval = setInterval(fetchMentionCount, 30000);
     return () => clearInterval(interval);
   }, [sender]);
+
+  // Fetch participants for autocomplete
+  useEffect(() => {
+    if (!room?.id) { setParticipants([]); return; }
+    const fetchParticipants = async () => {
+      try {
+        const res = await fetch(`${API}/rooms/${room.id}/participants`);
+        if (res.ok) {
+          const data = await res.json();
+          setParticipants(data);
+        }
+      } catch (e) { /* ignore */ }
+    };
+    fetchParticipants();
+    // Re-fetch every 60s while room is active
+    const interval = setInterval(fetchParticipants, 60000);
+    return () => clearInterval(interval);
+  }, [room?.id]);
+
+  // Close mention autocomplete when room changes
+  useEffect(() => {
+    setMentionQuery(null);
+    setMentionIndex(0);
+    mentionStartRef.current = null;
+  }, [room?.id]);
+
+  // Get filtered participants for the current mention query
+  const filteredMentions = mentionQuery !== null
+    ? participants.filter(p => p.sender.toLowerCase().includes(mentionQuery.toLowerCase()))
+    : [];
+
+  const handleMentionSelect = (name) => {
+    if (!inputRef.current || mentionStartRef.current === null) return;
+    const el = inputRef.current;
+    const before = text.slice(0, mentionStartRef.current); // text before the @
+    const after = text.slice(mentionStartRef.current + 1 + (mentionQuery || '').length); // text after the query
+    const newText = before + '@' + name + ' ' + after;
+    setText(newText);
+    setMentionQuery(null);
+    setMentionIndex(0);
+    mentionStartRef.current = null;
+    // Set cursor position after the inserted mention
+    requestAnimationFrame(() => {
+      const pos = before.length + 1 + name.length + 1;
+      el.setSelectionRange(pos, pos);
+      el.focus();
+      autoResize(el);
+    });
+  };
+
+  // Detect @ mentions while typing
+  const detectMention = (value, cursorPos) => {
+    // Look backward from cursor to find an unmatched @
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+    if (atIndex === -1) {
+      setMentionQuery(null);
+      mentionStartRef.current = null;
+      return;
+    }
+    // @ must be at start or preceded by whitespace
+    if (atIndex > 0 && !/\s/.test(textBeforeCursor[atIndex - 1])) {
+      setMentionQuery(null);
+      mentionStartRef.current = null;
+      return;
+    }
+    const query = textBeforeCursor.slice(atIndex + 1);
+    // No spaces in mention query (means they finished typing)
+    if (/\s/.test(query)) {
+      setMentionQuery(null);
+      mentionStartRef.current = null;
+      return;
+    }
+    // Max query length (prevent matching entire messages)
+    if (query.length > 30) {
+      setMentionQuery(null);
+      mentionStartRef.current = null;
+      return;
+    }
+    mentionStartRef.current = atIndex;
+    setMentionQuery(query);
+    setMentionIndex(0);
+  };
 
   const handleLoadOlder = async () => {
     if (loadingOlder || !onLoadOlder) return;
@@ -140,14 +228,41 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
   };
 
   const handleTextChange = (e) => {
-    setText(e.target.value);
+    const value = e.target.value;
+    setText(value);
     autoResize(e.target);
-    if (e.target.value.trim()) {
+    if (value.trim()) {
       onTyping();
     }
+    // Detect mention autocomplete
+    detectMention(value, e.target.selectionStart);
   };
 
   const handleKeyDown = (e) => {
+    // Handle mention autocomplete keyboard navigation
+    if (mentionQuery !== null && filteredMentions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex(prev => (prev + 1) % filteredMentions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex(prev => (prev - 1 + filteredMentions.length) % filteredMentions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        handleMentionSelect(filteredMentions[mentionIndex].sender);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionQuery(null);
+        mentionStartRef.current = null;
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
@@ -615,7 +730,16 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
       )}
 
       {!showSearch && !showMentions && (
-      <form onSubmit={handleSubmit} style={styles.inputArea}>
+      <form onSubmit={handleSubmit} style={{ ...styles.inputArea, position: 'relative' }}>
+        {mentionQuery !== null && filteredMentions.length > 0 && (
+          <MentionAutocomplete
+            query={mentionQuery}
+            participants={filteredMentions}
+            activeIndex={mentionIndex}
+            onSelect={handleMentionSelect}
+            onClose={() => { setMentionQuery(null); mentionStartRef.current = null; }}
+          />
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -640,6 +764,11 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
+          onClick={(e) => detectMention(text, e.target.selectionStart)}
+          onBlur={() => {
+            // Delay to allow click on autocomplete item (mouseDown prevents blur)
+            setTimeout(() => { setMentionQuery(null); mentionStartRef.current = null; }, 200);
+          }}
           placeholder={`Message #${room.name}...`}
           rows={1}
           style={styles.messageInput}

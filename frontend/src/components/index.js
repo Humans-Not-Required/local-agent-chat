@@ -9,6 +9,7 @@ export { default as DateSeparator } from './DateSeparator';
 export { default as FileCard } from './FileCard';
 export { default as TypingIndicator } from './TypingIndicator';
 export { default as MentionsPanel } from './MentionsPanel';
+export { default as MentionAutocomplete } from './MentionAutocomplete';
 export { default as SearchPanel } from './SearchPanel';
 export { default as ParticipantPanel } from './ParticipantPanel';
 export { default as ChatArea } from './ChatArea';
