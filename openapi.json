@@ -1663,6 +1663,137 @@
           }
         }
       }
+    },
+    "/rooms/{room_id}/read": {
+      "put": {
+        "summary": "Mark room as read",
+        "operationId": "updateReadPosition",
+        "description": "Update the sender's read position in a room. UPSERT: only increases the position, never goes backward. Returns the current read position.",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sender", "last_read_seq"],
+                "properties": {
+                  "sender": { "type": "string", "description": "The sender marking messages as read" },
+                  "last_read_seq": { "type": "integer", "description": "Sequence number of the last read message" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read position updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "room_id": { "type": "string" },
+                    "sender": { "type": "string" },
+                    "last_read_seq": { "type": "integer" },
+                    "updated_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request (empty sender or negative seq)" },
+          "404": { "description": "Room not found" }
+        }
+      },
+      "get": {
+        "summary": "Get read positions",
+        "operationId": "getReadPositions",
+        "description": "Get all read positions for a room. Returns each sender's last read sequence number, sorted by most recently updated.",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of read positions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "room_id": { "type": "string" },
+                      "sender": { "type": "string" },
+                      "last_read_seq": { "type": "integer" },
+                      "updated_at": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Room not found" }
+        }
+      }
+    },
+    "/unread": {
+      "get": {
+        "summary": "Get unread counts",
+        "operationId": "getUnread",
+        "description": "Get unread message counts across all rooms for a given sender. Compares each room's latest message seq against the sender's read position.",
+        "parameters": [
+          {
+            "name": "sender",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Sender name to check unread counts for"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unread counts per room",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sender": { "type": "string" },
+                    "rooms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "room_id": { "type": "string" },
+                          "room_name": { "type": "string" },
+                          "unread_count": { "type": "integer" },
+                          "last_read_seq": { "type": "integer" },
+                          "latest_seq": { "type": "integer" }
+                        }
+                      }
+                    },
+                    "total_unread": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Empty sender parameter" }
+        }
+      }
     }
   },
   "components": {

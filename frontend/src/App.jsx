@@ -32,12 +32,8 @@ export default function App() {
   const lastSeqRef = useRef(null);
   const typingTimeoutsRef = useRef({});
   const lastTypingSentRef = useRef(0);
-  const lastSeenCountsRef = useRef(null);
-  if (lastSeenCountsRef.current === null) {
-    try {
-      lastSeenCountsRef.current = JSON.parse(localStorage.getItem('chat-last-seen-counts') || '{}');
-    } catch { lastSeenCountsRef.current = {}; }
-  }
+  const readPositionTimerRef = useRef(null);
+  const activeRoomRef = useRef(null);
 
   const saveAdminKey = useCallback((roomId, key) => {
     setAdminKeys(prev => {
@@ -58,22 +54,29 @@ export default function App() {
     document.title = total > 0 ? `(${total}) Local Agent Chat` : 'Local Agent Chat';
   }, [unreadCounts]);
 
+  const fetchUnread = useCallback(async () => {
+    if (!senderRef.current) return;
+    try {
+      const res = await fetch(`${API}/unread?sender=${encodeURIComponent(senderRef.current)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const counts = {};
+        for (const room of data.rooms) {
+          if (room.unread_count > 0) {
+            counts[room.room_id] = room.unread_count;
+          }
+        }
+        setUnreadCounts(counts);
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
   const fetchRooms = useCallback(async () => {
     try {
       const res = await fetch(`${API}/rooms`);
       if (res.ok) {
         const data = await res.json();
         setRooms(data);
-        const counts = {};
-        const seen = lastSeenCountsRef.current;
-        for (const room of data) {
-          const lastSeen = seen[room.id] || 0;
-          const total = room.message_count || 0;
-          if (total > lastSeen) {
-            counts[room.id] = total - lastSeen;
-          }
-        }
-        setUnreadCounts(counts);
         return data;
       }
     } catch (e) { /* ignore */ }
@@ -167,11 +170,16 @@ export default function App() {
           if (msg.seq) lastSeqRef.current = msg.seq;
           return [...prev, msg];
         });
-        const seen = lastSeenCountsRef.current;
-        seen[roomId] = (seen[roomId] || 0) + 1;
-        try {
-          localStorage.setItem('chat-last-seen-counts', JSON.stringify(seen));
-        } catch { /* ignore */ }
+        // Debounce read position update — marks room as read 1s after last message arrives
+        if (!document.hidden && msg.seq) {
+          if (readPositionTimerRef.current) clearTimeout(readPositionTimerRef.current);
+          readPositionTimerRef.current = setTimeout(() => {
+            const ar = activeRoomRef.current;
+            if (ar && ar.id === roomId && lastSeqRef.current) {
+              markRoomRead(roomId, lastSeqRef.current);
+            }
+          }, 1000);
+        }
         setTypingUsers(prev => prev.filter(s => s !== msg.sender));
         if (typingTimeoutsRef.current[msg.sender]) {
           clearTimeout(typingTimeoutsRef.current[msg.sender]);
@@ -328,15 +336,17 @@ export default function App() {
       if (data.length > 0 && !activeRoom) {
         const general = data.find(r => r.name === 'general') || data[0];
         setActiveRoom(general);
-        markRoomRead(general);
       }
     });
-    const interval = setInterval(fetchRooms, 30000);
-    return () => clearInterval(interval);
+    fetchUnread();
+    const roomInterval = setInterval(fetchRooms, 30000);
+    const unreadInterval = setInterval(fetchUnread, 30000);
+    return () => { clearInterval(roomInterval); clearInterval(unreadInterval); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeRoom) return;
+    activeRoomRef.current = activeRoom;
     lastSeqRef.current = null;
     setTypingUsers([]);
     setOnlineUsers([]);
@@ -349,11 +359,19 @@ export default function App() {
       fetchFiles(activeRoom.id),
       fetchReactions(activeRoom.id),
     ]).then(() => {
+      // Mark room as read after loading messages (lastSeqRef is set by fetchMessages)
+      if (lastSeqRef.current) {
+        markRoomRead(activeRoom.id, lastSeqRef.current);
+      }
       connectSSE(activeRoom.id);
     });
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+      }
+      if (readPositionTimerRef.current) {
+        clearTimeout(readPositionTimerRef.current);
+        readPositionTimerRef.current = null;
       }
     };
   }, [activeRoom?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -363,8 +381,20 @@ export default function App() {
       if (window.innerWidth > 768) setShowSidebar(true);
     };
     window.addEventListener('resize', handle);
-    return () => window.removeEventListener('resize', handle);
-  }, []);
+
+    // Mark room as read when tab becomes visible again
+    const handleVisibility = () => {
+      if (!document.hidden && activeRoomRef.current && lastSeqRef.current) {
+        markRoomRead(activeRoomRef.current.id, lastSeqRef.current);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('resize', handle);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTyping = useCallback(async () => {
     if (!activeRoom) return;
@@ -393,23 +423,27 @@ export default function App() {
     setActiveRoom(prev => prev && prev.id === updated.id ? { ...prev, ...updated } : prev);
   }, []);
 
-  const markRoomRead = useCallback((room) => {
-    if (!room) return;
-    const count = room.message_count || 0;
-    lastSeenCountsRef.current[room.id] = count;
-    try {
-      localStorage.setItem('chat-last-seen-counts', JSON.stringify(lastSeenCountsRef.current));
-    } catch { /* ignore */ }
+  const markRoomRead = useCallback((roomId, seq) => {
+    if (!roomId || !senderRef.current) return;
+    const effectiveSeq = seq || lastSeqRef.current;
+    if (!effectiveSeq || effectiveSeq <= 0) return;
+    // Optimistically clear unread for this room
     setUnreadCounts(prev => {
       const next = { ...prev };
-      delete next[room.id];
+      delete next[roomId];
       return next;
     });
+    // Update server
+    fetch(`${API}/rooms/${roomId}/read`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender: senderRef.current, last_read_seq: effectiveSeq }),
+    }).catch(() => { /* ignore */ });
   }, []);
 
   const handleSelectRoom = (room) => {
     setActiveRoom(room);
-    markRoomRead(room);
+    // Read position will be marked after messages are loaded (in useEffect)
     if (window.innerWidth <= 768) setShowSidebar(false);
   };
 

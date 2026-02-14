@@ -109,8 +109,9 @@ fn event_to_payload(event: &ChatEvent) -> Option<(String, String, serde_json::Va
             room_id.clone(),
             serde_json::json!({"sender": sender, "room_id": room_id}),
         )),
-        // Typing events are ephemeral — skip webhook delivery
+        // Typing and read position events are ephemeral — skip webhook delivery
         ChatEvent::Typing { .. } => None,
+        ChatEvent::ReadPositionUpdated(_) => None,
         // Room updates don't have a single room_id target in the same way
         ChatEvent::RoomUpdated(room) => Some((
             "room_updated".to_string(),

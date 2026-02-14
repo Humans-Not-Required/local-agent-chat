@@ -172,6 +172,9 @@ pub fn message_stream(
                         Ok(ChatEvent::PresenceLeft { ref sender, room_id: ref rid }) if *rid == room_id => {
                             yield Event::json(&serde_json::json!({"sender": sender, "room_id": rid})).event("presence_left");
                         }
+                        Ok(ChatEvent::ReadPositionUpdated(ref rp)) if rp.room_id == room_id => {
+                            yield Event::json(rp).event("read_position_updated");
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
                     }

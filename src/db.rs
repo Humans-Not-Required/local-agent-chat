@@ -116,6 +116,19 @@ impl Db {
         )
         .expect("Failed to create message_reactions table");
 
+        // Read positions table for server-side unread tracking
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS read_positions (
+                room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                sender TEXT NOT NULL,
+                last_read_seq INTEGER NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (room_id, sender)
+            );
+            CREATE INDEX IF NOT EXISTS idx_read_positions_sender ON read_positions(sender);",
+        )
+        .expect("Failed to create read_positions table");
+
         // Webhooks table for event notifications
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS webhooks (

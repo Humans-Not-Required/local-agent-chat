@@ -286,6 +286,38 @@ pub struct WebhookDelivery {
     pub timestamp: String,
 }
 
+// --- Read Positions ---
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateReadPosition {
+    pub sender: String,
+    pub last_read_seq: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReadPosition {
+    pub room_id: String,
+    pub sender: String,
+    pub last_read_seq: i64,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UnreadInfo {
+    pub room_id: String,
+    pub room_name: String,
+    pub unread_count: i64,
+    pub last_read_seq: i64,
+    pub latest_seq: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UnreadResponse {
+    pub sender: String,
+    pub rooms: Vec<UnreadInfo>,
+    pub total_unread: i64,
+}
+
 // --- Reactions ---
 
 #[derive(Debug, Deserialize)]

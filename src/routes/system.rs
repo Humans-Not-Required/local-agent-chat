@@ -160,6 +160,12 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - SSE events: presence_joined (when a new user connects), presence_left (when a user fully disconnects).
 - Multiple connections from the same sender to the same room are ref-counted — presence_left only fires when the last connection drops.
 
+## Read Positions (Unread Tracking)
+- PUT /api/v1/rooms/{id}/read — mark room as read (body: {"sender": "...", "last_read_seq": 42}). UPSERT: only increases, never goes backward. Returns the current read position.
+- GET /api/v1/rooms/{id}/read — get all read positions for a room. Returns [{sender, last_read_seq, updated_at}] sorted by updated_at desc.
+- GET /api/v1/unread?sender=<name> — get unread counts across all rooms. Returns {sender, rooms: [{room_id, room_name, unread_count, last_read_seq, latest_seq}], total_unread}.
+- SSE event: read_position_updated (when someone marks messages as read)
+
 ## Webhooks
 - POST /api/v1/rooms/{id}/webhooks — register webhook (admin key required, body: {"url": "http://...", "events": "*", "secret": "optional-hmac-key", "created_by": "..."})
 - GET /api/v1/rooms/{id}/webhooks — list webhooks (admin key required)
