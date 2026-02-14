@@ -121,7 +121,7 @@ function ChatLogo({ size = 24, color = '#60a5fa', style: extraStyle }) {
   );
 }
 
-function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts }) {
+function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, onChangeSender }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -199,11 +199,31 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts }) {
           <div style={{ padding: '16px', color: '#64748b', fontSize: '0.85rem' }}>No rooms yet</div>
         )}
       </div>
-      {/* Branding footer */}
-      <div style={styles.sidebarFooter}>
-        <ChatLogo size={16} color="#475569" />
-        <span style={{ fontSize: '0.7rem', color: '#475569' }}>Local Agent Chat</span>
-      </div>
+      {/* User identity footer */}
+      {sender && (
+        <div style={styles.sidebarFooter}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: '0.9rem', flexShrink: 0 }}>{senderType === 'human' ? '👤' : '🤖'}</span>
+            <span style={{
+              fontSize: '0.8rem',
+              color: senderColor(sender),
+              fontWeight: 600,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {sender}
+            </span>
+          </div>
+          <button
+            onClick={onChangeSender}
+            style={{ ...styles.iconBtn, fontSize: '0.75rem', padding: '2px 8px', border: 'none' }}
+            title="Change name"
+          >
+            ✎
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -789,11 +809,31 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
   const [uploading, setUploading] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [newMsgCount, setNewMsgCount] = useState(0);
+  const prevMsgCountRef = useRef(0);
 
   // Clear reply state when room changes (keep participants panel open on desktop)
   useEffect(() => {
     setReplyTo(null);
+    setNewMsgCount(0);
   }, [room?.id]);
+
+  // Track new messages arriving while scrolled up
+  useEffect(() => {
+    const currentCount = messages.length;
+    const delta = currentCount - prevMsgCountRef.current;
+    if (delta > 0 && !autoScroll && prevMsgCountRef.current > 0) {
+      setNewMsgCount(prev => prev + delta);
+    }
+    prevMsgCountRef.current = currentCount;
+  }, [messages.length, autoScroll]);
+
+  // Reset new message count when auto-scroll is re-enabled
+  useEffect(() => {
+    if (autoScroll) {
+      setNewMsgCount(0);
+    }
+  }, [autoScroll]);
 
   useEffect(() => {
     if (autoScroll) {
@@ -1060,10 +1100,13 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
           onClick={() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             setAutoScroll(true);
+            setNewMsgCount(0);
           }}
           style={styles.scrollBtn}
         >
-          ↓ New messages
+          {newMsgCount > 0
+            ? `↓ ${newMsgCount} new message${newMsgCount === 1 ? '' : 's'}`
+            : '↓ Jump to latest'}
         </button>
       )}
 
@@ -1731,6 +1774,14 @@ export default function App() {
               onSelect={handleSelectRoom}
               onCreateRoom={handleCreateRoom}
               unreadCounts={unreadCounts}
+              sender={sender}
+              senderType={senderType}
+              onChangeSender={() => {
+                localStorage.removeItem('chat-sender');
+                localStorage.removeItem('chat-sender-type');
+                setSender('');
+                setSenderType('agent');
+              }}
             />
           </>
         )}
