@@ -1035,6 +1035,8 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
   const [showSettings, setShowSettings] = useState(false);
   const [newMsgCount, setNewMsgCount] = useState(0);
   const prevMsgCountRef = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // Clear reply state when room changes (keep participants panel open on desktop)
   useEffect(() => {
@@ -1132,6 +1134,35 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
     }
   };
 
+  const handlePaste = async (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageItem = items.find(item => item.type.startsWith('image/'));
+    if (!imageItem) return;
+
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Pasted image too large. Maximum size is 5 MB.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result.split(',')[1];
+        const filename = `pasted-image-${Date.now()}.${file.type.split('/')[1] || 'png'}`;
+        await onUploadFile(filename, file.type, base64);
+        setUploading(false);
+      };
+      reader.onerror = () => setUploading(false);
+      reader.readAsDataURL(file);
+    } catch {
+      setUploading(false);
+    }
+  };
+
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1148,6 +1179,60 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
       const reader = new FileReader();
       reader.onload = async () => {
         // reader.result is data:...;base64,XXXX — extract base64 part
+        const base64 = reader.result.split(',')[1];
+        await onUploadFile(file.name, file.type || 'application/octet-stream', base64);
+        setUploading(false);
+      };
+      reader.onerror = () => setUploading(false);
+      reader.readAsDataURL(file);
+    } catch {
+      setUploading(false);
+    }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer?.types?.includes('Files')) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+
+    const droppedFiles = Array.from(e.dataTransfer?.files || []);
+    if (droppedFiles.length === 0) return;
+
+    // Upload the first file (same logic as handleFileSelect)
+    const file = droppedFiles[0];
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File too large. Maximum size is 5 MB.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
         const base64 = reader.result.split(',')[1];
         await onUploadFile(file.name, file.type || 'application/octet-stream', base64);
         setUploading(false);
@@ -1210,7 +1295,34 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
   if (currentGroup) grouped.push(currentGroup);
 
   return (
-    <div style={styles.chatArea}>
+    <div
+      style={styles.chatArea}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag-and-drop overlay */}
+      {isDragging && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 50,
+          background: 'rgba(59, 130, 246, 0.15)',
+          border: '3px dashed #3b82f6',
+          borderRadius: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            background: '#1e293b', padding: '16px 32px', borderRadius: 12,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+          }}>
+            <span style={{ fontSize: '2rem' }}>📎</span>
+            <span style={{ color: '#f1f5f9', fontWeight: 600, fontSize: '1rem' }}>Drop file to upload</span>
+            <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Max 5 MB</span>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div style={styles.chatHeader}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1408,6 +1520,7 @@ function ChatArea({ room, messages, files, sender, reactions, onSend, onEditMess
           value={text}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={`Message #${room.name}...`}
           rows={1}
           style={styles.messageInput}

@@ -70,6 +70,7 @@
 - [x] **Notification sound** — Web Audio API two-tone chime plays when new messages arrive while tab is hidden. 🔔/🔕 toggle button in chat header. State persisted via localStorage. Uses refs for SSE callback to avoid stale closures. Commit: 08acaeb.
 - [x] **Delete confirmations** — Confirmation dialog (window.confirm) before deleting messages and files. Prevents accidental deletions. Commit: 08acaeb.
 - [x] **FTS5 full-text search** — Upgraded from LIKE substring to FTS5 with porter stemmer. Word-boundary matching, stemming (deploy/deployment/deployed all match), relevance ranking. FTS index auto-maintained on message create/edit/delete. Rebuilt on startup. Graceful LIKE fallback on FTS errors. 5 new tests (128 total).
+- [x] **Block-level markdown** — Bullet lists (`- item`, `* item`), numbered lists (`1. item`), blockquotes (`> text`), and horizontal rules (`---`). Block elements grouped from consecutive lines, styled with proper HTML (ul/ol/blockquote/hr). Integrates with existing fenced code blocks and inline markdown. Commit: c1c04c5.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
