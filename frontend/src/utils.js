@@ -307,3 +307,43 @@ export function playNotificationSound() {
 }
 
 export const API = '/api/v1';
+
+/**
+ * Groups a timeline of messages and files into renderable groups:
+ * date separators, file cards, and consecutive message groups by sender.
+ */
+export function groupTimeline(messages, files) {
+  const timeline = [
+    ...messages.map(m => ({ ...m, _type: 'message' })),
+    ...(files || []).map(f => ({ ...f, _type: 'file' })),
+  ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  const grouped = [];
+  let currentGroup = null;
+  let currentDate = null;
+
+  for (const item of timeline) {
+    const itemDate = formatDate(item.created_at);
+    if (itemDate !== currentDate) {
+      if (currentGroup) grouped.push(currentGroup);
+      currentGroup = null;
+      currentDate = itemDate;
+      grouped.push({ type: 'date', date: itemDate });
+    }
+    if (item._type === 'file') {
+      if (currentGroup) grouped.push(currentGroup);
+      currentGroup = null;
+      grouped.push({ type: 'file', file: item });
+    } else {
+      if (currentGroup && currentGroup.sender === item.sender) {
+        currentGroup.messages.push(item);
+      } else {
+        if (currentGroup) grouped.push(currentGroup);
+        currentGroup = { type: 'messages', sender: item.sender, messages: [item] };
+      }
+    }
+  }
+  if (currentGroup) grouped.push(currentGroup);
+
+  return grouped;
+}
