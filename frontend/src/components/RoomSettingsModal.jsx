@@ -1,11 +1,25 @@
 import React, { useState } from 'react';
 import { styles } from '../styles';
 import { API } from '../utils';
+import WebhookManager from './WebhookManager';
 
-export default function RoomSettingsModal({ room, onClose, onUpdated, onRoomArchived }) {
+const tabStyle = (active) => ({
+  padding: '6px 14px',
+  fontSize: '0.8rem',
+  fontWeight: active ? 600 : 400,
+  color: active ? '#e2e8f0' : '#64748b',
+  background: active ? '#334155' : 'transparent',
+  border: 'none',
+  borderRadius: 6,
+  cursor: 'pointer',
+  transition: 'all 0.15s ease',
+});
+
+export default function RoomSettingsModal({ room, onClose, onUpdated, onRoomArchived, savedAdminKey }) {
+  const [tab, setTab] = useState('general');
   const [name, setName] = useState(room.name);
   const [description, setDescription] = useState(room.description || '');
-  const [adminKey, setAdminKey] = useState('');
+  const [adminKey, setAdminKey] = useState(savedAdminKey || '');
   const [saving, setSaving] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState('');
@@ -72,68 +86,90 @@ export default function RoomSettingsModal({ room, onClose, onUpdated, onRoomArch
 
   return (
     <div style={styles.modalOverlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={styles.modal}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ ...styles.modal, maxWidth: 480 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0 }}>⚙️ Room Settings</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer', padding: '4px 8px' }}>✕</button>
         </div>
-        <div style={{ color: '#64748b', fontSize: '0.75rem', marginBottom: 16 }}>
-          Created by <strong style={{ color: '#94a3b8' }}>{room.created_by || 'anonymous'}</strong>
-          {room.created_at && <span> · {new Date(room.created_at).toLocaleDateString()}</span>}
-          {room.archived_at && <span style={{ color: '#f59e0b', marginLeft: 8 }}>📦 Archived</span>}
+
+        {/* Tab bar */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16, padding: 3, background: '#0f172a', borderRadius: 8 }}>
+          <button style={tabStyle(tab === 'general')} onClick={() => setTab('general')}>General</button>
+          <button style={tabStyle(tab === 'webhooks')} onClick={() => setTab('webhooks')}>Webhooks</button>
         </div>
-        <form onSubmit={handleSave}>
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: 4, fontWeight: 500 }}>Name</label>
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Room name"
-            style={{ ...styles.input, marginBottom: 12 }}
-            autoFocus
-          />
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: 4, fontWeight: 500 }}>Description</label>
-          <textarea
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            placeholder="What's this room about?"
-            rows={3}
-            style={{ ...styles.input, marginBottom: 12, resize: 'vertical', fontFamily: 'inherit' }}
-          />
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: 4, fontWeight: 500 }}>Admin Key</label>
-          <input
-            type="password"
-            value={adminKey}
-            onChange={e => setAdminKey(e.target.value)}
-            placeholder="Required to save changes"
-            style={{ ...styles.input, marginBottom: 6 }}
-          />
-          <p style={{ color: '#64748b', fontSize: '0.7rem', marginBottom: 16 }}>
-            The admin key was shown when this room was created.
-          </p>
-          {error && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginBottom: 12 }}>{error}</p>}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-            <button
-              type="button"
-              onClick={handleArchiveToggle}
-              disabled={archiving}
-              style={{
-                ...styles.btnSecondary,
-                marginRight: 'auto',
-                color: room.archived_at ? '#22c55e' : '#f59e0b',
-                borderColor: room.archived_at ? '#22c55e33' : '#f59e0b33',
-                fontSize: '0.8rem',
-                opacity: archiving ? 0.6 : 1,
-              }}
-              title={room.archived_at ? 'Restore this room to active' : 'Hide this room from the room list'}
-            >
-              {archiving ? '...' : room.archived_at ? '📤 Unarchive' : '📦 Archive'}
-            </button>
-            <button type="button" onClick={onClose} style={styles.btnSecondary}>Cancel</button>
-            <button type="submit" disabled={saving} style={{ ...styles.btnPrimary, opacity: saving ? 0.6 : 1 }}>
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+
+        {tab === 'general' && (
+          <>
+            <div style={{ color: '#64748b', fontSize: '0.75rem', marginBottom: 16 }}>
+              Created by <strong style={{ color: '#94a3b8' }}>{room.created_by || 'anonymous'}</strong>
+              {room.created_at && <span> · {new Date(room.created_at).toLocaleDateString()}</span>}
+              {room.archived_at && <span style={{ color: '#f59e0b', marginLeft: 8 }}>📦 Archived</span>}
+            </div>
+            <form onSubmit={handleSave}>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: 4, fontWeight: 500 }}>Name</label>
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Room name"
+                style={{ ...styles.input, marginBottom: 12 }}
+                autoFocus
+              />
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: 4, fontWeight: 500 }}>Description</label>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="What's this room about?"
+                rows={3}
+                style={{ ...styles.input, marginBottom: 12, resize: 'vertical', fontFamily: 'inherit' }}
+              />
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: 4, fontWeight: 500 }}>
+                Admin Key
+                {savedAdminKey && <span style={{ color: '#34d399', marginLeft: 6, fontSize: '0.7rem', fontWeight: 400 }}>✓ saved</span>}
+              </label>
+              <input
+                type="password"
+                value={adminKey}
+                onChange={e => setAdminKey(e.target.value)}
+                placeholder={savedAdminKey ? 'Using saved key' : 'Required to save changes'}
+                style={{ ...styles.input, marginBottom: 6 }}
+              />
+              <p style={{ color: '#64748b', fontSize: '0.7rem', marginBottom: 16 }}>
+                {savedAdminKey
+                  ? 'Auto-filled from your saved key. You can override it above.'
+                  : 'The admin key was shown when this room was created.'}
+              </p>
+              {error && tab === 'general' && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginBottom: 12 }}>{error}</p>}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleArchiveToggle}
+                  disabled={archiving}
+                  style={{
+                    ...styles.btnSecondary,
+                    marginRight: 'auto',
+                    color: room.archived_at ? '#22c55e' : '#f59e0b',
+                    borderColor: room.archived_at ? '#22c55e33' : '#f59e0b33',
+                    fontSize: '0.8rem',
+                    opacity: archiving ? 0.6 : 1,
+                  }}
+                  title={room.archived_at ? 'Restore this room to active' : 'Hide this room from the room list'}
+                >
+                  {archiving ? '...' : room.archived_at ? '📤 Unarchive' : '📦 Archive'}
+                </button>
+                <button type="button" onClick={onClose} style={styles.btnSecondary}>Cancel</button>
+                <button type="submit" disabled={saving} style={{ ...styles.btnPrimary, opacity: saving ? 0.6 : 1 }}>
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+
+        {tab === 'webhooks' && (
+          <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            <WebhookManager roomId={room.id} adminKey={adminKey.trim()} />
           </div>
-        </form>
+        )}
       </div>
     </div>
   );

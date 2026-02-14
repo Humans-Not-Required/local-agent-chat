@@ -240,6 +240,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, onS
           onClose={() => setShowSettings(false)}
           onUpdated={(updated) => onRoomUpdate?.(updated)}
           onRoomArchived={(updated) => onRoomArchived?.(updated)}
+          savedAdminKey={adminKey || ''}
         />
       )}
 
