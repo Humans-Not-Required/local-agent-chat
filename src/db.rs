@@ -161,6 +161,20 @@ impl Db {
             .ok();
         }
 
+        // FTS5 full-text search index for messages
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                message_id UNINDEXED,
+                sender,
+                content,
+                tokenize='porter unicode61'
+            );",
+        )
+        .expect("Failed to create FTS5 table");
+
+        // Rebuild FTS index from existing messages (idempotent)
+        rebuild_fts_index(&conn);
+
         // Seed #general room if it doesn't exist
         let count: i64 = conn
             .query_row(
@@ -179,4 +193,32 @@ impl Db {
             .ok();
         }
     }
+}
+
+/// Rebuild the FTS5 index from all messages. Called on startup.
+pub fn rebuild_fts_index(conn: &Connection) {
+    conn.execute("DELETE FROM messages_fts", []).ok();
+    conn.execute_batch(
+        "INSERT INTO messages_fts (message_id, sender, content)
+         SELECT id, sender, content FROM messages;",
+    )
+    .ok();
+}
+
+/// Insert or update a message in the FTS index (call after create/edit).
+pub fn upsert_fts(conn: &Connection, message_id: &str) {
+    conn.execute("DELETE FROM messages_fts WHERE message_id = ?1", [message_id])
+        .ok();
+    conn.execute(
+        "INSERT INTO messages_fts (message_id, sender, content)
+         SELECT id, sender, content FROM messages WHERE id = ?1",
+        [message_id],
+    )
+    .ok();
+}
+
+/// Remove a message from the FTS index (call after delete).
+pub fn delete_fts(conn: &Connection, message_id: &str) {
+    conn.execute("DELETE FROM messages_fts WHERE message_id = ?1", [message_id])
+        .ok();
 }

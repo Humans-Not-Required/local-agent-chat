@@ -546,6 +546,9 @@ pub fn send_message(
     )
     .ok();
 
+    // Update FTS index
+    crate::db::upsert_fts(&conn, &id);
+
     let msg = Message {
         id,
         room_id: room_id.to_string(),
@@ -680,6 +683,9 @@ pub fn edit_message(
             )
         })?;
 
+    // Update FTS index
+    crate::db::upsert_fts(&conn, message_id);
+
     events.publish(ChatEvent::MessageEdited(msg.clone()));
 
     Ok(Json(msg))
@@ -744,6 +750,9 @@ pub fn delete_message(
             ));
         }
     }
+
+    // Remove from FTS index before deleting
+    crate::db::delete_fts(&conn, message_id);
 
     conn.execute(
         "DELETE FROM messages WHERE id = ?1 AND room_id = ?2",
@@ -1032,65 +1041,145 @@ pub fn search_messages(
     let conn = db.conn.lock().unwrap();
     let limit = limit.unwrap_or(50).clamp(1, 200);
 
-    // Escape LIKE special characters and wrap with wildcards
-    let escaped = query
-        .replace('\\', "\\\\")
-        .replace('%', "\\%")
-        .replace('_', "\\_");
-    let like_pattern = format!("%{escaped}%");
-
-    let mut sql = String::from(
-        "SELECT m.id, m.room_id, r.name, m.sender, m.sender_type, m.content, \
-         m.created_at, m.edited_at, m.reply_to, m.seq \
-         FROM messages m JOIN rooms r ON m.room_id = r.id \
-         WHERE m.content LIKE ?1 ESCAPE '\\'",
-    );
-    let mut param_values: Vec<String> = vec![like_pattern];
-    let mut idx = 2;
-
-    if let Some(room_val) = room_id {
-        sql.push_str(&format!(" AND m.room_id = ?{idx}"));
-        param_values.push(room_val.to_string());
-        idx += 1;
-    }
-    if let Some(sender_val) = sender {
-        sql.push_str(&format!(" AND m.sender = ?{idx}"));
-        param_values.push(sender_val.to_string());
-        idx += 1;
-    }
-    if let Some(sender_type_val) = sender_type {
-        sql.push_str(&format!(" AND m.sender_type = ?{idx}"));
-        param_values.push(sender_type_val.to_string());
-        idx += 1;
-    }
-
-    sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
-    param_values.push(limit.to_string());
-
-    let mut stmt = conn.prepare(&sql).unwrap();
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
-        .iter()
-        .map(|v| v as &dyn rusqlite::types::ToSql)
-        .collect();
-
-    let results: Vec<SearchResult> = stmt
-        .query_map(params_refs.as_slice(), |row| {
-            Ok(SearchResult {
-                message_id: row.get(0)?,
-                room_id: row.get(1)?,
-                room_name: row.get(2)?,
-                sender: row.get(3)?,
-                sender_type: row.get(4)?,
-                content: row.get(5)?,
-                created_at: row.get(6)?,
-                edited_at: row.get(7)?,
-                reply_to: row.get(8)?,
-                seq: row.get(9)?,
+    // Try FTS5 first — falls back to LIKE if FTS fails (e.g. syntax error in query)
+    let fts_result: Result<Vec<SearchResult>, rusqlite::Error> = (|| {
+        // Build FTS5 query: each word is searched with porter stemming (implicit AND).
+        // We strip FTS5 special chars and quote each term for safety.
+        let fts_query: String = query
+            .split_whitespace()
+            .map(|word| {
+                // Remove FTS5 special characters to prevent syntax errors
+                let clean: String = word
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-' || *c == '\'')
+                    .collect();
+                // Wrap in quotes for safe matching (porter stemmer still applies)
+                let escaped = clean.replace('"', "\"\"");
+                format!("\"{escaped}\"")
             })
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+            .filter(|s| s != "\"\"")
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let mut sql = String::from(
+            "SELECT m.id, m.room_id, r.name, m.sender, m.sender_type, m.content, \
+             m.created_at, m.edited_at, m.reply_to, m.seq \
+             FROM messages_fts f \
+             JOIN messages m ON m.id = f.message_id \
+             JOIN rooms r ON m.room_id = r.id \
+             WHERE messages_fts MATCH ?1",
+        );
+        let mut param_values: Vec<String> = vec![fts_query];
+        let mut idx = 2;
+
+        if let Some(room_val) = room_id {
+            sql.push_str(&format!(" AND m.room_id = ?{idx}"));
+            param_values.push(room_val.to_string());
+            idx += 1;
+        }
+        if let Some(sender_val) = sender {
+            sql.push_str(&format!(" AND m.sender = ?{idx}"));
+            param_values.push(sender_val.to_string());
+            idx += 1;
+        }
+        if let Some(sender_type_val) = sender_type {
+            sql.push_str(&format!(" AND m.sender_type = ?{idx}"));
+            param_values.push(sender_type_val.to_string());
+            idx += 1;
+        }
+
+        sql.push_str(&format!(" ORDER BY rank LIMIT ?{idx}"));
+        param_values.push(limit.to_string());
+
+        let mut stmt = conn.prepare(&sql)?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
+            .iter()
+            .map(|v| v as &dyn rusqlite::types::ToSql)
+            .collect();
+
+        let results: Vec<SearchResult> = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(SearchResult {
+                    message_id: row.get(0)?,
+                    room_id: row.get(1)?,
+                    room_name: row.get(2)?,
+                    sender: row.get(3)?,
+                    sender_type: row.get(4)?,
+                    content: row.get(5)?,
+                    created_at: row.get(6)?,
+                    edited_at: row.get(7)?,
+                    reply_to: row.get(8)?,
+                    seq: row.get(9)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(results)
+    })();
+
+    let results = match fts_result {
+        Ok(r) => r,
+        Err(_) => {
+            // Fallback to LIKE search for invalid FTS queries or edge cases
+            let escaped = query
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            let like_pattern = format!("%{escaped}%");
+
+            let mut sql = String::from(
+                "SELECT m.id, m.room_id, r.name, m.sender, m.sender_type, m.content, \
+                 m.created_at, m.edited_at, m.reply_to, m.seq \
+                 FROM messages m JOIN rooms r ON m.room_id = r.id \
+                 WHERE m.content LIKE ?1 ESCAPE '\\'",
+            );
+            let mut param_values: Vec<String> = vec![like_pattern];
+            let mut idx = 2;
+
+            if let Some(room_val) = room_id {
+                sql.push_str(&format!(" AND m.room_id = ?{idx}"));
+                param_values.push(room_val.to_string());
+                idx += 1;
+            }
+            if let Some(sender_val) = sender {
+                sql.push_str(&format!(" AND m.sender = ?{idx}"));
+                param_values.push(sender_val.to_string());
+                idx += 1;
+            }
+            if let Some(sender_type_val) = sender_type {
+                sql.push_str(&format!(" AND m.sender_type = ?{idx}"));
+                param_values.push(sender_type_val.to_string());
+                idx += 1;
+            }
+
+            sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
+            param_values.push(limit.to_string());
+
+            let mut stmt = conn.prepare(&sql).unwrap();
+            let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
+                .iter()
+                .map(|v| v as &dyn rusqlite::types::ToSql)
+                .collect();
+
+            stmt.query_map(params_refs.as_slice(), |row| {
+                Ok(SearchResult {
+                    message_id: row.get(0)?,
+                    room_id: row.get(1)?,
+                    room_name: row.get(2)?,
+                    sender: row.get(3)?,
+                    sender_type: row.get(4)?,
+                    content: row.get(5)?,
+                    created_at: row.get(6)?,
+                    edited_at: row.get(7)?,
+                    reply_to: row.get(8)?,
+                    seq: row.get(9)?,
+                })
+            })
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+        }
+    };
 
     let count = results.len();
     Ok(Json(SearchResponse {

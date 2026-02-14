@@ -67,6 +67,9 @@
 - [x] **Italic and strikethrough** — `*italic*` and `~~strikethrough~~` rendering in messages. Full inline markdown: bold, italic, strikethrough, inline code, @mentions, clickable links.
 - [x] **Room editing** — PUT /api/v1/rooms/{id} with admin key auth. Update name and/or description. Validates name (1-100 chars), catches duplicate names (409 Conflict). SSE `room_updated` event for real-time sync. 7 new tests (123 total). Commit: ad8dfdc.
 - [x] **Room settings UI** — ⚙️ button in chat header opens RoomSettingsModal. Edit room name/description with admin key auth. Shows creator info, error handling (invalid key, duplicate name), backdrop dismiss. Also fixes SSE room_updated not updating activeRoom. Commit: 8eee6a8.
+- [x] **Notification sound** — Web Audio API two-tone chime plays when new messages arrive while tab is hidden. 🔔/🔕 toggle button in chat header. State persisted via localStorage. Uses refs for SSE callback to avoid stale closures. Commit: 08acaeb.
+- [x] **Delete confirmations** — Confirmation dialog (window.confirm) before deleting messages and files. Prevents accidental deletions. Commit: 08acaeb.
+- [x] **FTS5 full-text search** — Upgraded from LIKE substring to FTS5 with porter stemmer. Word-boundary matching, stemming (deploy/deployment/deployed all match), relevance ranking. FTS index auto-maintained on message create/edit/delete. Rebuilt on startup. Graceful LIKE fallback on FTS errors. 5 new tests (128 total).
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
