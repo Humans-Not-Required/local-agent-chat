@@ -22,6 +22,12 @@ function formatTime(dateStr) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatFullTimestamp(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -190,7 +196,7 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sen
               </div>
               <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
                 {room.message_count || 0} msgs
-                {room.last_activity && ` · ${timeAgo(room.last_activity)}`}
+                {room.last_activity && <span title={formatFullTimestamp(room.last_activity)}>{` · ${timeAgo(room.last_activity)}`}</span>}
               </div>
             </div>
           );
@@ -446,8 +452,8 @@ function MessageBubble({ msg, isOwn, onEdit, onDelete, onReply, onReact, reactio
             {msg.reply_to && <ReplyPreview replyToId={msg.reply_to} messages={allMessages} />}
             <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(msg.content)}</div>
             <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
-              {msg.edited_at && <span style={{ fontStyle: 'italic' }}>(edited)</span>}
-              {formatTime(msg.created_at)}
+              {msg.edited_at && <span style={{ fontStyle: 'italic' }} title={`Edited: ${formatFullTimestamp(msg.edited_at)}`}>(edited)</span>}
+              <span title={formatFullTimestamp(msg.created_at)}>{formatTime(msg.created_at)}</span>
             </div>
           </>
         )}
@@ -572,7 +578,7 @@ function FileCard({ file, isOwn, sender, onDelete }) {
           )}
         </div>
         <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 6, textAlign: 'right' }}>
-          {formatTime(file.created_at)}
+          <span title={formatFullTimestamp(file.created_at)}>{formatTime(file.created_at)}</span>
         </div>
       </div>
     </div>
@@ -731,7 +737,7 @@ function SearchPanel({ onClose, rooms, onSelectRoom }) {
                   {r.sender_type === 'human' ? '👤' : '🤖'} {r.sender}
                 </span>
               </div>
-              <span style={{ fontSize: '0.7rem', color: '#475569' }}>{timeAgo(r.created_at)}</span>
+              <span style={{ fontSize: '0.7rem', color: '#475569' }} title={formatFullTimestamp(r.created_at)}>{timeAgo(r.created_at)}</span>
             </div>
             <div style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
               {highlightMatch(r.content, query)}
@@ -788,7 +794,7 @@ function ParticipantPanel({ roomId, onClose }) {
                 </span>
               </div>
               <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2, paddingLeft: 26 }}>
-                {p.message_count} msg{p.message_count !== 1 ? 's' : ''} · {timeAgo(p.last_seen)}
+                {p.message_count} msg{p.message_count !== 1 ? 's' : ''} · <span title={formatFullTimestamp(p.last_seen)}>{timeAgo(p.last_seen)}</span>
               </div>
             </div>
           );
@@ -1313,6 +1319,12 @@ export default function App() {
       lastSeenCountsRef.current = JSON.parse(localStorage.getItem('chat-last-seen-counts') || '{}');
     } catch { lastSeenCountsRef.current = {}; }
   }
+
+  // Update document title with unread count
+  useEffect(() => {
+    const total = Object.values(unreadCounts).reduce((sum, n) => sum + n, 0);
+    document.title = total > 0 ? `(${total}) Local Agent Chat` : 'Local Agent Chat';
+  }, [unreadCounts]);
 
   // Fetch rooms and update unread counts
   const fetchRooms = useCallback(async () => {
