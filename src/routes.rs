@@ -192,7 +192,9 @@ pub fn list_rooms(db: &State<Db>) -> Json<Vec<RoomWithStats>> {
         .prepare(
             "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
                     (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
-                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity
+                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                    (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview
              FROM rooms r ORDER BY r.name",
         )
         .unwrap();
@@ -207,6 +209,8 @@ pub fn list_rooms(db: &State<Db>) -> Json<Vec<RoomWithStats>> {
                 updated_at: row.get(5)?,
                 message_count: row.get(6)?,
                 last_activity: row.get(7)?,
+                last_message_sender: row.get(8)?,
+                last_message_preview: row.get(9)?,
             })
         })
         .unwrap()
@@ -224,7 +228,9 @@ pub fn get_room(
     conn.query_row(
         "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
                 (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
-                (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity
+                (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview
          FROM rooms r WHERE r.id = ?1",
         params![room_id],
         |row| {
@@ -237,6 +243,8 @@ pub fn get_room(
                 updated_at: row.get(5)?,
                 message_count: row.get(6)?,
                 last_activity: row.get(7)?,
+                last_message_sender: row.get(8)?,
+                last_message_preview: row.get(9)?,
             })
         },
     )

@@ -3358,3 +3358,79 @@ fn test_get_room_reactions_nonexistent_room() {
         .dispatch();
     assert_eq!(res.status(), Status::NotFound);
 }
+
+#[test]
+fn test_room_last_message_preview() {
+    let client = test_client();
+
+    // Create room
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "preview-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Empty room — no preview fields
+    let res = client.get(format!("/api/v1/rooms/{room_id}")).dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body.get("last_message_sender").is_none() || body["last_message_sender"].is_null());
+    assert!(body.get("last_message_preview").is_none() || body["last_message_preview"].is_null());
+
+    // Send a message
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Alice", "content": "Hello world"}"#)
+        .dispatch();
+
+    // Send another message
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "Bob", "content": "Goodbye world"}"#)
+        .dispatch();
+
+    // Room detail should show last message from Bob
+    let res = client.get(format!("/api/v1/rooms/{room_id}")).dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["last_message_sender"], "Bob");
+    assert_eq!(body["last_message_preview"], "Goodbye world");
+
+    // Room list should also include preview
+    let res = client.get("/api/v1/rooms").dispatch();
+    let rooms: Vec<serde_json::Value> = res.into_json().unwrap();
+    let room = rooms.iter().find(|r| r["id"].as_str() == Some(room_id)).unwrap();
+    assert_eq!(room["last_message_sender"], "Bob");
+    assert_eq!(room["last_message_preview"], "Goodbye world");
+}
+
+#[test]
+fn test_room_last_message_preview_truncation() {
+    let client = test_client();
+
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "truncate-test"}"#)
+        .dispatch();
+    let room: serde_json::Value = res.into_json().unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send a very long message (200 chars)
+    let long_content = "A".repeat(200);
+    let body_json = serde_json::json!({"sender": "Verbose", "content": long_content});
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(body_json.to_string())
+        .dispatch();
+
+    // Preview should be truncated to 100 chars
+    let res = client.get(format!("/api/v1/rooms/{room_id}")).dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let preview = body["last_message_preview"].as_str().unwrap();
+    assert_eq!(preview.len(), 100);
+    assert_eq!(body["last_message_sender"], "Verbose");
+}

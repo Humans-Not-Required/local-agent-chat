@@ -194,7 +194,13 @@ function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sen
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+              {room.last_message_sender && room.last_message_preview && (
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ color: '#cbd5e1', fontWeight: 500 }}>{room.last_message_sender}:</span>{' '}
+                  {room.last_message_preview.length > 60 ? room.last_message_preview.slice(0, 60) + '…' : room.last_message_preview}
+                </div>
+              )}
+              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2 }}>
                 {room.message_count || 0} msgs
                 {room.last_activity && <span title={formatFullTimestamp(room.last_activity)}>{` · ${timeAgo(room.last_activity)}`}</span>}
               </div>
