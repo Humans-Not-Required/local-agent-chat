@@ -10,6 +10,11 @@ pub fn generate_admin_key() -> String {
     format!("chat_{:032x}", uuid::Uuid::new_v4().as_u128())
 }
 
+/// Generate an incoming webhook token: `whk_<32 hex chars>`
+pub fn generate_webhook_token() -> String {
+    format!("whk_{:032x}", uuid::Uuid::new_v4().as_u128())
+}
+
 impl Db {
     pub fn new(path: &str) -> Self {
         let conn = Connection::open(path).expect("Failed to open database");
@@ -201,6 +206,22 @@ impl Db {
         // Add archived_at column for room archiving
         conn.execute_batch("ALTER TABLE rooms ADD COLUMN archived_at TEXT;")
             .ok();
+
+        // Incoming webhooks table (external systems post messages into rooms via token URL)
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS incoming_webhooks (
+                id TEXT PRIMARY KEY,
+                room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE INDEX IF NOT EXISTS idx_incoming_webhooks_token ON incoming_webhooks(token);
+            CREATE INDEX IF NOT EXISTS idx_incoming_webhooks_room ON incoming_webhooks(room_id);",
+        )
+        .expect("Failed to create incoming_webhooks table");
 
         // Backfill admin_key for existing rooms that don't have one
         let mut stmt = conn

@@ -438,6 +438,47 @@ pub struct UnreadMentionsResponse {
     pub total_unread: i64,
 }
 
+// --- Incoming Webhooks ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct IncomingWebhook {
+    pub id: String,
+    pub room_id: String,
+    pub name: String,
+    pub token: String,
+    pub created_by: String,
+    pub created_at: String,
+    pub active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>, // Computed: /api/v1/hook/{token}
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateIncomingWebhook {
+    pub name: String,
+    #[serde(default = "default_anonymous")]
+    pub created_by: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateIncomingWebhook {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IncomingWebhookMessage {
+    pub content: String,
+    #[serde(default)]
+    pub sender: Option<String>,
+    #[serde(default)]
+    pub sender_type: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+}
+
 // --- Profiles ---
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

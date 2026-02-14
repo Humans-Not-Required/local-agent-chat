@@ -3,6 +3,7 @@
 
 mod dm;
 mod files;
+mod incoming_hooks;
 mod mentions;
 mod messages;
 mod participants;
@@ -41,6 +42,10 @@ pub use system::{
 };
 pub use typing::notify_typing;
 pub use webhook_routes::{create_webhook, delete_webhook, list_webhooks, update_webhook};
+pub use incoming_hooks::{
+    create_incoming_webhook, delete_incoming_webhook, list_incoming_webhooks,
+    post_via_hook, update_incoming_webhook,
+};
 
 // --- Shared request guards ---
 
