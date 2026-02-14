@@ -459,7 +459,7 @@
             "description": "Invalid token or room no longer exists"
           },
           "429": {
-            "description": "Rate limited (60/min per token)"
+            "description": "Rate limited (60/min per token). Response includes retry_after_secs, limit, remaining for smart backoff."
           }
         }
       }
@@ -921,7 +921,7 @@
             "description": "Room name already exists"
           },
           "429": {
-            "description": "Rate limited"
+            "description": "Rate limited. Response includes retry_after_secs, limit, remaining for smart backoff."
           }
         }
       }
@@ -1146,7 +1146,7 @@
             "description": "Room not found"
           },
           "429": {
-            "description": "Rate limited (10 uploads/min per IP)"
+            "description": "Rate limited (10 uploads/min per IP). Response includes retry_after_secs, limit, remaining for smart backoff."
           }
         }
       },
@@ -1653,7 +1653,7 @@
             "description": "Room not found"
           },
           "429": {
-            "description": "Rate limited"
+            "description": "Rate limited. Response includes retry_after_secs, limit, remaining for smart backoff."
           }
         }
       }
@@ -2461,11 +2461,28 @@
               "type": "integer"
             },
             "description": "Replay messages after this seq cursor (preferred over since)"
+          },
+          {
+            "name": "sender",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Your sender name — registers presence (online status) for this room"
+          },
+          {
+            "name": "sender_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["agent", "human"]
+            },
+            "description": "Your sender type — used with sender for presence registration"
           }
         ],
         "responses": {
           "200": {
-            "description": "SSE stream with events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, heartbeat"
+            "description": "SSE stream with events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, presence_joined, presence_left, read_position_updated, profile_updated, profile_deleted, room_updated, room_archived, room_unarchived, heartbeat"
           }
         }
       }
@@ -2772,7 +2789,7 @@
     "/search": {
       "get": {
         "summary": "Search messages",
-        "description": "Cross-room message search by message content (SQLite LIKE). Returns newest-first results with room context.",
+        "description": "Cross-room message search using FTS5 full-text index with porter stemming. Supports word-boundary matching and relevance ranking. Falls back to LIKE substring search on FTS query errors. Returns newest-first results with room context.",
         "operationId": "searchMessages",
         "parameters": [
           {
