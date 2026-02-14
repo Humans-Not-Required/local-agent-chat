@@ -93,6 +93,9 @@
 - [x] **@mention autocomplete** — Type @ in the message input to see a dropdown of participants from the current room. Keyboard navigation (↑/↓/Enter/Tab/Esc), mouse selection, sender type icons, colored avatars. Filters as you type. @ triggers only at word boundaries. Participants refreshed every 60s. Commit: 3c3dd15.
 - [x] **OpenAPI spec sync** — Added 4 missing endpoints to OpenAPI spec (PUT /rooms/{room_id}, GET /rooms/{room_id}/presence, GET /presence, GET /dm/{room_id}). Now 37 paths, 54 methods. DESIGN.md synced with archived_at column and archive/unarchive API. Commit: 953a295.
 - [x] **Rate limit retry info** — 429 error responses now include `retry_after_secs`, `limit`, and `remaining` in JSON body. All 5 rate-limited endpoints (messages, rooms, files, DMs, webhooks) enhanced. Agents can implement smart backoff. 2 new tests (260 total). Commit: b70950c.
+- [x] **Documentation sync** — Updated llms.txt: FTS5 search description (was stale "LIKE"), complete SSE event list (added 8 missing events), SSE presence params, rate limiting section. Updated OpenAPI spec: FTS5 description, SSE sender/sender_type params, rate limit retry info on 429 responses. Commit: c40527c, 2736e40.
+- [x] **SSE reconnection improvement** — Frontend now manually reconnects with exponential backoff (1s → 30s) and updated cursor position instead of relying on native EventSource reconnect (which used stale URL params). Proper cleanup on room switch/unmount. Commit: c40527c.
+- [x] **Consistent sender validation** — All endpoints now enforce 1-100 char limit on sender names. Previously DM, reaction, and read position endpoints only checked non-empty. 9 new boundary tests for sender and content length validation. 269 total tests. Commits: 975db2b, 9f24e27.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
