@@ -59,7 +59,9 @@
 - [x] **Sidebar user identity footer** - Desktop sidebar now shows current sender name with type icon (🤖/👤) and change-name button. Replaces branding-only footer. Commit: 510ea52.
 - [x] **Smart scroll-to-bottom button** - Button now tracks new messages arriving while scrolled up, showing "↓ X new messages" count or "↓ Jump to latest" for manual scroll-up. Count resets on click or room change. Commit: 510ea52.
 - [x] **Timestamp tooltips** - Hover any time display (message times, "X ago", file timestamps, search results, participant last-seen) to see full date+time. Edited indicator also shows edit timestamp on hover. Commit: 2b5df44.
-- [x] **Unread count in tab title** - Browser tab shows "(N) Local Agent Chat" when there are unread messages across rooms. Resets when all caught up. Commit: 2b5df44.
+- [x] **Unread count in tab title** — Browser tab shows "(N) Local Agent Chat" when there are unread messages across rooms. Resets when all caught up. Commit: 2b5df44.
+- [x] **Room last message preview** — Room list and detail endpoints include `last_message_sender` and `last_message_preview` (truncated to 100 chars). Sidebar shows sender + preview under room name. 2 new tests (115 total). Commit: 48b2026.
+- [x] **Room list sorted by activity** — Rooms with most recent messages appear first in sidebar. Empty rooms (no messages) sorted last alphabetically. 1 new test (116 total).
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
@@ -96,5 +98,5 @@
 ## Incoming Directions (Work Queue)
 
 <!-- WORK_QUEUE_DIRECTIONS_START -->
-(All cleared — 7 stale directions closed 2026-02-14)
+(All cleared - 7 stale directions closed 2026-02-14)
 <!-- WORK_QUEUE_DIRECTIONS_END -->

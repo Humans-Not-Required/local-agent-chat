@@ -3434,3 +3434,69 @@ fn test_room_last_message_preview_truncation() {
     assert_eq!(preview.len(), 100);
     assert_eq!(body["last_message_sender"], "Verbose");
 }
+
+#[test]
+fn test_rooms_sorted_by_last_activity() {
+    let client = test_client();
+
+    // Create three rooms
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "alpha-room"}"#)
+        .dispatch();
+    let room_a: serde_json::Value = res.into_json().unwrap();
+    let room_a_id = room_a["id"].as_str().unwrap();
+
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "beta-room"}"#)
+        .dispatch();
+    let room_b: serde_json::Value = res.into_json().unwrap();
+    let room_b_id = room_b["id"].as_str().unwrap();
+
+    let res = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "gamma-room"}"#)
+        .dispatch();
+    let room_c: serde_json::Value = res.into_json().unwrap();
+    let room_c_id = room_c["id"].as_str().unwrap();
+
+    // Send messages in order: alpha first, then gamma, then beta (most recent)
+    client
+        .post(format!("/api/v1/rooms/{room_a_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "test", "content": "first"}"#)
+        .dispatch();
+
+    // Small delay to ensure different timestamps
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    client
+        .post(format!("/api/v1/rooms/{room_c_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "test", "content": "second"}"#)
+        .dispatch();
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    client
+        .post(format!("/api/v1/rooms/{room_b_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "test", "content": "third"}"#)
+        .dispatch();
+
+    // Fetch room list — should be ordered by last activity DESC
+    let res = client.get("/api/v1/rooms").dispatch();
+    let rooms: Vec<serde_json::Value> = res.into_json().unwrap();
+
+    // beta (most recent) first, then gamma, then alpha, then #general (no messages) last
+    assert!(rooms.len() >= 4); // 3 created + #general
+    assert_eq!(rooms[0]["name"], "beta-room");
+    assert_eq!(rooms[1]["name"], "gamma-room");
+    assert_eq!(rooms[2]["name"], "alpha-room");
+    // #general has no messages, should be last
+    assert_eq!(rooms[3]["name"], "general");
+}
