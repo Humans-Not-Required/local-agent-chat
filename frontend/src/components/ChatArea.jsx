@@ -231,6 +231,7 @@ export default function ChatArea({ room, messages, files, sender, reactions, pro
           sender={sender}
           onReply={handleReply}
           onClose={() => setThreadMessageId(null)}
+          profiles={profiles}
         />
       )}
 

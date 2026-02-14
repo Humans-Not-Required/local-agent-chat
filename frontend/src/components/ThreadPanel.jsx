@@ -3,7 +3,7 @@ import { styles } from '../styles';
 import { API, renderContent, formatTime, formatFullTimestamp, senderColor, timeAgo } from '../utils';
 import ReactionChips from './ReactionChips';
 
-export default function ThreadPanel({ roomId, messageId, sender, onReply, onClose }) {
+export default function ThreadPanel({ roomId, messageId, sender, onReply, onClose, profiles }) {
   const [thread, setThread] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -78,44 +78,85 @@ export default function ThreadPanel({ roomId, messageId, sender, onReply, onClos
 
   const renderMessage = (msg, isRoot) => {
     const depth = msg.depth || 0;
+    const msgSender = msg.sender;
+    const profile = profiles?.[msgSender];
+    const avatarUrl = profile?.avatar_url;
+    const displayName = profile?.display_name || msgSender;
+    const initial = msgSender.charAt(0).toUpperCase();
+    const color = senderColor(msgSender);
+
     return (
       <div key={msg.id || msg.message?.id} style={{
-        background: isRoot ? '#1e3a5f' : '#1e293b',
-        borderRadius: 8,
-        padding: '10px 14px',
+        display: 'flex', gap: 8, alignItems: 'flex-start',
         marginBottom: 8,
-        borderLeft: `3px solid ${senderColor(isRoot ? msg.sender : (msg.sender || msg.message?.sender))}`,
         marginLeft: isRoot ? 0 : Math.min(depth - 1, 3) * 12,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 600, fontSize: '0.8rem', color: senderColor(msg.sender) }}>
-              {msg.sender}
-            </span>
-            {isRoot && (
-              <span style={{
-                fontSize: '0.6rem', background: 'rgba(96,165,250,0.2)', color: '#60a5fa',
-                padding: '1px 6px', borderRadius: 10, fontWeight: 500,
-              }}>ROOT</span>
-            )}
-            {!isRoot && depth > 1 && (
-              <span style={{
-                fontSize: '0.6rem', color: '#64748b',
-              }}>depth {depth}</span>
-            )}
+        {/* Avatar */}
+        <div style={{ flexShrink: 0, marginTop: 2 }}>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={msgSender}
+              style={{
+                width: 28, height: 28, borderRadius: '50%',
+                objectFit: 'cover', background: '#1e293b',
+              }}
+              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+            />
+          ) : null}
+          <div
+            style={{
+              width: 28, height: 28, borderRadius: '50%',
+              background: color, display: avatarUrl ? 'none' : 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.75rem', fontWeight: 700, color: '#0f172a',
+              userSelect: 'none',
+            }}
+          >
+            {initial}
           </div>
-          <span style={{ fontSize: '0.65rem', color: '#64748b' }} title={formatFullTimestamp(msg.created_at)}>
-            {timeAgo(msg.created_at)}
-          </span>
         </div>
-        <div style={{ fontSize: '0.85rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {renderContent(msg.content)}
+        {/* Message content */}
+        <div style={{
+          flex: 1, minWidth: 0,
+          background: isRoot ? '#1e3a5f' : '#1e293b',
+          borderRadius: 8,
+          padding: '10px 14px',
+          borderLeft: `3px solid ${color}`,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontWeight: 600, fontSize: '0.8rem', color }}>
+                {displayName}
+              </span>
+              {displayName !== msgSender && (
+                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>@{msgSender}</span>
+              )}
+              {isRoot && (
+                <span style={{
+                  fontSize: '0.6rem', background: 'rgba(96,165,250,0.2)', color: '#60a5fa',
+                  padding: '1px 6px', borderRadius: 10, fontWeight: 500,
+                }}>ROOT</span>
+              )}
+              {!isRoot && depth > 1 && (
+                <span style={{
+                  fontSize: '0.6rem', color: '#64748b',
+                }}>depth {depth}</span>
+              )}
+            </div>
+            <span style={{ fontSize: '0.65rem', color: '#64748b' }} title={formatFullTimestamp(msg.created_at)}>
+              {timeAgo(msg.created_at)}
+            </span>
+          </div>
+          <div style={{ fontSize: '0.85rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {renderContent(msg.content)}
+          </div>
+          {msg.edited_at && (
+            <span style={{
+              fontSize: '0.65rem', color: '#64748b', fontStyle: 'italic',
+            }} title={`Edited: ${formatFullTimestamp(msg.edited_at)}`}>(edited)</span>
+          )}
         </div>
-        {msg.edited_at && (
-          <span style={{
-            fontSize: '0.65rem', color: '#64748b', fontStyle: 'italic',
-          }} title={`Edited: ${formatFullTimestamp(msg.edited_at)}`}>(edited)</span>
-        )}
       </div>
     );
   };
