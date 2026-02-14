@@ -1,6 +1,7 @@
 // Route module decomposition — each domain area in its own file.
 // Shared types (request guards, trackers) live here; route functions in submodules.
 
+mod dm;
 mod files;
 mod messages;
 mod participants;
@@ -19,6 +20,7 @@ mod webhook_routes;
 
 // --- Re-exports (all route functions used by lib.rs mount) ---
 
+pub use dm::{send_dm, list_dm_conversations, get_dm_conversation};
 pub use files::{delete_file, download_file, file_info, list_files, upload_file};
 pub use messages::{delete_message, edit_message, get_messages, send_message};
 pub use participants::room_participants;

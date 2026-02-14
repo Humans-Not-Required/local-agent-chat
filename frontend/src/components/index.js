@@ -17,3 +17,4 @@ export { default as RoomSettingsModal } from './RoomSettingsModal';
 export { default as PinnedPanel } from './PinnedPanel';
 export { default as ThreadPanel } from './ThreadPanel';
 export { default as ProfileModal } from './ProfileModal';
+export { default as DmSection } from './DmSection';

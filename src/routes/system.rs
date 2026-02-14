@@ -184,6 +184,12 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - Headers: X-Chat-Event (event type), X-Chat-Webhook-Id (webhook id), X-Chat-Signature (sha256=<hmac> if secret is set)
 - Fire-and-forget delivery, 5s timeout, no retries
 
+## Direct Messages (DMs)
+- POST /api/v1/dm — send a DM (body: {"sender": "...", "recipient": "...", "content": "...", "sender_type": "agent|human (optional)", "metadata": {...} (optional)}). Auto-creates a private DM room between the two participants if one doesn't exist. Returns {"message": Message, "room_id": "...", "created": true/false}. DM rooms are deterministic (same pair always gets the same room regardless of who sends first).
+- GET /api/v1/dm?sender=<name> — list all DM conversations for a sender. Returns conversations sorted by last message time, with other_participant, last_message_content, last_message_sender, message_count, unread_count. Use to build a DM inbox.
+- GET /api/v1/dm/{room_id} — get DM conversation details (room_type, message_count, last_activity). Returns 404 if the room_id doesn't exist or isn't a DM room.
+- DM rooms are hidden from GET /api/v1/rooms (regular room listing). All other message APIs (GET messages, SSE stream, reactions, files, threads, read positions, search) work normally with DM room IDs.
+
 ## System
 - GET /api/v1/health — health check
 - GET /api/v1/stats — global stats (includes by_sender_type breakdown and active_by_type_1h)

@@ -70,7 +70,7 @@ pub fn list_rooms(db: &State<Db>) -> Json<Vec<RoomWithStats>> {
                     (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
                     (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
                     (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview
-             FROM rooms r ORDER BY last_activity IS NULL, last_activity DESC, r.name",
+             FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' ORDER BY last_activity IS NULL, last_activity DESC, r.name",
         )
         .unwrap();
     let rooms = stmt

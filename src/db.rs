@@ -194,6 +194,10 @@ impl Db {
             }
         }
 
+        // Add room_type column for DMs (default 'room' for existing rooms)
+        conn.execute_batch("ALTER TABLE rooms ADD COLUMN room_type TEXT DEFAULT 'room';")
+            .ok();
+
         // Backfill admin_key for existing rooms that don't have one
         let mut stmt = conn
             .prepare("SELECT id FROM rooms WHERE admin_key IS NULL")

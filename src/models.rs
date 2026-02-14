@@ -355,6 +355,45 @@ pub struct RoomReactionsResponse {
     pub reactions: std::collections::HashMap<String, Vec<ReactionSummary>>,
 }
 
+// --- Direct Messages ---
+
+#[derive(Debug, Deserialize)]
+pub struct SendDm {
+    pub sender: String,
+    pub recipient: String,
+    pub content: String,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub sender_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DmConversation {
+    pub room_id: String,
+    pub other_participant: String,
+    pub last_message_content: Option<String>,
+    pub last_message_sender: Option<String>,
+    pub last_message_at: Option<String>,
+    pub message_count: i64,
+    pub unread_count: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DmConversationsResponse {
+    pub sender: String,
+    pub conversations: Vec<DmConversation>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DmSendResponse {
+    pub message: Message,
+    pub room_id: String,
+    pub created: bool, // true if a new DM room was created
+}
+
 // --- Profiles ---
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

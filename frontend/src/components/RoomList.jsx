@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { styles } from '../styles';
 import { timeAgo, formatFullTimestamp, senderColor } from '../utils';
 import ChatLogo from './ChatLogo';
+import DmSection from './DmSection';
 
-export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, onChangeSender, onEditProfile }) {
+export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, onChangeSender, onEditProfile, dmConversations, onSelectDm, onStartDm }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -87,6 +88,14 @@ export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, un
           <div style={{ padding: '16px', color: '#64748b', fontSize: '0.85rem' }}>No rooms yet</div>
         )}
       </div>
+      {/* Direct Messages section */}
+      <DmSection
+        conversations={dmConversations || []}
+        activeRoom={activeRoom}
+        onSelectDm={onSelectDm}
+        onStartDm={onStartDm}
+        sender={sender}
+      />
       {/* User identity footer */}
       {sender && (
         <div style={styles.sidebarFooter}>

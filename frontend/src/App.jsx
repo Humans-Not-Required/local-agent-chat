@@ -27,6 +27,8 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('chat-sound') !== 'off');
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [dmConversations, setDmConversations] = useState([]);
+  const [isDmView, setIsDmView] = useState(false);
   const senderRef = useRef(sender);
   const soundEnabledRef = useRef(soundEnabled);
   const eventSourceRef = useRef(null);
@@ -68,6 +70,17 @@ export default function App() {
           }
         }
         setUnreadCounts(counts);
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
+  const fetchDmConversations = useCallback(async () => {
+    if (!senderRef.current) return;
+    try {
+      const res = await fetch(`${API}/dm?sender=${encodeURIComponent(senderRef.current)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDmConversations(data.conversations || []);
       }
     } catch (e) { /* ignore */ }
   }, []);
@@ -340,9 +353,11 @@ export default function App() {
       }
     });
     fetchUnread();
+    fetchDmConversations();
     const roomInterval = setInterval(fetchRooms, 30000);
     const unreadInterval = setInterval(fetchUnread, 30000);
-    return () => { clearInterval(roomInterval); clearInterval(unreadInterval); };
+    const dmInterval = setInterval(fetchDmConversations, 30000);
+    return () => { clearInterval(roomInterval); clearInterval(unreadInterval); clearInterval(dmInterval); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -442,12 +457,6 @@ export default function App() {
     }).catch(() => { /* ignore */ });
   }, []);
 
-  const handleSelectRoom = (room) => {
-    setActiveRoom(room);
-    // Read position will be marked after messages are loaded (in useEffect)
-    if (window.innerWidth <= 768) setShowSidebar(false);
-  };
-
   const handleCreateRoom = async (name, description) => {
     try {
       const res = await fetch(`${API}/rooms`, {
@@ -479,6 +488,7 @@ export default function App() {
       });
       if (res.ok) {
         fetchRooms();
+        if (isDmView) fetchDmConversations();
       }
     } catch (e) { /* ignore */ }
   };
@@ -596,6 +606,51 @@ export default function App() {
     } catch (e) { /* ignore */ }
   };
 
+  const handleSelectDm = useCallback((conv) => {
+    // DM conversations use a real room_id, so we can load it like any room
+    setIsDmView(true);
+    setActiveRoom({
+      id: conv.room_id,
+      name: conv.other_participant,
+      description: `DM with ${conv.other_participant}`,
+      created_by: sender,
+      message_count: conv.message_count,
+      isDm: true,
+      other_participant: conv.other_participant,
+    });
+    if (window.innerWidth <= 768) setShowSidebar(false);
+  }, [sender]);
+
+  const handleStartDm = useCallback(async (recipient, content) => {
+    try {
+      const res = await fetch(`${API}/dm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender, recipient, content, sender_type: senderType }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await fetchDmConversations();
+        // Switch to the DM room
+        setIsDmView(true);
+        setActiveRoom({
+          id: data.room_id,
+          name: recipient,
+          description: `DM with ${recipient}`,
+          created_by: sender,
+          isDm: true,
+          other_participant: recipient,
+        });
+      }
+    } catch (e) { /* ignore */ }
+  }, [sender, senderType, fetchDmConversations]);
+
+  const handleSelectRoom = (room) => {
+    setIsDmView(false);
+    setActiveRoom(room);
+    if (window.innerWidth <= 768) setShowSidebar(false);
+  };
+
   if (!sender) {
     return <SenderModal onSet={handleSetSender} />;
   }
@@ -622,7 +677,7 @@ export default function App() {
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
           <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {activeRoom ? `#${activeRoom.name}` : 'Local Agent Chat'}
+            {activeRoom ? (isDmView ? `💬 ${activeRoom.name}` : `#${activeRoom.name}`) : 'Local Agent Chat'}
           </span>
           {connected && (
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', flexShrink: 0 }} />
@@ -655,6 +710,9 @@ export default function App() {
                 setSenderType('agent');
               }}
               onEditProfile={() => setShowProfileModal(true)}
+              dmConversations={dmConversations}
+              onSelectDm={handleSelectDm}
+              onStartDm={handleStartDm}
             />
           </>
         )}
