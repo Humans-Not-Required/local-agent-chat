@@ -1,6 +1,7 @@
 use crate::db::Db;
 use crate::events::{ChatEvent, EventBus};
 use crate::models::{Profile, UpsertProfile};
+use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, put, State};
 use rusqlite::params;
@@ -12,7 +13,67 @@ pub fn upsert_profile(
     body: Json<UpsertProfile>,
     db: &State<Db>,
     events: &State<EventBus>,
-) -> Result<Json<Profile>, rocket::http::Status> {
+) -> Result<Json<Profile>, (Status, Json<serde_json::Value>)> {
+    // Validate sender (URL path param)
+    let sender = sender.trim();
+    if sender.is_empty() || sender.len() > 100 {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "Sender must be 1-100 characters"})),
+        ));
+    }
+
+    // Validate field lengths
+    if let Some(ref name) = body.display_name
+        && name.len() > 200
+    {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "display_name must be at most 200 characters"})),
+        ));
+    }
+    if let Some(ref bio) = body.bio
+        && bio.len() > 1000
+    {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "bio must be at most 1000 characters"})),
+        ));
+    }
+    if let Some(ref status) = body.status_text
+        && status.len() > 200
+    {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "status_text must be at most 200 characters"})),
+        ));
+    }
+    if let Some(ref url) = body.avatar_url
+        && url.len() > 2000
+    {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "avatar_url must be at most 2000 characters"})),
+        ));
+    }
+    if let Some(ref st) = body.sender_type
+        && st != "agent" && st != "human"
+    {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "sender_type must be 'agent' or 'human'"})),
+        ));
+    }
+    if let Some(ref meta) = body.metadata {
+        let meta_str = serde_json::to_string(meta).unwrap_or_default();
+        if meta_str.len() > 10_000 {
+            return Err((
+                Status::BadRequest,
+                Json(serde_json::json!({"error": "metadata must be at most 10KB when serialized"})),
+            ));
+        }
+    }
+
     let conn = db.conn.lock().unwrap();
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -93,7 +154,7 @@ pub fn upsert_profile(
             &now,
         ],
     )
-    .map_err(|_| rocket::http::Status::InternalServerError)?;
+    .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Database error"}))))?;
 
     let profile = Profile {
         sender: sender.to_string(),

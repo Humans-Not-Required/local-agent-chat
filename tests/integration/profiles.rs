@@ -259,3 +259,131 @@ fn test_profile_preserves_created_at() {
     assert_eq!(second["created_at"].as_str().unwrap(), created_at);
     assert_eq!(second["display_name"], "Updated");
 }
+
+// --- Profile Field Validation ---
+
+#[test]
+fn test_profile_display_name_too_long() {
+    let client = test_client();
+    let long_name = "a".repeat(201);
+    let body = serde_json::json!({"display_name": long_name});
+    let res = client
+        .put("/api/v1/profiles/valid-sender")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("display_name"));
+}
+
+#[test]
+fn test_profile_display_name_at_limit() {
+    let client = test_client();
+    let name_200 = "b".repeat(200);
+    let body = serde_json::json!({"display_name": name_200});
+    let res = client
+        .put("/api/v1/profiles/limit-name")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["display_name"].as_str().unwrap().len(), 200);
+}
+
+#[test]
+fn test_profile_bio_too_long() {
+    let client = test_client();
+    let long_bio = "c".repeat(1001);
+    let body = serde_json::json!({"bio": long_bio});
+    let res = client
+        .put("/api/v1/profiles/bio-sender")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("bio"));
+}
+
+#[test]
+fn test_profile_status_text_too_long() {
+    let client = test_client();
+    let long_status = "d".repeat(201);
+    let body = serde_json::json!({"status_text": long_status});
+    let res = client
+        .put("/api/v1/profiles/status-sender")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("status_text"));
+}
+
+#[test]
+fn test_profile_avatar_url_too_long() {
+    let client = test_client();
+    let long_url = format!("https://example.com/{}", "x".repeat(2001));
+    let body = serde_json::json!({"avatar_url": long_url});
+    let res = client
+        .put("/api/v1/profiles/avatar-sender")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("avatar_url"));
+}
+
+#[test]
+fn test_profile_invalid_sender_type() {
+    let client = test_client();
+    let body = serde_json::json!({"sender_type": "robot"});
+    let res = client
+        .put("/api/v1/profiles/type-sender")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("sender_type"));
+}
+
+#[test]
+fn test_profile_valid_sender_types() {
+    let client = test_client();
+
+    // "agent" should work
+    let res = client
+        .put("/api/v1/profiles/type-agent")
+        .header(ContentType::JSON)
+        .body(r#"{"sender_type":"agent"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // "human" should work
+    let res = client
+        .put("/api/v1/profiles/type-human")
+        .header(ContentType::JSON)
+        .body(r#"{"sender_type":"human"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+}
+
+#[test]
+fn test_profile_metadata_too_large() {
+    let client = test_client();
+    // Create metadata larger than 10KB
+    let big_value = "v".repeat(11_000);
+    let body = serde_json::json!({"metadata": {"big": big_value}});
+    let res = client
+        .put("/api/v1/profiles/meta-sender")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("metadata"));
+}
