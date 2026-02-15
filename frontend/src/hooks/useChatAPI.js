@@ -30,7 +30,9 @@ export default function useChatAPI({
 
   const fetchRooms = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/rooms`);
+      const sender = senderRef.current;
+      const url = sender ? `${API}/rooms?sender=${encodeURIComponent(sender)}` : `${API}/rooms`;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setRooms(data);
@@ -38,7 +40,7 @@ export default function useChatAPI({
       }
     } catch (e) { /* ignore */ }
     return [];
-  }, [setRooms]);
+  }, [setRooms, senderRef]);
 
   const fetchMessages = useCallback(async (roomId) => {
     setLoading(true);
@@ -160,6 +162,25 @@ export default function useChatAPI({
       }
     } catch (e) { /* ignore */ }
   }, [fetchRooms, setActiveRoom, saveAdminKey, setAdminKeyInfo]);
+
+  const toggleBookmark = useCallback(async (roomId, isCurrentlyBookmarked) => {
+    const sender = senderRef.current;
+    if (!sender) return;
+    try {
+      if (isCurrentlyBookmarked) {
+        await fetch(`${API}/rooms/${roomId}/bookmark?sender=${encodeURIComponent(sender)}`, {
+          method: 'DELETE',
+        });
+      } else {
+        await fetch(`${API}/rooms/${roomId}/bookmark`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sender }),
+        });
+      }
+      await fetchRooms();
+    } catch (e) { /* ignore */ }
+  }, [fetchRooms, senderRef]);
 
   const handleSend = useCallback(async (activeRoom, sender, senderType, content, replyToId, isDmView) => {
     if (!activeRoom) return;
@@ -344,6 +365,7 @@ export default function useChatAPI({
     loadOlderMessages,
     markRoomRead,
     handleCreateRoom,
+    toggleBookmark,
     handleSend,
     handleEditMessage,
     handleDeleteMessage,

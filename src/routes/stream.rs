@@ -187,6 +187,12 @@ pub fn message_stream(
                         Ok(ChatEvent::RoomUnarchived(ref r)) if r.id == room_id => {
                             yield Event::json(r).event("room_unarchived");
                         }
+                        Ok(ChatEvent::RoomBookmarked { room_id: ref bk_rid, sender: ref bk_sender }) if *bk_rid == room_id => {
+                            yield Event::json(&serde_json::json!({"room_id": bk_rid, "sender": bk_sender})).event("room_bookmarked");
+                        }
+                        Ok(ChatEvent::RoomUnbookmarked { room_id: ref ubk_rid, sender: ref ubk_sender }) if *ubk_rid == room_id => {
+                            yield Event::json(&serde_json::json!({"room_id": ubk_rid, "sender": ubk_sender})).event("room_unbookmarked");
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                         _ => {} // different room or lagged
                     }

@@ -21,6 +21,8 @@ pub enum ChatEvent {
     ProfileDeleted { sender: String },
     RoomArchived(RoomWithStats),
     RoomUnarchived(RoomWithStats),
+    RoomBookmarked { room_id: String, sender: String },
+    RoomUnbookmarked { room_id: String, sender: String },
 }
 
 pub struct EventBus {

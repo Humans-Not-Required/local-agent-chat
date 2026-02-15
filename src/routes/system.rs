@@ -208,6 +208,14 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - GET /api/v1/dm/{room_id} — get DM conversation details (room_type, message_count, last_activity). Returns 404 if the room_id doesn't exist or isn't a DM room.
 - DM rooms are hidden from GET /api/v1/rooms (regular room listing). All other message APIs (GET messages, SSE stream, reactions, files, threads, read positions, search) work normally with DM room IDs.
 
+## Bookmarks (Room Favorites)
+- PUT /api/v1/rooms/{id}/bookmark — bookmark a room (body: {"sender": "..."}). Idempotent — re-bookmarking returns created=false. Returns {"room_id": "...", "sender": "...", "bookmarked": true, "created": true/false}.
+- DELETE /api/v1/rooms/{id}/bookmark?sender=... — remove a bookmark. Returns {"bookmarked": false, "removed": true/false}.
+- GET /api/v1/bookmarks?sender=<name> — list sender's bookmarked rooms with stats (room_name, description, message_count, last_activity, bookmarked_at). Sorted by bookmark creation time (newest first).
+- GET /api/v1/rooms?sender=<name> — when sender is provided, each room includes a `bookmarked` field (true/false) and bookmarked rooms are sorted to the top.
+- SSE events: room_bookmarked, room_unbookmarked
+- Bookmarks CASCADE delete when a room is deleted.
+
 ## Rate Limiting
 - Messages: 60/min per IP. Rooms: 10/hr per IP. Files: 10/min per IP. DMs: 60/min per IP. Incoming webhooks: 60/min per token.
 - All rate-limited endpoints include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` response headers on every response (both 200 and 429).

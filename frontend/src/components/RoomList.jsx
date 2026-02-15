@@ -4,7 +4,7 @@ import { timeAgo, formatFullTimestamp, senderColor } from '../utils';
 import ChatLogo from './ChatLogo';
 import DmSection from './DmSection';
 
-export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, unreadCounts, sender, senderType, senderProfile, onChangeSender, onEditProfile, dmConversations, onSelectDm, onStartDm, profiles }) {
+export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, onToggleBookmark, unreadCounts, sender, senderType, senderProfile, onChangeSender, onEditProfile, dmConversations, onSelectDm, onStartDm, profiles }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -62,8 +62,25 @@ export default function RoomList({ rooms, activeRoom, onSelect, onCreateRoom, un
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontWeight: unread > 0 ? 700 : 500, color: activeRoom?.id === room.id ? '#f1f5f9' : unread > 0 ? '#f1f5f9' : '#cbd5e1' }}>
-                  #{room.name}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                  {room.bookmarked && (
+                    <span
+                      onClick={(e) => { e.stopPropagation(); onToggleBookmark && onToggleBookmark(room.id, true); }}
+                      title="Remove bookmark"
+                      style={{ cursor: 'pointer', fontSize: '0.7rem', flexShrink: 0, lineHeight: 1 }}
+                    >⭐</span>
+                  )}
+                  {room.bookmarked === false && (
+                    <span
+                      onClick={(e) => { e.stopPropagation(); onToggleBookmark && onToggleBookmark(room.id, false); }}
+                      title="Bookmark room"
+                      style={{ cursor: 'pointer', fontSize: '0.7rem', flexShrink: 0, lineHeight: 1, opacity: 0, transition: 'opacity 0.15s' }}
+                      className="room-bookmark-icon"
+                    >☆</span>
+                  )}
+                  <span style={{ fontWeight: unread > 0 ? 700 : 500, color: activeRoom?.id === room.id ? '#f1f5f9' : unread > 0 ? '#f1f5f9' : '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    #{room.name}
+                  </span>
                 </div>
                 {unread > 0 && (
                   <span style={styles.unreadBadge}>

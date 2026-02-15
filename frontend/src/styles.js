@@ -581,6 +581,13 @@ export function injectGlobalStyles() {
       0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
       30% { opacity: 1; transform: translateY(-3px); }
     }
+    /* Show bookmark star on room hover */
+    .chat-sidebar > div > div:hover .room-bookmark-icon {
+      opacity: 0.6 !important;
+    }
+    .room-bookmark-icon:hover {
+      opacity: 1 !important;
+    }
   `;
   document.head.appendChild(style);
   // Apply mobile header display dynamically

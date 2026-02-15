@@ -26,6 +26,8 @@ pub struct RoomWithStats {
     pub last_message_preview: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub archived_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bookmarked: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -436,6 +438,31 @@ pub struct UnreadMentionsResponse {
     pub target: String,
     pub rooms: Vec<UnreadMentionRoom>,
     pub total_unread: i64,
+}
+
+// --- Bookmarks ---
+
+#[derive(Debug, Deserialize)]
+pub struct BookmarkAction {
+    pub sender: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BookmarkedRoom {
+    pub room_id: String,
+    pub room_name: String,
+    pub description: String,
+    pub created_at: String,
+    pub bookmarked_at: String,
+    pub message_count: i64,
+    pub last_activity: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BookmarksResponse {
+    pub sender: String,
+    pub bookmarks: Vec<BookmarkedRoom>,
+    pub count: usize,
 }
 
 // --- Incoming Webhooks ---

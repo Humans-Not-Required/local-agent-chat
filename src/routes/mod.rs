@@ -1,6 +1,7 @@
 // Route module decomposition — each domain area in its own file.
 // Shared types (request guards, trackers) live here; route functions in submodules.
 
+mod bookmarks;
 mod discover;
 mod dm;
 mod files;
@@ -23,6 +24,7 @@ mod webhook_routes;
 
 // --- Re-exports (all route functions used by lib.rs mount) ---
 
+pub use bookmarks::{add_bookmark, remove_bookmark, list_bookmarks};
 pub use discover::discover as service_discover;
 pub use dm::{send_dm, list_dm_conversations, get_dm_conversation};
 pub use mentions::{get_mentions, get_unread_mentions};

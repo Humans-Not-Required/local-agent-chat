@@ -52,6 +52,7 @@ pub fn discover() -> Json<serde_json::Value> {
             "search_fts5",
             "read_positions",
             "archiving",
+            "bookmarks",
             "typing_indicators",
             "markdown_rendering",
         ],

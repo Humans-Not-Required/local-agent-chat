@@ -67,10 +67,62 @@ pub fn create_room(
     }
 }
 
-#[get("/api/v1/rooms?<include_archived>")]
-pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>) -> Json<Vec<RoomWithStats>> {
+#[get("/api/v1/rooms?<include_archived>&<sender>")]
+pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option<&str>) -> Json<Vec<RoomWithStats>> {
     let conn = db.conn.lock().unwrap();
     let include = include_archived.unwrap_or(false);
+
+    // When sender is provided, include bookmark status and sort bookmarked rooms first
+    if let Some(sender_val) = sender {
+        let sender_val = sender_val.trim();
+        if !sender_val.is_empty() {
+            let sql = if include {
+                "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
+                        (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
+                        (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                        (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                        (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                        r.archived_at,
+                        (SELECT 1 FROM bookmarks WHERE room_id = r.id AND sender = ?1) as is_bookmarked
+                 FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm'
+                 ORDER BY is_bookmarked IS NOT NULL DESC, last_activity IS NULL, last_activity DESC, r.name"
+            } else {
+                "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
+                        (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
+                        (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                        (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                        (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                        r.archived_at,
+                        (SELECT 1 FROM bookmarks WHERE room_id = r.id AND sender = ?1) as is_bookmarked
+                 FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' AND r.archived_at IS NULL
+                 ORDER BY is_bookmarked IS NOT NULL DESC, last_activity IS NULL, last_activity DESC, r.name"
+            };
+            let mut stmt = conn.prepare(sql).unwrap();
+            let rooms = stmt
+                .query_map(params![sender_val], |row| {
+                    let is_bookmarked: Option<i64> = row.get(11)?;
+                    Ok(RoomWithStats {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        description: row.get(2)?,
+                        created_by: row.get(3)?,
+                        created_at: row.get(4)?,
+                        updated_at: row.get(5)?,
+                        message_count: row.get(6)?,
+                        last_activity: row.get(7)?,
+                        last_message_sender: row.get(8)?,
+                        last_message_preview: row.get(9)?,
+                        archived_at: row.get(10)?,
+                        bookmarked: Some(is_bookmarked.is_some()),
+                    })
+                })
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect();
+            return Json(rooms);
+        }
+    }
+
     let sql = if include {
         "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
                 (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
@@ -103,6 +155,7 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>) -> Json<Vec<Ro
                 last_message_sender: row.get(8)?,
                 last_message_preview: row.get(9)?,
                 archived_at: row.get(10)?,
+                bookmarked: None,
             })
         })
         .unwrap()
@@ -139,6 +192,7 @@ pub fn get_room(
                 last_message_sender: row.get(8)?,
                 last_message_preview: row.get(9)?,
                 archived_at: row.get(10)?,
+                bookmarked: None,
             })
         },
     )
@@ -274,6 +328,7 @@ pub fn update_room(
                     last_message_sender: row.get(8)?,
                     last_message_preview: row.get(9)?,
                     archived_at: row.get(10)?,
+                    bookmarked: None,
                 })
             },
         )
@@ -367,6 +422,7 @@ pub fn archive_room(
                     last_message_sender: row.get(8)?,
                     last_message_preview: row.get(9)?,
                     archived_at: row.get(10)?,
+                    bookmarked: None,
                 })
             },
         )
@@ -459,6 +515,7 @@ pub fn unarchive_room(
                     last_message_sender: row.get(8)?,
                     last_message_preview: row.get(9)?,
                     archived_at: row.get(10)?,
+                    bookmarked: None,
                 })
             },
         )

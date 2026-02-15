@@ -223,6 +223,18 @@ impl Db {
         )
         .expect("Failed to create incoming_webhooks table");
 
+        // Bookmarks table for room favorites
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS bookmarks (
+                room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                sender TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (room_id, sender)
+            );
+            CREATE INDEX IF NOT EXISTS idx_bookmarks_sender ON bookmarks(sender);",
+        )
+        .expect("Failed to create bookmarks table");
+
         // Backfill admin_key for existing rooms that don't have one
         let mut stmt = conn
             .prepare("SELECT id FROM rooms WHERE admin_key IS NULL")

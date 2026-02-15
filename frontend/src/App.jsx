@@ -265,6 +265,7 @@ export default function App() {
               activeRoom={activeRoom}
               onSelect={handleSelectRoom}
               onCreateRoom={(name, desc) => api.handleCreateRoom(name, desc, sender)}
+              onToggleBookmark={api.toggleBookmark}
               unreadCounts={unreadCounts}
               sender={sender}
               senderType={senderType}
