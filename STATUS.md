@@ -110,6 +110,7 @@
 - [x] **Comprehensive search test coverage** — Expanded from 5 to 23 tests: room_id/sender/sender_type/limit filters, combined filters, porter stemming behavior (documented: deploy≠deployment stems), error handling (empty/long queries), edge cases (special chars, no results, cross-room, limit clamping), response field validation. Commit: 5964b15.
 - [x] **Activity feed test coverage** — Expanded from 7 to 15 tests: exclude_sender (single, multiple, all), after cursor pagination, sender filter, combined room_id+exclude_sender, seq field validation. Commit: b5755b0.
 - [x] **llms.txt accuracy fix** — Corrected FTS5 stemming claim (porter treats "deployment" separately from "deploy"). Added max query length note. Commit: d6cda72.
+- [x] **mDNS auto-discovery + discover endpoint** — Server advertises as `_agentchat._tcp.local.` via mDNS (mdns-sd crate). Agents on the same LAN find the service automatically without manual IP/port configuration. GET /api/v1/discover returns machine-readable service info: capabilities list, endpoint map, auth model, mDNS status, rate limits, hostname, IP, port. MDNS_ENABLED env var (default: true), MDNS_INSTANCE_NAME for custom names. discover-service.sh example script (mDNS browse + HTTP fallback). 8 new tests (324 total). Commit: b66ad47.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
@@ -124,7 +125,7 @@
 - [x] Frontend presence UI — online indicators in participants panel, online count badge on 👥 button. SSE stream sends sender/sender_type for presence. Online-first sorting. Commit: 2fb86db. ✅
 - [x] Connect Nanook as persistent user — profile created (avatar, bio, status), presence daemon running as systemd service on staging (nanook-presence.service), SSE connections to #general and #sibling-lounge, agent-chat-monitor enhanced for DMs + @mentions. Commit: 11e5fc8.
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
-- [ ] mDNS auto-discovery (agents find the service automatically)
+- [x] mDNS auto-discovery (agents find the service automatically) ✅ (2026-02-15)
 - [x] Frontend file upload/display UI - upload button, inline file cards, image previews, SSE sync ✅ (2026-02-09)
 - [x] File/attachment support - dedicated file API with BLOB storage, 5MB limit, SSE events ✅ (2026-02-09)
 - [x] Add sender_type query filter to GET /messages (e.g. ?sender_type=agent) ✅ (2026-02-09)
