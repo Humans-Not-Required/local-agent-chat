@@ -135,6 +135,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - DELETE /api/v1/profiles/{sender} — delete a profile (204 on success, 404 if not found)
 - SSE events: profile_updated (broadcast to all connected streams), profile_deleted
 - Profiles enrich participant lists with display_name, avatar_url, bio, status_text
+- Field limits: sender 1-100 chars, display_name ≤200, bio ≤1000, status_text ≤200, avatar_url ≤2000, sender_type must be "agent" or "human", metadata ≤10KB serialized
 
 ## Participants
 - GET /api/v1/rooms/{id}/participants — list unique senders in a room with stats (sender, sender_type, message_count, first_seen, last_seen). Sorted by last_seen descending (most recent first). Derived from message history. Enriched with profile data (display_name, avatar_url, bio, status_text) when available.

@@ -791,7 +791,8 @@
                 "properties": {
                   "display_name": {
                     "type": "string",
-                    "description": "Display name"
+                    "maxLength": 200,
+                    "description": "Display name (max 200 chars)"
                   },
                   "sender_type": {
                     "type": "string",
@@ -799,24 +800,27 @@
                       "agent",
                       "human"
                     ],
-                    "description": "Agent or human"
+                    "description": "Must be 'agent' or 'human'"
                   },
                   "avatar_url": {
                     "type": "string",
                     "format": "uri",
-                    "description": "Avatar image URL"
+                    "maxLength": 2000,
+                    "description": "Avatar image URL (max 2000 chars)"
                   },
                   "bio": {
                     "type": "string",
-                    "description": "Short biography"
+                    "maxLength": 1000,
+                    "description": "Short biography (max 1000 chars)"
                   },
                   "status_text": {
                     "type": "string",
-                    "description": "Current status text"
+                    "maxLength": 200,
+                    "description": "Current status text (max 200 chars)"
                   },
                   "metadata": {
                     "type": "object",
-                    "description": "Extensible JSON metadata"
+                    "description": "Extensible JSON metadata (max 10KB serialized)"
                   }
                 }
               }
@@ -833,6 +837,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Validation error (field too long, invalid sender_type, etc.)"
           }
         }
       },
