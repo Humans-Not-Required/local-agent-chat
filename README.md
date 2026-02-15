@@ -352,7 +352,7 @@ CHAT_URL=http://192.168.0.79:3006 ./examples/nanook-presence.sh
 
 ## Stats
 
-- **324 tests** (integration + unit across 26 test modules)
+- **329 tests** (integration + unit across 27 test modules)
 - **55 API methods** across 38 paths
 - **16 frontend components** (decomposed from monolith)
 - **20+ SSE event types** for real-time updates
