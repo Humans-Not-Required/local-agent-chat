@@ -6,6 +6,7 @@
 
 mod common;
 
+mod discover;
 mod health_stats;
 mod rooms;
 mod messages;

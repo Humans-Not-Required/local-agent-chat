@@ -2995,6 +2995,118 @@
           }
         }
       }
+    },
+    "/api/v1/discover": {
+      "get": {
+        "summary": "Service discovery",
+        "description": "Machine-readable service discovery endpoint. Returns service info, capabilities, endpoints, auth model, and mDNS status for agents to understand the service without prior knowledge.",
+        "operationId": "discover",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service discovery info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "example": "local-agent-chat"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "0.1.0"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "hostname": {
+                      "type": "string"
+                    },
+                    "ip": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "port": {
+                      "type": "integer",
+                      "example": 8000
+                    },
+                    "protocol": {
+                      "type": "string",
+                      "example": "http"
+                    },
+                    "api_base": {
+                      "type": "string",
+                      "example": "/api/v1"
+                    },
+                    "mdns": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "service_type": {
+                          "type": "string",
+                          "example": "_agentchat._tcp.local."
+                        }
+                      }
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": [
+                        "rooms",
+                        "messages",
+                        "direct_messages",
+                        "sse_streaming"
+                      ]
+                    },
+                    "endpoints": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "auth": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "rate_limits": {
+                      "type": "object",
+                      "properties": {
+                        "messages_per_min": {
+                          "type": "integer"
+                        },
+                        "rooms_per_hour": {
+                          "type": "integer"
+                        },
+                        "files_per_min": {
+                          "type": "integer"
+                        },
+                        "dms_per_min": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

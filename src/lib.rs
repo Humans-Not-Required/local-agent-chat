@@ -1,5 +1,6 @@
 pub mod db;
 pub mod events;
+pub mod mdns;
 pub mod models;
 pub mod rate_limit;
 pub mod routes;
@@ -127,6 +128,7 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                 routes::update_incoming_webhook,
                 routes::delete_incoming_webhook,
                 routes::post_via_hook,
+                routes::service_discover,
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,
@@ -138,6 +140,47 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                 Box::pin(async move {
                     webhooks::spawn_dispatcher(webhook_receiver, webhook_db_path);
                     println!("🔗 Webhook dispatcher started");
+                })
+            },
+        ))
+        .attach(rocket::fairing::AdHoc::on_liftoff(
+            "mDNS Service Discovery",
+            |_rocket| {
+                Box::pin(async move {
+                    let mdns_enabled = env::var("MDNS_ENABLED")
+                        .map(|v| v != "0" && v.to_lowercase() != "false")
+                        .unwrap_or(true);
+
+                    if !mdns_enabled {
+                        println!("📡 mDNS service discovery disabled (MDNS_ENABLED=false)");
+                        return;
+                    }
+
+                    let port: u16 = env::var("ROCKET_PORT")
+                        .unwrap_or_else(|_| "8000".to_string())
+                        .parse()
+                        .unwrap_or(8000);
+
+                    let instance_name = env::var("MDNS_INSTANCE_NAME")
+                        .unwrap_or_else(|_| "local-agent-chat".to_string());
+
+                    match mdns::start_mdns(port, &instance_name) {
+                        Ok(handle) => {
+                            println!(
+                                "📡 mDNS advertising: {} on port {}",
+                                handle.fullname(),
+                                port
+                            );
+                            // Leak the handle to keep mDNS alive for the lifetime of the server.
+                            // Rocket doesn't provide a clean on_shutdown hook for managed state
+                            // cleanup, so this is the pragmatic approach. The OS reclaims
+                            // resources on process exit.
+                            std::mem::forget(handle);
+                        }
+                        Err(e) => {
+                            eprintln!("⚠️  mDNS failed to start: {e} (discovery disabled, API still works)");
+                        }
+                    }
                 })
             },
         ));
