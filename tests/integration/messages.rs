@@ -490,7 +490,7 @@ fn test_messages_returned_in_chronological_order() {
     assert_eq!(res.status(), Status::Ok);
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 5);
-    for i in 0..5 {
-        assert_eq!(msgs[i]["content"], format!("Message {}", i + 1));
+    for (i, msg) in msgs.iter().enumerate() {
+        assert_eq!(msg["content"], format!("Message {}", i + 1));
     }
 }

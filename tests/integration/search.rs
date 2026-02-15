@@ -339,7 +339,7 @@ fn test_search_combined_filters() {
         .dispatch();
     let body: serde_json::Value = res.into_json().unwrap();
     assert_eq!(body["count"].as_u64().unwrap(), 1);
-    assert_eq!(body["results"][0]["content"].as_str().unwrap().contains("started"), true);
+    assert!(body["results"][0]["content"].as_str().unwrap().contains("started"));
 }
 
 // --- FTS5 Search: Error Handling ---

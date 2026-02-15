@@ -243,7 +243,7 @@ fn test_mentions_include_archived_room_messages() {
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
     let mentions = body["mentions"].as_array().unwrap();
-    assert!(mentions.len() >= 1, "Mention in archived room should be found");
+    assert!(!mentions.is_empty(), "Mention in archived room should be found");
     assert!(mentions.iter().any(|m| m["content"].as_str().unwrap().contains("@targetagent")));
 }
 

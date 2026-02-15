@@ -6,8 +6,7 @@ use crate::common::test_client_with_rate_limits;
 
 #[test]
 fn test_custom_message_rate_limit() {
-    let mut config = RateLimitConfig::default();
-    config.messages_max = 3; // Very low limit for testing
+    let config = RateLimitConfig { messages_max: 3, ..Default::default() }; // Very low limit for testing
     let client = test_client_with_rate_limits(config);
 
     // Create a room
@@ -45,8 +44,7 @@ fn test_custom_message_rate_limit() {
 
 #[test]
 fn test_custom_message_rate_limit_headers() {
-    let mut config = RateLimitConfig::default();
-    config.messages_max = 5;
+    let config = RateLimitConfig { messages_max: 5, ..Default::default() };
     let client = test_client_with_rate_limits(config);
 
     // Create a room
@@ -74,8 +72,7 @@ fn test_custom_message_rate_limit_headers() {
 
 #[test]
 fn test_custom_room_rate_limit() {
-    let mut config = RateLimitConfig::default();
-    config.rooms_max = 2;
+    let config = RateLimitConfig { rooms_max: 2, ..Default::default() };
     let client = test_client_with_rate_limits(config);
 
     // Create 2 rooms (should succeed)
@@ -104,8 +101,7 @@ fn test_custom_room_rate_limit() {
 #[test]
 fn test_custom_file_rate_limit() {
     use base64::Engine;
-    let mut config = RateLimitConfig::default();
-    config.files_max = 2;
+    let config = RateLimitConfig { files_max: 2, ..Default::default() };
     let client = test_client_with_rate_limits(config);
 
     // Create a room
@@ -155,8 +151,7 @@ fn test_custom_file_rate_limit() {
 
 #[test]
 fn test_custom_dm_rate_limit() {
-    let mut config = RateLimitConfig::default();
-    config.dms_max = 2;
+    let config = RateLimitConfig { dms_max: 2, ..Default::default() };
     let client = test_client_with_rate_limits(config);
 
     // Send 2 DMs (should succeed)
@@ -196,8 +191,7 @@ fn test_custom_dm_rate_limit() {
 
 #[test]
 fn test_custom_webhook_rate_limit() {
-    let mut config = RateLimitConfig::default();
-    config.webhooks_max = 2;
+    let config = RateLimitConfig { webhooks_max: 2, ..Default::default() };
     let client = test_client_with_rate_limits(config);
 
     // Create a room and incoming webhook

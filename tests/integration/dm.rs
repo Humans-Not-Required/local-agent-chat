@@ -16,7 +16,7 @@ fn test_send_dm_creates_room() {
     assert_eq!(body["created"], true);
     assert_eq!(body["message"]["sender"], "alice");
     assert_eq!(body["message"]["content"], "Hey Bob!");
-    assert!(body["room_id"].as_str().unwrap().len() > 0);
+    assert!(!body["room_id"].as_str().unwrap().is_empty());
 }
 
 #[test]
