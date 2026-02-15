@@ -15,7 +15,7 @@ pub fn update_read_position(
     body: Json<UpdateReadPosition>,
     db: &State<Db>,
     events: &State<EventBus>,
-) -> Result<Json<ReadPosition>, Status> {
+) -> Result<Json<ReadPosition>, (Status, Json<serde_json::Value>)> {
     let conn = db.conn.lock().unwrap();
 
     // Verify room exists
@@ -29,18 +29,18 @@ pub fn update_read_position(
         .unwrap_or(false);
 
     if !room_exists {
-        return Err(Status::NotFound);
+        return Err((Status::NotFound, Json(serde_json::json!({"error": "Room not found"}))));
     }
 
     // Validate sender
     let sender = body.sender.trim();
     if sender.is_empty() || sender.len() > 100 {
-        return Err(Status::BadRequest);
+        return Err((Status::BadRequest, Json(serde_json::json!({"error": "Sender must be 1-100 characters"}))));
     }
 
     // Validate last_read_seq is positive
     if body.last_read_seq < 0 {
-        return Err(Status::BadRequest);
+        return Err((Status::BadRequest, Json(serde_json::json!({"error": "last_read_seq must be non-negative"}))));
     }
 
     let now = chrono::Utc::now().to_rfc3339();
@@ -55,7 +55,7 @@ pub fn update_read_position(
          WHERE excluded.last_read_seq > read_positions.last_read_seq",
         params![room_id, sender, body.last_read_seq, &now],
     )
-    .map_err(|_| Status::InternalServerError)?;
+    .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Database error"}))))?;
 
     // Read back the actual value (might not have changed if new seq was lower)
     let position = conn
@@ -71,7 +71,7 @@ pub fn update_read_position(
                 })
             },
         )
-        .map_err(|_| Status::InternalServerError)?;
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Database error"}))))?;
 
     // Broadcast the read position update
     events.publish(ChatEvent::ReadPositionUpdated(position.clone()));
@@ -81,7 +81,7 @@ pub fn update_read_position(
 
 /// GET /api/v1/rooms/<room_id>/read — Get all read positions for a room.
 #[get("/api/v1/rooms/<room_id>/read")]
-pub fn get_read_positions(room_id: &str, db: &State<Db>) -> Result<Json<Vec<ReadPosition>>, Status> {
+pub fn get_read_positions(room_id: &str, db: &State<Db>) -> Result<Json<Vec<ReadPosition>>, (Status, Json<serde_json::Value>)> {
     let conn = db.conn.lock().unwrap();
 
     // Verify room exists
@@ -95,14 +95,14 @@ pub fn get_read_positions(room_id: &str, db: &State<Db>) -> Result<Json<Vec<Read
         .unwrap_or(false);
 
     if !room_exists {
-        return Err(Status::NotFound);
+        return Err((Status::NotFound, Json(serde_json::json!({"error": "Room not found"}))));
     }
 
     let mut stmt = conn
         .prepare(
             "SELECT room_id, sender, last_read_seq, updated_at FROM read_positions WHERE room_id = ?1 ORDER BY updated_at DESC",
         )
-        .map_err(|_| Status::InternalServerError)?;
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Database error"}))))?;
 
     let positions: Vec<ReadPosition> = stmt
         .query_map(params![room_id], |row| {
@@ -113,7 +113,7 @@ pub fn get_read_positions(room_id: &str, db: &State<Db>) -> Result<Json<Vec<Read
                 updated_at: row.get(3)?,
             })
         })
-        .map_err(|_| Status::InternalServerError)?
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Database error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -122,10 +122,10 @@ pub fn get_read_positions(room_id: &str, db: &State<Db>) -> Result<Json<Vec<Read
 
 /// GET /api/v1/unread?sender=<name> — Get unread counts across all rooms for a sender.
 #[get("/api/v1/unread?<sender>")]
-pub fn get_unread(sender: &str, db: &State<Db>) -> Result<Json<UnreadResponse>, Status> {
+pub fn get_unread(sender: &str, db: &State<Db>) -> Result<Json<UnreadResponse>, (Status, Json<serde_json::Value>)> {
     let sender = sender.trim();
     if sender.is_empty() {
-        return Err(Status::BadRequest);
+        return Err((Status::BadRequest, Json(serde_json::json!({"error": "Sender parameter is required"}))));
     }
 
     let conn = db.conn.lock().unwrap();
@@ -144,7 +144,7 @@ pub fn get_unread(sender: &str, db: &State<Db>) -> Result<Json<UnreadResponse>, 
              GROUP BY r.id
              ORDER BY r.name",
         )
-        .map_err(|_| Status::InternalServerError)?;
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Database error"}))))?;
 
     let rooms: Vec<UnreadInfo> = stmt
         .query_map(params![sender], |row| {
@@ -156,7 +156,7 @@ pub fn get_unread(sender: &str, db: &State<Db>) -> Result<Json<UnreadResponse>, 
                 latest_seq: row.get(2)?,
             })
         })
-        .map_err(|_| Status::InternalServerError)?
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Database error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 

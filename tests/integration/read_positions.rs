@@ -83,6 +83,8 @@ fn test_read_position_nonexistent_room() {
         .body(r#"{"sender": "alice", "last_read_seq": 1}"#)
         .dispatch();
     assert_eq!(res.status(), Status::NotFound);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("not found"), "Should return JSON error body");
 }
 
 #[test]
@@ -96,6 +98,57 @@ fn test_read_position_empty_sender() {
         .body(r#"{"sender": "  ", "last_read_seq": 1}"#)
         .dispatch();
     assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].is_string(), "Should return JSON error body");
+}
+
+#[test]
+fn test_read_position_negative_seq() {
+    let client = test_client();
+    let (room_id, _) = create_test_room(&client, "read-test-neg-seq");
+
+    let res = client
+        .put(format!("/api/v1/rooms/{}/read", room_id))
+        .header(ContentType::JSON)
+        .body(r#"{"sender": "alice", "last_read_seq": -5}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("non-negative"));
+}
+
+#[test]
+fn test_read_position_sender_too_long() {
+    let client = test_client();
+    let (room_id, _) = create_test_room(&client, "read-test-long-sender");
+
+    let long_sender = "a".repeat(101);
+    let res = client
+        .put(format!("/api/v1/rooms/{}/read", room_id))
+        .header(ContentType::JSON)
+        .body(format!(r#"{{"sender": "{}", "last_read_seq": 1}}"#, long_sender))
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("1-100"));
+}
+
+#[test]
+fn test_get_read_positions_nonexistent_room_json_error() {
+    let client = test_client();
+    let res = client.get("/api/v1/rooms/nonexistent-room/read").dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("not found"), "Should return JSON error body");
+}
+
+#[test]
+fn test_unread_counts_empty_sender_json_error() {
+    let client = test_client();
+    let res = client.get("/api/v1/unread?sender=%20").dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].is_string(), "Should return JSON error body");
 }
 
 #[test]
