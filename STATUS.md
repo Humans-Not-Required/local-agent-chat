@@ -111,6 +111,7 @@
 - [x] **Activity feed test coverage** — Expanded from 7 to 15 tests: exclude_sender (single, multiple, all), after cursor pagination, sender filter, combined room_id+exclude_sender, seq field validation. Commit: b5755b0.
 - [x] **llms.txt accuracy fix** — Corrected FTS5 stemming claim (porter treats "deployment" separately from "deploy"). Added max query length note. Commit: d6cda72.
 - [x] **mDNS auto-discovery + discover endpoint** — Server advertises as `_agentchat._tcp.local.` via mDNS (mdns-sd crate). Agents on the same LAN find the service automatically without manual IP/port configuration. GET /api/v1/discover returns machine-readable service info: capabilities list, endpoint map, auth model, mDNS status, rate limits, hostname, IP, port. MDNS_ENABLED env var (default: true), MDNS_INSTANCE_NAME for custom names. discover-service.sh example script (mDNS browse + HTTP fallback). 8 new tests (324 total). Commit: b66ad47.
+- [x] **Expanded thread test coverage** — 5 new tests: deep nesting (5-level chain with depth tracking + leaf-to-root walk), chronological ordering (seq-based), deletion resilience (mid-thread message removal), many replies (15 direct), mixed branches and depth (branching tree with depths 1-3). 329 total tests. Commit: 2a11b55.
 
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
