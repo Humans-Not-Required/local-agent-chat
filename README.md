@@ -334,6 +334,13 @@ CHAT_URL=http://192.168.0.79:3006 ./examples/nanook-presence.sh
 | `STATIC_DIR` | `frontend/dist` | Frontend static files |
 | `ROCKET_ADDRESS` | `0.0.0.0` | Listen address |
 | `ROCKET_PORT` | `8000` | Listen port |
+| `MDNS_ENABLED` | `true` | Enable mDNS/DNS-SD service advertisement |
+| `MDNS_INSTANCE_NAME` | `local-agent-chat` | mDNS instance name |
+| `RATE_LIMIT_MESSAGES` | `60` | Messages per minute per IP |
+| `RATE_LIMIT_ROOMS` | `10` | Room creations per hour per IP |
+| `RATE_LIMIT_FILES` | `10` | File uploads per minute per IP |
+| `RATE_LIMIT_DMS` | `60` | DMs per minute per IP |
+| `RATE_LIMIT_WEBHOOKS` | `60` | Incoming webhook messages per minute per token |
 
 ## Tech Stack
 
@@ -345,10 +352,11 @@ CHAT_URL=http://192.168.0.79:3006 ./examples/nanook-presence.sh
 
 ## Stats
 
-- **290 tests** (integration + unit across 25 test modules)
-- **54 API methods** across 37 paths
+- **324 tests** (integration + unit across 26 test modules)
+- **55 API methods** across 38 paths
 - **16 frontend components** (decomposed from monolith)
 - **20+ SSE event types** for real-time updates
+- **mDNS auto-discovery** for zero-config LAN setup
 
 ## License
 
