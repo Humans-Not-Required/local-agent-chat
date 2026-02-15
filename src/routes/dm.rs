@@ -1,7 +1,7 @@
 use crate::db::{generate_admin_key, upsert_fts, Db};
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
-use crate::rate_limit::RateLimiter;
+use crate::rate_limit::{RateLimited, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{get, post, State};
@@ -44,7 +44,7 @@ pub fn send_dm(
     rate_limiter: &State<RateLimiter>,
     ip: ClientIp,
     body: Json<SendDm>,
-) -> Result<Json<DmSendResponse>, (Status, Json<serde_json::Value>)> {
+) -> Result<RateLimited<DmSendResponse>, (Status, Json<serde_json::Value>)> {
     // Rate limit
     let rl = rate_limiter.check_with_info(&format!("send_dm:{}", ip.0), 60, 60);
     if !rl.allowed {
@@ -156,11 +156,14 @@ pub fn send_dm(
     // Publish SSE event
     events.publish(ChatEvent::NewMessage(message.clone()));
 
-    Ok(Json(DmSendResponse {
-        message,
-        room_id,
-        created,
-    }))
+    Ok(RateLimited::new(
+        Json(DmSendResponse {
+            message,
+            room_id,
+            created,
+        }),
+        rl,
+    ))
 }
 
 /// List DM conversations for a sender

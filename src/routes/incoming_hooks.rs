@@ -311,7 +311,7 @@ pub fn post_via_hook(
     _ip: ClientIp,
     token: &str,
     body: Json<IncomingWebhookMessage>,
-) -> Result<Json<Message>, (Status, Json<serde_json::Value>)> {
+) -> Result<crate::rate_limit::RateLimited<Message>, (Status, Json<serde_json::Value>)> {
     // Rate limit per token (60/min, same as regular messages)
     let rl = rate_limiter.check_with_info(&format!("hook:{}", token), 60, 60);
     if !rl.allowed {
@@ -437,5 +437,5 @@ pub fn post_via_hook(
     // Publish event for SSE and outgoing webhooks
     events.publish(ChatEvent::NewMessage(msg.clone()));
 
-    Ok(Json(msg))
+    Ok(crate::rate_limit::RateLimited::new(Json(msg), rl))
 }

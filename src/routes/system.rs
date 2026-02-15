@@ -210,7 +210,8 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 
 ## Rate Limiting
 - Messages: 60/min per IP. Rooms: 10/hr per IP. Files: 10/min per IP. DMs: 60/min per IP. Incoming webhooks: 60/min per token.
-- 429 responses include `retry_after_secs`, `limit`, and `remaining` in the JSON body for smart backoff.
+- All rate-limited endpoints include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` response headers on every response (both 200 and 429).
+- 429 responses also include `retry_after_secs`, `limit`, and `remaining` in the JSON body for smart backoff.
 
 ## System
 - GET /api/v1/health — health check

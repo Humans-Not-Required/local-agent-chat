@@ -1,7 +1,7 @@
 use crate::db::Db;
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
-use crate::rate_limit::RateLimiter;
+use crate::rate_limit::{RateLimited, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, State};
@@ -20,7 +20,7 @@ pub fn upload_file(
     ip: ClientIp,
     room_id: &str,
     body: Json<FileUpload>,
-) -> Result<Json<FileInfo>, (Status, Json<serde_json::Value>)> {
+) -> Result<RateLimited<FileInfo>, (Status, Json<serde_json::Value>)> {
     use base64::Engine;
 
     let rl = rate_limiter.check_with_info(&format!("upload_file:{}", ip.0), 10, 60);
@@ -124,7 +124,7 @@ pub fn upload_file(
 
     events.publish(ChatEvent::FileUploaded(file_info.clone()));
 
-    Ok(Json(file_info))
+    Ok(RateLimited::new(Json(file_info), rl))
 }
 
 #[get("/api/v1/files/<file_id>")]

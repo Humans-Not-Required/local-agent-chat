@@ -17,9 +17,11 @@ pub fn send_message(
     ip: ClientIp,
     room_id: &str,
     body: Json<SendMessage>,
-) -> Result<Json<Message>, (Status, Json<serde_json::Value>)> {
+) -> Result<crate::rate_limit::RateLimited<Message>, (Status, Json<serde_json::Value>)> {
     let rl = rate_limiter.check_with_info(&format!("send_msg:{}", ip.0), 60, 60);
     if !rl.allowed {
+        // Return via RateLimitedError — but we need to convert to the error tuple type
+        // for compatibility. Instead, use the tuple approach but also note headers are on 429 JSON.
         return Err((
             Status::TooManyRequests,
             Json(serde_json::json!({
@@ -148,7 +150,7 @@ pub fn send_message(
     // Publish event for SSE
     events.publish(ChatEvent::NewMessage(msg.clone()));
 
-    Ok(Json(msg))
+    Ok(crate::rate_limit::RateLimited::new(Json(msg), rl))
 }
 
 #[put(

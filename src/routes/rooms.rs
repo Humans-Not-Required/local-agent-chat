@@ -1,7 +1,7 @@
 use crate::db::{generate_admin_key, Db};
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
-use crate::rate_limit::RateLimiter;
+use crate::rate_limit::{RateLimited, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, put, State};
@@ -15,7 +15,7 @@ pub fn create_room(
     rate_limiter: &State<RateLimiter>,
     ip: ClientIp,
     body: Json<CreateRoom>,
-) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+) -> Result<RateLimited<serde_json::Value>, (Status, Json<serde_json::Value>)> {
     let rl = rate_limiter.check_with_info(&format!("create_room:{}", ip.0), 10, 3600);
     if !rl.allowed {
         return Err((
@@ -46,7 +46,7 @@ pub fn create_room(
         "INSERT INTO rooms (id, name, description, created_by, created_at, updated_at, admin_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![&id, &name, &body.description, &body.created_by, &now, &now, &admin_key],
     ) {
-        Ok(_) => Ok(Json(serde_json::json!({
+        Ok(_) => Ok(RateLimited::new(Json(serde_json::json!({
             "id": id,
             "name": name,
             "description": body.description,
@@ -54,7 +54,7 @@ pub fn create_room(
             "admin_key": admin_key,
             "created_at": now,
             "updated_at": now
-        }))),
+        })), rl)),
         Err(e) if e.to_string().contains("UNIQUE") => Err((
             Status::Conflict,
             Json(serde_json::json!({"error": format!("Room '{}' already exists", name)})),
