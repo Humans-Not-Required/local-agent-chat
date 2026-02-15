@@ -1,7 +1,7 @@
 use crate::db::Db;
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
-use crate::rate_limit::RateLimiter;
+use crate::rate_limit::{RateLimitConfig, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, put, State};
@@ -14,18 +14,17 @@ pub fn send_message(
     db: &State<Db>,
     events: &State<EventBus>,
     rate_limiter: &State<RateLimiter>,
+    rate_config: &State<RateLimitConfig>,
     ip: ClientIp,
     room_id: &str,
     body: Json<SendMessage>,
 ) -> Result<crate::rate_limit::RateLimited<Message>, (Status, Json<serde_json::Value>)> {
-    let rl = rate_limiter.check_with_info(&format!("send_msg:{}", ip.0), 60, 60);
+    let rl = rate_limiter.check_with_info(&format!("send_msg:{}", ip.0), rate_config.messages_max, rate_config.messages_window_secs);
     if !rl.allowed {
-        // Return via RateLimitedError — but we need to convert to the error tuple type
-        // for compatibility. Instead, use the tuple approach but also note headers are on 429 JSON.
         return Err((
             Status::TooManyRequests,
             Json(serde_json::json!({
-                "error": "Rate limited: max 60 messages per minute",
+                "error": format!("Rate limited: max {} messages per minute", rate_config.messages_max),
                 "retry_after_secs": rl.retry_after_secs,
                 "limit": rl.limit,
                 "remaining": 0

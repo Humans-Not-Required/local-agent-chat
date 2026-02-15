@@ -1,7 +1,7 @@
 use crate::db::{generate_admin_key, upsert_fts, Db};
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
-use crate::rate_limit::{RateLimited, RateLimiter};
+use crate::rate_limit::{RateLimitConfig, RateLimited, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{get, post, State};
@@ -42,16 +42,17 @@ pub fn send_dm(
     db: &State<Db>,
     events: &State<EventBus>,
     rate_limiter: &State<RateLimiter>,
+    rate_config: &State<RateLimitConfig>,
     ip: ClientIp,
     body: Json<SendDm>,
 ) -> Result<RateLimited<DmSendResponse>, (Status, Json<serde_json::Value>)> {
     // Rate limit
-    let rl = rate_limiter.check_with_info(&format!("send_dm:{}", ip.0), 60, 60);
+    let rl = rate_limiter.check_with_info(&format!("send_dm:{}", ip.0), rate_config.dms_max, rate_config.dms_window_secs);
     if !rl.allowed {
         return Err((
             Status::TooManyRequests,
             Json(serde_json::json!({
-                "error": "Rate limited: max 60 DMs per minute",
+                "error": format!("Rate limited: max {} DMs per minute", rate_config.dms_max),
                 "retry_after_secs": rl.retry_after_secs,
                 "limit": rl.limit,
                 "remaining": 0

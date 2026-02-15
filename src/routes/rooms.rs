@@ -1,7 +1,7 @@
 use crate::db::{generate_admin_key, Db};
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
-use crate::rate_limit::{RateLimited, RateLimiter};
+use crate::rate_limit::{RateLimitConfig, RateLimited, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, put, State};
@@ -13,15 +13,16 @@ use super::{AdminKey, ClientIp};
 pub fn create_room(
     db: &State<Db>,
     rate_limiter: &State<RateLimiter>,
+    rate_config: &State<RateLimitConfig>,
     ip: ClientIp,
     body: Json<CreateRoom>,
 ) -> Result<RateLimited<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let rl = rate_limiter.check_with_info(&format!("create_room:{}", ip.0), 10, 3600);
+    let rl = rate_limiter.check_with_info(&format!("create_room:{}", ip.0), rate_config.rooms_max, rate_config.rooms_window_secs);
     if !rl.allowed {
         return Err((
             Status::TooManyRequests,
             Json(serde_json::json!({
-                "error": "Rate limited: max 10 rooms per hour",
+                "error": format!("Rate limited: max {} rooms per hour", rate_config.rooms_max),
                 "retry_after_secs": rl.retry_after_secs,
                 "limit": rl.limit,
                 "remaining": 0

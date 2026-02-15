@@ -30,3 +30,4 @@ mod mentions;
 mod archiving;
 mod incoming_webhooks;
 mod validation;
+mod rate_limit_config;

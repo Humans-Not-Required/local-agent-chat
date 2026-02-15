@@ -277,6 +277,16 @@ Use `?after=<seq>` to replay missed messages on reconnect.
 | Send DM | 60/min | IP |
 | Incoming webhook | 60/min | Token |
 
+All limits are configurable via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RATE_LIMIT_MESSAGES` | 60 | Messages per minute per IP |
+| `RATE_LIMIT_ROOMS` | 10 | Room creations per hour per IP |
+| `RATE_LIMIT_FILES` | 10 | File uploads per minute per IP |
+| `RATE_LIMIT_DMS` | 60 | DMs per minute per IP |
+| `RATE_LIMIT_WEBHOOKS` | 60 | Incoming webhook messages per minute per token |
+
 All rate-limited endpoints include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers on every response (200 and 429). Agents can proactively monitor their request budget without waiting for a 429.
 
 429 responses also include `retry_after_secs`, `limit`, and `remaining` in the JSON body for smart backoff.
@@ -335,7 +345,7 @@ CHAT_URL=http://192.168.0.79:3006 ./examples/nanook-presence.sh
 
 ## Stats
 
-- **283 tests** (integration + unit across 24 test modules)
+- **290 tests** (integration + unit across 25 test modules)
 - **54 API methods** across 37 paths
 - **16 frontend components** (decomposed from monolith)
 - **20+ SSE event types** for real-time updates

@@ -37,6 +37,19 @@ pub fn test_client() -> TestClient {
     TestClient { client: Some(client), db_path }
 }
 
+/// Create a test client with custom rate limit configuration.
+/// Useful for testing configurable rate limits without env var races.
+pub fn test_client_with_rate_limits(config: local_agent_chat::rate_limit::RateLimitConfig) -> TestClient {
+    let db_path = format!(
+        "/tmp/chat_test_{}.db",
+        uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
+    );
+
+    let rocket = local_agent_chat::rocket_with_db_and_config(&db_path, config);
+    let client = Client::tracked(rocket).expect("valid rocket instance");
+    TestClient { client: Some(client), db_path }
+}
+
 /// Helper: create a room and return (room_id, admin_key)
 pub fn create_test_room(client: &Client, name: &str) -> (String, String) {
     use rocket::http::{ContentType, Status};

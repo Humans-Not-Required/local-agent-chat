@@ -1,7 +1,7 @@
 use crate::db::{self, Db};
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
-use crate::rate_limit::RateLimiter;
+use crate::rate_limit::{RateLimitConfig, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, put, State};
@@ -308,17 +308,18 @@ pub fn post_via_hook(
     db: &State<Db>,
     events: &State<EventBus>,
     rate_limiter: &State<RateLimiter>,
+    rate_config: &State<RateLimitConfig>,
     _ip: ClientIp,
     token: &str,
     body: Json<IncomingWebhookMessage>,
 ) -> Result<crate::rate_limit::RateLimited<Message>, (Status, Json<serde_json::Value>)> {
-    // Rate limit per token (60/min, same as regular messages)
-    let rl = rate_limiter.check_with_info(&format!("hook:{}", token), 60, 60);
+    // Rate limit per token
+    let rl = rate_limiter.check_with_info(&format!("hook:{}", token), rate_config.webhooks_max, rate_config.webhooks_window_secs);
     if !rl.allowed {
         return Err((
             Status::TooManyRequests,
             Json(serde_json::json!({
-                "error": "Rate limited: max 60 messages per minute per webhook",
+                "error": format!("Rate limited: max {} messages per minute per webhook", rate_config.webhooks_max),
                 "retry_after_secs": rl.retry_after_secs,
                 "limit": rl.limit,
                 "remaining": 0

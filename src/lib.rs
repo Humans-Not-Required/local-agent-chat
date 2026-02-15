@@ -7,7 +7,7 @@ pub mod webhooks;
 
 use db::Db;
 use events::EventBus;
-use rate_limit::RateLimiter;
+use rate_limit::{RateLimitConfig, RateLimiter};
 use rocket::fs::{FileServer, Options};
 use rocket_cors::CorsOptions;
 use routes::{PresenceTracker, TypingTracker};
@@ -19,7 +19,16 @@ pub fn rocket() -> rocket::Rocket<rocket::Build> {
     rocket_with_db(&db_path)
 }
 
+pub fn rocket_with_db_and_config(db_path: &str, rate_config: RateLimitConfig) -> rocket::Rocket<rocket::Build> {
+    build_rocket(db_path, rate_config)
+}
+
 pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
+    let rate_limit_config = RateLimitConfig::from_env();
+    build_rocket(db_path, rate_limit_config)
+}
+
+fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Rocket<rocket::Build> {
     // Ensure data directory exists
     if let Some(parent) = std::path::Path::new(db_path).parent() {
         std::fs::create_dir_all(parent).ok();
@@ -52,6 +61,7 @@ pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
     let mut build = rocket::custom(figment)
         .manage(db)
         .manage(events)
+        .manage(rate_limit_config)
         .manage(rate_limiter)
         .manage(typing_tracker)
         .manage(presence_tracker)

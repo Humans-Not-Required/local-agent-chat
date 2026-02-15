@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -6,6 +7,84 @@ use rocket::http::Header;
 use rocket::response::{self, Responder, Response};
 use rocket::serde::json::Json;
 use rocket::Request;
+
+/// Configurable rate limit values. All read from environment variables with sensible defaults.
+///
+/// Environment variables:
+/// - `RATE_LIMIT_MESSAGES` — Max messages per minute per IP (default: 60)
+/// - `RATE_LIMIT_ROOMS` — Max room creations per hour per IP (default: 10)
+/// - `RATE_LIMIT_FILES` — Max file uploads per minute per IP (default: 10)
+/// - `RATE_LIMIT_DMS` — Max DMs per minute per IP (default: 60)
+/// - `RATE_LIMIT_WEBHOOKS` — Max incoming webhook messages per minute per token (default: 60)
+pub struct RateLimitConfig {
+    /// Messages per minute per IP
+    pub messages_max: usize,
+    pub messages_window_secs: u64,
+    /// Room creations per hour per IP
+    pub rooms_max: usize,
+    pub rooms_window_secs: u64,
+    /// File uploads per minute per IP
+    pub files_max: usize,
+    pub files_window_secs: u64,
+    /// DMs per minute per IP
+    pub dms_max: usize,
+    pub dms_window_secs: u64,
+    /// Incoming webhook messages per minute per token
+    pub webhooks_max: usize,
+    pub webhooks_window_secs: u64,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            messages_max: 60,
+            messages_window_secs: 60,
+            rooms_max: 10,
+            rooms_window_secs: 3600,
+            files_max: 10,
+            files_window_secs: 60,
+            dms_max: 60,
+            dms_window_secs: 60,
+            webhooks_max: 60,
+            webhooks_window_secs: 60,
+        }
+    }
+}
+
+impl RateLimitConfig {
+    /// Create a new RateLimitConfig from environment variables, with defaults.
+    pub fn from_env() -> Self {
+        let mut config = Self::default();
+
+        if let Ok(val) = env::var("RATE_LIMIT_MESSAGES")
+            && let Ok(n) = val.parse::<usize>()
+        {
+            config.messages_max = n;
+        }
+        if let Ok(val) = env::var("RATE_LIMIT_ROOMS")
+            && let Ok(n) = val.parse::<usize>()
+        {
+            config.rooms_max = n;
+        }
+        if let Ok(val) = env::var("RATE_LIMIT_FILES")
+            && let Ok(n) = val.parse::<usize>()
+        {
+            config.files_max = n;
+        }
+        if let Ok(val) = env::var("RATE_LIMIT_DMS")
+            && let Ok(n) = val.parse::<usize>()
+        {
+            config.dms_max = n;
+        }
+        if let Ok(val) = env::var("RATE_LIMIT_WEBHOOKS")
+            && let Ok(n) = val.parse::<usize>()
+        {
+            config.webhooks_max = n;
+        }
+
+        config
+    }
+}
 
 pub struct RateLimiter {
     limits: Mutex<HashMap<String, Vec<Instant>>>,

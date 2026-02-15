@@ -1,7 +1,7 @@
 use crate::db::Db;
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
-use crate::rate_limit::{RateLimited, RateLimiter};
+use crate::rate_limit::{RateLimitConfig, RateLimited, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, State};
@@ -17,18 +17,19 @@ pub fn upload_file(
     db: &State<Db>,
     events: &State<EventBus>,
     rate_limiter: &State<RateLimiter>,
+    rate_config: &State<RateLimitConfig>,
     ip: ClientIp,
     room_id: &str,
     body: Json<FileUpload>,
 ) -> Result<RateLimited<FileInfo>, (Status, Json<serde_json::Value>)> {
     use base64::Engine;
 
-    let rl = rate_limiter.check_with_info(&format!("upload_file:{}", ip.0), 10, 60);
+    let rl = rate_limiter.check_with_info(&format!("upload_file:{}", ip.0), rate_config.files_max, rate_config.files_window_secs);
     if !rl.allowed {
         return Err((
             Status::TooManyRequests,
             Json(serde_json::json!({
-                "error": "Rate limited: max 10 file uploads per minute",
+                "error": format!("Rate limited: max {} file uploads per minute", rate_config.files_max),
                 "retry_after_secs": rl.retry_after_secs,
                 "limit": rl.limit,
                 "remaining": 0
