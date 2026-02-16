@@ -689,3 +689,294 @@ fn test_read_positions_cascade_on_room_delete() {
     let rooms = body["rooms"].as_array().unwrap();
     assert!(!rooms.iter().any(|r| r["room_id"] == room_id));
 }
+
+// --- DM + Files cross-feature ---
+
+#[test]
+fn test_dm_file_upload() {
+    let client = test_client();
+
+    // Create a DM conversation
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"Sending you a file"}"#)
+        .dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let room_id = body["room_id"].as_str().unwrap();
+
+    // Upload a file to the DM room
+    use base64::Engine;
+    let file_data = base64::engine::general_purpose::STANDARD.encode(b"test file content");
+    let upload_body = serde_json::json!({
+        "sender": "alice",
+        "filename": "test.txt",
+        "content_type": "text/plain",
+        "data": file_data
+    });
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/files"))
+        .header(ContentType::JSON)
+        .body(upload_body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // List files in DM room
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/files"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let files: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0]["filename"], "test.txt");
+}
+
+// --- DM + Participants cross-feature ---
+
+#[test]
+fn test_dm_participants_list() {
+    let client = test_client();
+
+    // Create DM and exchange messages
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"Hey Bob"}"#)
+        .dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let room_id = body["room_id"].as_str().unwrap();
+
+    client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"bob","recipient":"alice","content":"Hey Alice"}"#)
+        .dispatch();
+
+    // Participants list should show both
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/participants"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let participants: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(participants.len(), 2);
+    let names: Vec<&str> = participants.iter().map(|p| p["sender"].as_str().unwrap()).collect();
+    assert!(names.contains(&"alice"));
+    assert!(names.contains(&"bob"));
+}
+
+// --- DM + Activity feed cross-feature ---
+
+#[test]
+fn test_dm_messages_in_activity_feed() {
+    let client = test_client();
+
+    // Send a DM
+    client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"DM in activity feed"}"#)
+        .dispatch();
+
+    // Activity feed should include DM messages
+    let res = client.get("/api/v1/activity?limit=50").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    let events = body["events"].as_array().unwrap();
+    let dm_msg = events.iter().find(|e| e["content"] == "DM in activity feed");
+    assert!(dm_msg.is_some(), "DM message should appear in activity feed");
+}
+
+// --- Thread + Read positions cross-feature ---
+
+#[test]
+fn test_thread_replies_counted_in_unread() {
+    let client = test_client();
+    let (room_id, _) = create_test_room(&client, "thread-unread");
+
+    // Send root message
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","content":"Thread root"}"#)
+        .dispatch();
+    let root: serde_json::Value = res.into_json().unwrap();
+    let root_id = root["id"].as_str().unwrap();
+    let root_seq = root["seq"].as_i64().unwrap();
+
+    // Bob reads up to root message
+    client
+        .put(format!("/api/v1/rooms/{room_id}/read"))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({"sender": "bob", "last_read_seq": root_seq}).to_string())
+        .dispatch();
+
+    // Alice sends 2 replies in the thread
+    for i in 1..=2 {
+        client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(
+                r#"{{"sender":"alice","content":"Reply {i}","reply_to":"{root_id}"}}"#
+            ))
+            .dispatch();
+    }
+
+    // Bob should have 2 unread (the thread replies)
+    let res = client.get("/api/v1/unread?sender=bob").dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["total_unread"], 2);
+}
+
+// --- Thread + Mentions cross-feature ---
+
+#[test]
+fn test_mention_in_thread_reply() {
+    let client = test_client();
+    let (room_id, _) = create_test_room(&client, "thread-mention");
+
+    // Root message
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","content":"Starting a discussion"}"#)
+        .dispatch();
+    let root: serde_json::Value = res.into_json().unwrap();
+    let root_id = root["id"].as_str().unwrap();
+
+    // Reply that mentions someone
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(format!(
+            r#"{{"sender":"bob","content":"Hey @charlie check this thread","reply_to":"{root_id}"}}"#
+        ))
+        .dispatch();
+
+    // Charlie should have a mention from the thread reply
+    let res = client.get("/api/v1/mentions?target=charlie").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["count"].as_i64().unwrap() >= 1);
+    let mentions = body["mentions"].as_array().unwrap();
+    let thread_mention = mentions.iter().find(|m| m["content"].as_str().unwrap().contains("@charlie"));
+    assert!(thread_mention.is_some());
+}
+
+// --- DM + Read positions cross-feature ---
+
+#[test]
+fn test_dm_read_positions() {
+    let client = test_client();
+
+    // Send a DM
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"Read this"}"#)
+        .dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let room_id = body["room_id"].as_str().unwrap();
+    let msg_seq = body["message"]["seq"].as_i64().unwrap();
+
+    // Bob marks as read
+    let res = client
+        .put(format!("/api/v1/rooms/{room_id}/read"))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({"sender": "bob", "last_read_seq": msg_seq}).to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // Now DM list should show 0 unread for bob
+    let res = client.get("/api/v1/dm?sender=bob").dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let convos = body["conversations"].as_array().unwrap();
+    assert_eq!(convos[0]["unread_count"], 0);
+}
+
+// --- Pins + Thread cross-feature ---
+
+#[test]
+fn test_pin_message_with_replies() {
+    let client = test_client();
+    let (room_id, admin_key) = create_test_room(&client, "pin-thread");
+
+    // Root message
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","content":"Pin-worthy discussion"}"#)
+        .dispatch();
+    let root: serde_json::Value = res.into_json().unwrap();
+    let root_id = root["id"].as_str().unwrap();
+
+    // Add replies
+    client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(format!(
+            r#"{{"sender":"bob","content":"Great point!","reply_to":"{root_id}"}}"#
+        ))
+        .dispatch();
+
+    // Pin the root message
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages/{root_id}/pin"))
+        .header(Header::new("Authorization", format!("Bearer {}", admin_key)))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // Thread should still work for pinned message
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages/{root_id}/thread"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let thread: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(thread["total_replies"], 1);
+    // Pinned message info should be on the root
+    assert!(thread["root"]["pinned_at"].is_string());
+}
+
+// --- Edit + Thread view cross-feature ---
+
+#[test]
+fn test_thread_shows_edited_content() {
+    let client = test_client();
+    let (room_id, _) = create_test_room(&client, "thread-edit-view");
+
+    // Root
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","content":"Original root"}"#)
+        .dispatch();
+    let root: serde_json::Value = res.into_json().unwrap();
+    let root_id = root["id"].as_str().unwrap();
+
+    // Reply
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/messages"))
+        .header(ContentType::JSON)
+        .body(format!(
+            r#"{{"sender":"bob","content":"Original reply","reply_to":"{root_id}"}}"#
+        ))
+        .dispatch();
+    let reply: serde_json::Value = res.into_json().unwrap();
+    let reply_id = reply["id"].as_str().unwrap();
+
+    // Edit the reply
+    client
+        .put(format!("/api/v1/rooms/{room_id}/messages/{reply_id}"))
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"bob","content":"Edited reply content"}"#)
+        .dispatch();
+
+    // Thread view should show the edited content
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages/{root_id}/thread"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let thread: serde_json::Value = res.into_json().unwrap();
+    let replies = thread["replies"].as_array().unwrap();
+    assert_eq!(replies[0]["content"], "Edited reply content");
+    assert!(replies[0]["edited_at"].is_string());
+}

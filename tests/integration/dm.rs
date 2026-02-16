@@ -1,5 +1,5 @@
 use rocket::http::{ContentType, Status};
-use crate::common::test_client;
+use crate::common::{test_client, create_test_room};
 
 // --- Direct Messages ---
 
@@ -310,4 +310,194 @@ fn test_dm_search_included() {
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
     assert!(body["count"].as_i64().unwrap() >= 1);
+}
+
+#[test]
+fn test_dm_missing_recipient_field() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","content":"Hello"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::UnprocessableEntity);
+}
+
+#[test]
+fn test_dm_empty_recipient_rejected() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"","content":"Hello"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_dm_list_no_conversations() {
+    let client = test_client();
+    // List for a user who has no DM conversations
+    let res = client.get("/api/v1/dm?sender=nobody").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["sender"], "nobody");
+    assert_eq!(body["count"], 0);
+    assert!(body["conversations"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn test_dm_get_regular_room_returns_404() {
+    let client = test_client();
+    // Create a regular (non-DM) room
+    let (room_id, _admin_key) = create_test_room(&client, "regular-room");
+
+    // GET /dm/{room_id} should 404 because it's not a DM room
+    let res = client.get(format!("/api/v1/dm/{}", room_id)).dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert!(body["error"].as_str().unwrap().contains("not found"));
+}
+
+#[test]
+fn test_dm_conversation_ordering_by_last_message() {
+    let client = test_client();
+
+    // Create DM with bob (first)
+    client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"Old message"}"#)
+        .dispatch();
+
+    // Create DM with charlie (second, more recent)
+    client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"charlie","content":"New message"}"#)
+        .dispatch();
+
+    // List should show charlie's conversation first (most recent)
+    let res = client.get("/api/v1/dm?sender=alice").dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let convos = body["conversations"].as_array().unwrap();
+    assert_eq!(convos.len(), 2);
+    assert_eq!(convos[0]["other_participant"], "charlie");
+    assert_eq!(convos[1]["other_participant"], "bob");
+}
+
+#[test]
+fn test_dm_recipient_too_long() {
+    let client = test_client();
+    let long_name = "x".repeat(101);
+    let body = serde_json::json!({
+        "sender": "alice",
+        "recipient": long_name,
+        "content": "Hello"
+    });
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_dm_whitespace_sender_trimmed() {
+    let client = test_client();
+    // Sender with whitespace — should be trimmed
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"  alice  ","recipient":"bob","content":"Trimmed sender"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["message"]["sender"], "alice");
+}
+
+#[test]
+fn test_dm_whitespace_only_sender_rejected() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"   ","recipient":"bob","content":"Hello"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_dm_whitespace_only_recipient_rejected() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"   ","content":"Hello"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::BadRequest);
+}
+
+#[test]
+fn test_dm_multiple_conversations_unread_tracking() {
+    let client = test_client();
+
+    // alice → bob (2 messages)
+    client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"Msg 1"}"#)
+        .dispatch();
+    client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"Msg 2"}"#)
+        .dispatch();
+
+    // alice → charlie (1 message)
+    client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"charlie","content":"Hey Charlie"}"#)
+        .dispatch();
+
+    // bob sees 2 unread from alice, charlie sees 1
+    let res = client.get("/api/v1/dm?sender=bob").dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let convos = body["conversations"].as_array().unwrap();
+    assert_eq!(convos.len(), 1);
+    assert_eq!(convos[0]["unread_count"], 2);
+
+    let res = client.get("/api/v1/dm?sender=charlie").dispatch();
+    let body: serde_json::Value = res.into_json().unwrap();
+    let convos = body["conversations"].as_array().unwrap();
+    assert_eq!(convos.len(), 1);
+    assert_eq!(convos[0]["unread_count"], 1);
+}
+
+#[test]
+fn test_dm_conversation_detail_fields() {
+    let client = test_client();
+    let res = client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"Detailed DM"}"#)
+        .dispatch();
+    let send_body: serde_json::Value = res.into_json().unwrap();
+    let room_id = send_body["room_id"].as_str().unwrap();
+
+    let res = client.get(format!("/api/v1/dm/{}", room_id)).dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+
+    // Verify all expected fields are present
+    assert_eq!(body["room_type"], "dm");
+    assert_eq!(body["message_count"], 1);
+    assert!(body["id"].is_string());
+    assert!(body["name"].as_str().unwrap().starts_with("dm:"));
+    assert!(body["created_at"].is_string());
+    assert!(body["updated_at"].is_string());
+    assert!(body["created_by"].is_string());
+    assert!(body["last_activity"].is_string());
 }

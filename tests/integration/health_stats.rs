@@ -118,3 +118,82 @@ fn test_stats_update_after_message_deletion() {
     let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
     assert_eq!(msgs.len(), 2);
 }
+
+// --- Health response fields ---
+
+#[test]
+fn test_health_response_fields() {
+    let client = test_client();
+    let res = client.get("/api/v1/health").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["status"], "ok");
+    assert_eq!(body["service"], "local-agent-chat");
+    assert!(body["version"].is_string());
+}
+
+// --- Stats reflect DM messages ---
+
+#[test]
+fn test_stats_include_dm_messages() {
+    let client = test_client();
+
+    // Initial stats
+    let res = client.get("/api/v1/stats").dispatch();
+    let before: serde_json::Value = res.into_json().unwrap();
+    let msgs_before = before["messages"].as_i64().unwrap();
+
+    // Send a DM
+    client
+        .post("/api/v1/dm")
+        .header(ContentType::JSON)
+        .body(r#"{"sender":"alice","recipient":"bob","content":"DM counted in stats"}"#)
+        .dispatch();
+
+    // Stats should increase
+    let res = client.get("/api/v1/stats").dispatch();
+    let after: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(after["messages"].as_i64().unwrap(), msgs_before + 1);
+}
+
+// --- Stats response structure ---
+
+#[test]
+fn test_stats_response_structure() {
+    let client = test_client();
+
+    let res = client.get("/api/v1/stats").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+
+    // Verify expected fields exist
+    assert!(body["rooms"].is_number());
+    assert!(body["messages"].is_number());
+    assert!(body["by_sender_type"].is_object());
+    assert!(body["active_senders_1h"].is_number());
+    assert!(body["active_by_type_1h"].is_object());
+}
+
+// --- Stats with multiple rooms ---
+
+#[test]
+fn test_stats_count_multiple_rooms() {
+    let client = test_client();
+
+    let res = client.get("/api/v1/stats").dispatch();
+    let before: serde_json::Value = res.into_json().unwrap();
+    let rooms_before = before["rooms"].as_i64().unwrap();
+
+    // Create 3 new rooms
+    for i in 1..=3 {
+        client
+            .post("/api/v1/rooms")
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"name":"stats-room-{i}"}}"#))
+            .dispatch();
+    }
+
+    let res = client.get("/api/v1/stats").dispatch();
+    let after: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(after["rooms"].as_i64().unwrap(), rooms_before + 3);
+}
