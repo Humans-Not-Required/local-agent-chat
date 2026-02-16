@@ -135,6 +135,8 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,
+                routes::skills_index,
+                routes::skills_skill_md,
             ],
         )
         .attach(rocket::fairing::AdHoc::on_liftoff(
