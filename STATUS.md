@@ -118,6 +118,8 @@
 - [x] **Clippy warnings cleanup** — Resolved all 10 clippy warnings in test suite: loop indexing, assert_eq with bool, length comparisons, struct field reassignment. Zero warnings. Commit: 77afb8d.
 - [x] **Consistent JSON error responses** — `read_positions.rs` was the only route file returning bare `Status` errors; now returns `(Status, Json)` with descriptive messages matching all other routes. 8 new tests: negative seq validation, sender length validation, JSON error body verification, llms.txt section coverage, OpenAPI path count, health version field, SPA fallback. 401 total tests. Commit: 0f87a74.
 
+- [x] **Well-known skills discovery** — `GET /.well-known/skills/index.json` (Cloudflare RFC discovery index) and `GET /.well-known/skills/local-agent-chat/SKILL.md` (agentskills.io format integration guide). SKILL.md includes quick start, core patterns (cursor pagination, DMs, unread tracking, mentions, profiles, file sharing, webhooks), auth model, rate limits table, SSE event types, and gotchas. Progressive disclosure: index → SKILL.md → llms.txt/openapi.json. Compatible with Claude Code, Codex, VS Code Copilot, Cursor, and other skills-compatible agents. Updated llms.txt and OpenAPI spec (42 paths). 4 new tests (405 total). Commit: 5c38cdd.
+
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
 - [x] Mobile viewport fix - 100dvh + -webkit-fill-available + overflow:hidden ✅ (2026-02-10)
