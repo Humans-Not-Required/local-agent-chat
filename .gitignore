@@ -6,3 +6,4 @@
 .env
 node_modules/
 frontend/dist/
+sdk/python/__pycache__/
