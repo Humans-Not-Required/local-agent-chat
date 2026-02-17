@@ -13,7 +13,7 @@ import traceback
 
 # Import from same directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agent_chat import AgentChat, NotFoundError, ConflictError, ChatError
+from agent_chat import AgentChat, NotFoundError, ConflictError, ChatError, AuthError
 
 
 BASE_URL = os.environ.get("CHAT_URL", "http://192.168.0.79:3006")
@@ -716,14 +716,12 @@ def main():
         except ChatError:
             pass
 
-    @test("room reactions empty for new room")
+    @test("room reactions structure is valid")
     def _():
-        tmp_room = chat.create_room(
-            f"sdk-empty-{int(time.time()) % 100000}", "temp"
-        )
-        r = chat.get_room_reactions(tmp_room["name"])
-        assert isinstance(r, dict) or isinstance(r, list)
-        chat.delete_room(tmp_room["name"], tmp_room["admin_key"])
+        r = chat.get_room_reactions(room_name)
+        assert isinstance(r, dict) or isinstance(r, list), f"Unexpected type: {type(r)}"
+        if isinstance(r, dict):
+            assert "reactions" in r, f"Missing 'reactions' key: {list(r.keys())}"
 
     @test("stats includes comprehensive fields")
     def _():
@@ -740,6 +738,407 @@ def main():
         act = chat.activity(limit=10, exclude_sender=SENDER)
         for msg in act:
             assert msg.get("sender") != SENDER
+
+    # ── Forward Pagination (after=seq) ──────────────────────────────────
+    print("\nForward Pagination:")
+
+    @test("get messages with after=seq returns newer messages")
+    def _():
+        m1 = chat.send(room_name, "pagination-first")
+        m2 = chat.send(room_name, "pagination-second")
+        m3 = chat.send(room_name, "pagination-third")
+        msgs = chat.get_messages(room_name, after=m1["seq"], limit=10)
+        seqs = [m["seq"] for m in msgs]
+        assert m2["seq"] in seqs, f"Expected seq {m2['seq']} in {seqs}"
+        assert m3["seq"] in seqs
+        assert m1["seq"] not in seqs, "after= should exclude the given seq"
+
+    @test("forward and backward pagination are complementary")
+    def _():
+        msgs_all = chat.get_messages(room_name, limit=50)
+        if len(msgs_all) >= 4:
+            mid = msgs_all[len(msgs_all) // 2]
+            older = chat.get_messages(room_name, before_seq=mid["seq"], limit=50)
+            newer = chat.get_messages(room_name, after=mid["seq"], limit=50)
+            older_seqs = {m["seq"] for m in older}
+            newer_seqs = {m["seq"] for m in newer}
+            assert mid["seq"] not in older_seqs
+            assert mid["seq"] not in newer_seqs
+
+    # ── Room Name Update ────────────────────────────────────────────────
+    print("\nRoom Name Update:")
+
+    @test("update room name")
+    def _():
+        new_name = f"sdk-renamed-{int(time.time()) % 100000}"
+        r = chat.update_room(room_name, room_data["admin_key"], name=new_name)
+        assert r["name"] == new_name
+        # Verify the room is accessible by new name
+        r2 = chat.get_room(new_name)
+        assert r2["id"] == room_data["id"]
+        # Rename back for subsequent tests
+        chat.update_room(new_name, room_data["admin_key"], name=room_name)
+
+    @test("update room name to duplicate raises ConflictError")
+    def _():
+        # Try to rename our room to "general" (always exists)
+        try:
+            chat.update_room(room_name, room_data["admin_key"], name="general")
+            assert False, "Should raise ConflictError"
+        except ConflictError:
+            pass
+
+    # ── Search Advanced Filters ─────────────────────────────────────────
+    print("\nSearch Advanced Filters:")
+
+    @test("search with sender_type filter")
+    def _():
+        results = chat.search("from", sender_type="agent")
+        for r in results.get("results", []):
+            assert r.get("sender_type") == "agent"
+
+    @test("search cursor pagination with after param")
+    def _():
+        r1 = chat.search("from", room=room_name, limit=2)
+        if r1.get("has_more") and r1["results"]:
+            last_seq = r1["results"][-1].get("seq")
+            if last_seq:
+                r2 = chat.search("from", room=room_name, limit=2, before_seq=last_seq)
+                if r2["results"]:
+                    for res in r2["results"]:
+                        assert res["seq"] < last_seq
+
+    # ── Activity Advanced Filters ───────────────────────────────────────
+    print("\nActivity Advanced Filters:")
+
+    @test("activity with sender_type filter")
+    def _():
+        act = chat.activity(sender_type="agent", limit=5)
+        # All returned messages should be from agents
+        for msg in act:
+            assert msg.get("sender_type") == "agent", f"Expected agent, got {msg.get('sender_type')}"
+
+    @test("activity with sender filter")
+    def _():
+        act = chat.activity(sender=SENDER, limit=5)
+        for msg in act:
+            assert msg.get("sender") == SENDER
+
+    @test("activity with after cursor")
+    def _():
+        act1 = chat.activity(limit=3)
+        if len(act1) >= 2:
+            last_seq = act1[-1].get("seq")
+            if last_seq:
+                act2 = chat.activity(after=last_seq, limit=3)
+                # Messages after the cursor should be newer
+                for msg in act2:
+                    assert msg.get("seq", 0) > last_seq
+
+    # ── Multiple Reactions ──────────────────────────────────────────────
+    print("\nMultiple Reactions:")
+
+    @test("multiple different emojis on same message")
+    def _():
+        m = chat.send(room_name, "react variety test")
+        chat.react(room_name, m["id"], "👍")
+        chat.react(room_name, m["id"], "🎉")
+        chat.react(room_name, m["id"], "🔥")
+        r = chat.get_reactions(room_name, m["id"])
+        # Reactions are in r["reactions"] list
+        emojis = [x["emoji"] for x in r.get("reactions", [])]
+        assert "👍" in emojis, f"Expected 👍 in {emojis}"
+        assert "🎉" in emojis, f"Expected 🎉 in {emojis}"
+        assert "🔥" in emojis, f"Expected 🔥 in {emojis}"
+
+    @test("explicit unreact removes reaction")
+    def _():
+        m = chat.send(room_name, "unreact test")
+        chat.react(room_name, m["id"], "🧪")
+        chat.unreact(room_name, m["id"], "🧪")
+        r = chat.get_reactions(room_name, m["id"])
+        # 🧪 should not be present or sender should not be in its senders
+        for rx in r.get("reactions", []):
+            if rx["emoji"] == "🧪":
+                assert SENDER not in rx["senders"], "Sender should be removed after unreact"
+
+    @test("multi-sender reactions")
+    def _():
+        m = chat.send(room_name, "multi-sender react test")
+        other = AgentChat(BASE_URL, sender="reactor-agent")
+        chat.react(room_name, m["id"], "👍")
+        other.react(room_name, m["id"], "👍")
+        r = chat.get_reactions(room_name, m["id"])
+        for rx in r.get("reactions", []):
+            if rx["emoji"] == "👍":
+                assert rx["count"] >= 2, f"Expected count >= 2, got {rx['count']}"
+                assert SENDER in rx["senders"]
+                assert "reactor-agent" in rx["senders"]
+
+    # ── Profile with All Fields ─────────────────────────────────────────
+    print("\nProfile All Fields:")
+
+    @test("set profile with all optional fields")
+    def _():
+        p = chat.set_profile(
+            display_name="Full Profile Test",
+            bio="Testing all fields",
+            avatar_url="https://example.com/avatar.png",
+            status_text="testing",
+            metadata={"custom_key": "custom_value"},
+        )
+        assert p["display_name"] == "Full Profile Test"
+        assert p["bio"] == "Testing all fields"
+        assert p.get("avatar_url") == "https://example.com/avatar.png"
+        assert p.get("status_text") == "testing"
+
+    @test("profile partial update preserves other fields")
+    def _():
+        # Update only status_text
+        p = chat.set_profile(status_text="new status")
+        assert p.get("status_text") == "new status"
+        # display_name should still be set
+        p2 = chat.get_profile(SENDER)
+        assert p2["display_name"] == "Full Profile Test"
+
+    @test("cleanup profile")
+    def _():
+        chat.delete_profile()
+
+    # ── DM with Metadata ────────────────────────────────────────────────
+    print("\nDM with Metadata:")
+
+    @test("send DM with metadata")
+    def _():
+        dm = chat.send_dm("dm-meta-recipient", "DM with metadata", metadata={"priority": "urgent"})
+        assert dm["message"]["content"] == "DM with metadata"
+        # Check metadata came through
+        assert dm["message"].get("metadata", {}).get("priority") == "urgent"
+
+    # ── Auth Error Handling ─────────────────────────────────────────────
+    print("\nAuth Error Handling:")
+
+    @test("wrong admin key raises AuthError")
+    def _():
+        try:
+            chat.update_room(room_name, "wrong-key-12345", description="nope")
+            assert False, "Should raise AuthError"
+        except AuthError:
+            pass
+
+    @test("delete room with wrong key raises AuthError")
+    def _():
+        try:
+            chat.delete_room(room_name, "wrong-key-12345")
+            assert False, "Should raise AuthError"
+        except AuthError:
+            pass
+
+    @test("pin without admin key raises AuthError")
+    def _():
+        m = chat.send(room_name, "pin auth test")
+        try:
+            chat.pin(room_name, m["id"], "bad-admin-key")
+            assert False, "Should raise AuthError"
+        except AuthError:
+            pass
+
+    # ── Mentions with Room Filter ───────────────────────────────────────
+    print("\nMentions with Room Filter:")
+
+    @test("get mentions filtered by room")
+    def _():
+        other = AgentChat(BASE_URL, sender="mention-room-filter")
+        other.send(room_name, f"Hey @{SENDER} in this room")
+        time.sleep(0.5)
+        mentions = chat.get_mentions(room=room_name)
+        for m in mentions:
+            assert m.get("room_id") == room_data["id"]
+
+    # ── Room Last Message Preview ───────────────────────────────────────
+    print("\nRoom Last Message Preview:")
+
+    @test("room list includes last_message_preview")
+    def _():
+        chat.send(room_name, "This is the latest message for preview test")
+        rooms = chat.list_rooms()
+        target = [r for r in rooms if r["name"] == room_name]
+        assert len(target) == 1
+        assert "last_message_preview" in target[0]
+        assert "preview" in target[0]["last_message_preview"].lower() or \
+               "latest" in target[0]["last_message_preview"].lower()
+
+    @test("room list sorted by activity")
+    def _():
+        # Send a message to our test room to make it the most recently active
+        chat.send(room_name, "activity sort verification")
+        rooms = chat.list_rooms()
+        if len(rooms) >= 2:
+            # Our test room should be first (most recent activity)
+            assert rooms[0]["name"] == room_name, \
+                f"Expected {room_name} first, got {rooms[0]['name']}"
+
+    # ── File Admin Delete ───────────────────────────────────────────────
+    print("\nFile Admin Delete:")
+
+    @test("admin can delete another user's file")
+    def _():
+        other = AgentChat(BASE_URL, sender="file-uploader")
+        f = other.upload_file(room_name, b"admin delete test", "admin-del.txt", "text/plain")
+        # Delete with admin key (not the uploader)
+        chat.delete_file(room_name, f["id"], admin_key=room_data["admin_key"])
+        try:
+            chat.get_file_info(f["id"])
+            assert False, "File should be deleted"
+        except NotFoundError:
+            pass
+
+    # ── Unicode & Special Characters ────────────────────────────────────
+    print("\nUnicode & Special Characters:")
+
+    @test("send message with unicode and emoji")
+    def _():
+        content = "日本語テスト 🎌 Ünïcödé ñ à 🧪💻"
+        m = chat.send(room_name, content)
+        assert m["content"] == content, f"Send mismatch: {repr(m['content'])} != {repr(content)}"
+        # Verify retrieval by fetching messages after this seq
+        msgs = chat.get_messages(room_name, after=m["seq"] - 1, limit=5)
+        found = [msg for msg in msgs if msg["id"] == m["id"]]
+        assert len(found) == 1, f"Message not found in retrieval"
+        assert found[0]["content"] == content, f"Retrieval mismatch"
+
+    @test("search finds unicode content")
+    def _():
+        chat.send(room_name, "Prüfung mit Ünïcödé text")
+        time.sleep(0.3)  # FTS indexing
+        results = chat.search("Prüfung", room=room_name)
+        assert len(results.get("results", [])) >= 1
+
+    @test("profile with unicode display name")
+    def _():
+        p = chat.set_profile(display_name="测试Agent 🤖", bio="Unicode bio ñ")
+        assert p["display_name"] == "测试Agent 🤖"
+        chat.delete_profile()
+
+    # ── Export with Metadata ────────────────────────────────────────────
+    print("\nExport with Metadata:")
+
+    @test("export JSON with include_metadata")
+    def _():
+        chat.send(room_name, "metadata export test", metadata={"tag": "export"})
+        data = chat.export(room_name, format="json", include_metadata=True)
+        if isinstance(data, str):
+            data = json.loads(data)
+        msgs = data.get("messages", [])
+        # At least one message should have metadata
+        has_meta = any(m.get("metadata") for m in msgs)
+        assert has_meta, "Expected at least one message with metadata when include_metadata=True"
+
+    # ── Retention with max_age ──────────────────────────────────────────
+    print("\nRetention max_age:")
+
+    @test("create room with max_message_age_hours")
+    def _():
+        age_room = chat.create_room(
+            f"sdk-age-{int(time.time()) % 100000}",
+            "Age retention test",
+            max_message_age_hours=24,
+        )
+        r = chat.get_room(age_room["name"])
+        assert r.get("max_message_age_hours") == 24
+        chat.delete_room(age_room["name"], age_room["admin_key"])
+
+    # ── Incoming Webhook Edge Cases ─────────────────────────────────────
+    print("\nIncoming Webhook Edge Cases:")
+
+    @test("post via webhook with default sender")
+    def _():
+        token = incoming_wh["token"]
+        msg = chat.post_via_webhook(token, "No explicit sender")
+        # Should use webhook default or no sender
+        assert msg["content"] == "No explicit sender"
+
+    @test("post via webhook with sender_type")
+    def _():
+        token = incoming_wh["token"]
+        msg = chat.post_via_webhook(
+            token, "Typed webhook msg", sender="typed-hook", sender_type="human"
+        )
+        assert msg.get("sender_type") == "human"
+
+    # ── Read Position Workflow ──────────────────────────────────────────
+    print("\nRead Position Workflow:")
+
+    @test("mark_read reduces unread count")
+    def _():
+        # Send a message to generate unread
+        m = chat.send(room_name, "unread tracking test")
+        # Mark as read up to this seq
+        chat.mark_read(room_name, m["seq"])
+        after = chat.get_unread()
+        # Find our room in the rooms list
+        rooms_list = after.get("rooms", [])
+        room_entry = [r for r in rooms_list if r["room_id"] == room_data["id"]]
+        if room_entry:
+            assert room_entry[0]["unread_count"] == 0, \
+                f"Expected 0 unread after mark_read, got {room_entry[0]['unread_count']}"
+
+    # ── Thread Depth ────────────────────────────────────────────────────
+    print("\nThread Depth:")
+
+    @test("nested thread replies")
+    def _():
+        root = chat.send(room_name, "thread root")
+        r1 = chat.reply(room_name, root["id"], "reply 1")
+        r2 = chat.reply(room_name, root["id"], "reply 2")
+        r3 = chat.reply(room_name, root["id"], "reply 3")
+        thread = chat.get_thread(room_name, root["id"])
+        assert thread["total_replies"] >= 3
+        assert len(thread["replies"]) >= 3
+
+    # ── Message Ordering ────────────────────────────────────────────────
+    print("\nMessage Ordering:")
+
+    @test("messages are chronologically ordered")
+    def _():
+        msgs = chat.get_messages(room_name, limit=20)
+        for i in range(1, len(msgs)):
+            assert msgs[i]["seq"] > msgs[i - 1]["seq"], \
+                f"Messages not ordered: seq {msgs[i-1]['seq']} before {msgs[i]['seq']}"
+
+    @test("messages with before_seq are reverse-chronological input, chronological output")
+    def _():
+        msgs = chat.get_messages(room_name, limit=50)
+        if len(msgs) >= 5:
+            pivot = msgs[-1]["seq"]
+            older = chat.get_messages(room_name, before_seq=pivot, limit=5)
+            for m in older:
+                assert m["seq"] < pivot
+
+    # ── Stats Comprehensive Fields ──────────────────────────────────────
+    print("\nStats Comprehensive:")
+
+    @test("stats has comprehensive fields")
+    def _():
+        s = chat.stats()
+        for field in ["messages", "rooms"]:
+            assert field in s, f"Missing stats field: {field}"
+        # Messages and rooms should be positive
+        assert s["messages"] > 0
+        assert s["rooms"] > 0
+
+    @test("health response fields")
+    def _():
+        h = chat.health()
+        assert h.get("status") == "ok"
+        assert "version" in h
+
+    @test("discover response structure")
+    def _():
+        d = chat.discover()
+        assert "capabilities" in d
+        assert "endpoints" in d
+        assert isinstance(d["capabilities"], list) or isinstance(d["capabilities"], dict)
 
     # ── Cleanup ─────────────────────────────────────────────────────────
     print("\nCleanup:")
