@@ -75,7 +75,13 @@ cargo run
 ### Webhooks
 - **Outgoing webhooks** — HTTP POST notifications for room events (optional HMAC-SHA256 signing)
 - **Incoming webhooks** — Post messages into rooms via simple token URL (no auth needed, token IS the auth)
+- **Webhook delivery retry** — 3 attempts with exponential backoff (2s, 4s delays), full audit log
 - **Webhook management UI** — Full CRUD in Room Settings modal
+
+### Data Management
+- **Message export** — Export room history as JSON (structured), Markdown (human-readable), or CSV (tabular)
+- **Message retention** — Per-room auto-pruning by count (`max_messages`) and/or age (`max_message_age_hours`)
+- **Pinned message exemption** — Pinned messages always survive retention pruning
 
 ### Frontend
 - **React dark theme UI** — Responsive chat interface matching HNR design system
@@ -88,7 +94,7 @@ cargo run
 ## Usage
 
 ```bash
-# List rooms (a #general room is auto-created)
+# List rooms (#general auto-created on startup)
 curl http://localhost:3006/api/v1/rooms
 
 # Send a message
@@ -123,6 +129,17 @@ curl -X PUT http://localhost:3006/api/v1/profiles/my-agent \
   -H "Content-Type: application/json" \
   -d '{"display_name": "My Agent 🤖", "sender_type": "agent", "bio": "A helpful bot"}'
 
+# Export room history as Markdown
+curl "http://localhost:3006/api/v1/rooms/{room_id}/export?format=markdown" -o chat-export.md
+
+# Export as CSV with filters
+curl "http://localhost:3006/api/v1/rooms/{room_id}/export?format=csv&sender=my-agent&limit=1000"
+
+# Create a room with message retention (auto-prune)
+curl -X POST http://localhost:3006/api/v1/rooms \
+  -H "Content-Type: application/json" \
+  -d '{"name": "logs", "description": "Build logs", "max_messages": 1000, "max_message_age_hours": 168}'
+
 # Create a new room (returns admin_key — save this!)
 curl -X POST http://localhost:3006/api/v1/rooms \
   -H "Content-Type: application/json" \
@@ -140,11 +157,17 @@ curl -X POST http://localhost:3006/api/v1/rooms/{room_id}/files \
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/v1/health` | Health check |
-| GET | `/api/v1/stats` | Global stats (rooms, messages, files) |
+| GET | `/api/v1/stats` | Comprehensive operational stats (rooms, DMs, files, profiles, webhooks, 24h metrics) |
 | GET | `/api/v1/activity` | Cross-room activity feed (`?after=`, `?sender=`) |
 | GET | `/api/v1/search` | Full-text search (`?q=`, `?room_id=`, `?sender=`) |
 | GET | `/api/v1/presence` | Global online users across all rooms |
 | GET | `/api/v1/unread` | Cross-room unread counts (`?sender=`) |
+
+### Export & Retention
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/rooms/{id}/export` | Export messages (`?format=json\|markdown\|csv`, `?sender=`, `?after=`, `?before=`, `?limit=`) |
+| POST | `/api/v1/admin/retention/run` | Manually trigger retention sweep (returns pruning details) |
 
 ### Rooms
 | Method | Endpoint | Description |
@@ -227,6 +250,7 @@ curl -X POST http://localhost:3006/api/v1/rooms/{room_id}/files \
 | GET | `/api/v1/rooms/{id}/webhooks` | List outgoing webhooks (admin key) |
 | PUT | `/api/v1/rooms/{id}/webhooks/{wh_id}` | Update webhook (admin key) |
 | DELETE | `/api/v1/rooms/{id}/webhooks/{wh_id}` | Delete webhook (admin key) |
+| GET | `/api/v1/rooms/{id}/webhooks/{wh_id}/deliveries` | Webhook delivery audit log (`?event=`, `?status=`, `?limit=`) |
 | POST | `/api/v1/rooms/{id}/incoming-webhooks` | Create incoming webhook (admin key) |
 | GET | `/api/v1/rooms/{id}/incoming-webhooks` | List incoming webhooks (admin key) |
 | PUT | `/api/v1/rooms/{id}/incoming-webhooks/{wh_id}` | Update incoming webhook |
@@ -367,11 +391,12 @@ CHAT_URL=http://192.168.0.79:3006 ./examples/nanook-presence.sh
 
 ## Stats
 
-- **401 tests** (integration + unit across 28 test modules)
-- **58 API methods** across 40 paths
+- **466 tests** (integration + unit across 32 test modules)
+- **63 API methods** across 45 paths
 - **25 frontend components** + 4 custom hooks (decomposed from monolith)
-- **20+ SSE event types** for real-time updates
+- **22+ SSE event types** for real-time updates
 - **mDNS auto-discovery** for zero-config LAN setup
+- **Security hardened** — mutex poison recovery, no error info leakage, zero runtime panics
 
 ## License
 
