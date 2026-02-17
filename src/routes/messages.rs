@@ -144,6 +144,7 @@ pub fn send_message(
         seq,
         pinned_at: None,
         pinned_by: None,
+        edit_count: 0,
     };
 
     // Publish event for SSE
@@ -204,7 +205,22 @@ pub fn edit_message(
         ));
     }
 
+    // Save previous content to edit history
+    let previous_content: String = conn
+        .query_row(
+            "SELECT content FROM messages WHERE id = ?1",
+            params![message_id],
+            |r| r.get(0),
+        )
+        .unwrap_or_default();
+
     let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO message_edits (id, message_id, previous_content, edited_at, editor) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![uuid::Uuid::new_v4().to_string(), message_id, &previous_content, &now, &sender],
+    ).ok();
+
     let metadata = body.metadata.clone();
 
     // Update content and edited_at; optionally update metadata
@@ -240,7 +256,9 @@ pub fn edit_message(
     // Fetch the updated message
     let msg = conn
         .query_row(
-            "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE id = ?1",
+            "SELECT m.id, m.room_id, m.sender, m.content, m.metadata, m.created_at, m.edited_at, m.reply_to, m.sender_type, m.seq, m.pinned_at, m.pinned_by, \
+             (SELECT COUNT(*) FROM message_edits WHERE message_id = m.id) \
+             FROM messages m WHERE m.id = ?1",
             params![message_id],
             |row| {
                 let metadata_str: String = row.get(4)?;
@@ -257,6 +275,7 @@ pub fn edit_message(
                     seq: row.get(9)?,
                     pinned_at: row.get(10)?,
                     pinned_by: row.get(11)?,
+                    edit_count: row.get(12)?,
                 })
             },
         )
@@ -393,7 +412,8 @@ pub fn get_messages(
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
     let mut sql = String::from(
-        "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1",
+        "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by, \
+         (SELECT COUNT(*) FROM message_edits WHERE message_id = messages.id) FROM messages WHERE room_id = ?1",
     );
     let mut param_values: Vec<String> = vec![room_id.to_string()];
     let mut idx = 2;
@@ -487,6 +507,7 @@ pub fn get_messages(
                 seq: row.get(9)?,
                 pinned_at: row.get(10)?,
                 pinned_by: row.get(11)?,
+                edit_count: row.get(12)?,
             })
         })
         .map_err(|_e| {
@@ -504,4 +525,62 @@ pub fn get_messages(
     }
 
     Ok(Json(messages))
+}
+
+#[get("/api/v1/rooms/<room_id>/messages/<message_id>/edits")]
+pub fn get_edit_history(
+    db: &State<Db>,
+    room_id: &str,
+    message_id: &str,
+) -> Result<Json<EditHistoryResponse>, (Status, Json<serde_json::Value>)> {
+    let conn = db.conn();
+
+    // Verify the message exists in this room and get current content
+    let current_content: String = conn
+        .query_row(
+            "SELECT content FROM messages WHERE id = ?1 AND room_id = ?2",
+            params![message_id, room_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| {
+            (
+                Status::NotFound,
+                Json(serde_json::json!({"error": "Message not found in this room"})),
+            )
+        })?;
+
+    // Fetch edit history (chronological: oldest edit first)
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, message_id, previous_content, edited_at, editor \
+             FROM message_edits WHERE message_id = ?1 ORDER BY edited_at ASC",
+        )
+        .map_err(|_| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": "Internal server error"})),
+            )
+        })?;
+
+    let edits: Vec<MessageEdit> = match stmt.query_map(params![message_id], |row| {
+        Ok(MessageEdit {
+            id: row.get(0)?,
+            message_id: row.get(1)?,
+            previous_content: row.get(2)?,
+            edited_at: row.get(3)?,
+            editor: row.get(4)?,
+        })
+    }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    };
+
+    let edit_count = edits.len() as i64;
+
+    Ok(Json(EditHistoryResponse {
+        message_id: message_id.to_string(),
+        current_content,
+        edits,
+        edit_count,
+    }))
 }

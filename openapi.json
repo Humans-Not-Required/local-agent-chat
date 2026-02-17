@@ -2444,6 +2444,60 @@
         }
       }
     },
+    "/rooms/{room_id}/messages/{message_id}/edits": {
+      "get": {
+        "summary": "Get message edit history",
+        "description": "Returns the full edit history for a message, including all previous content versions in chronological order (oldest edit first). Also returns the current content and total edit count.",
+        "operationId": "getEditHistory",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Edit history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message_id": { "type": "string" },
+                    "current_content": { "type": "string" },
+                    "edit_count": { "type": "integer" },
+                    "edits": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "message_id": { "type": "string" },
+                          "previous_content": { "type": "string" },
+                          "edited_at": { "type": "string", "format": "date-time" },
+                          "editor": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Message not found in this room"
+          }
+        }
+      }
+    },
     "/rooms/{room_id}/messages/{message_id}/thread": {
       "get": {
         "summary": "Get message thread",

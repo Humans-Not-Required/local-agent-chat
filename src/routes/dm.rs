@@ -152,6 +152,7 @@ pub fn send_dm(
         seq: next_seq,
         pinned_at: None,
         pinned_by: None,
+        edit_count: 0,
     };
 
     // Publish SSE event

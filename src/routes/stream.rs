@@ -71,6 +71,7 @@ pub fn message_stream(
                     seq: row.get(9)?,
                     pinned_at: row.get(10)?,
                     pinned_by: row.get(11)?,
+                    edit_count: 0,
                 })
             })
             .ok()
@@ -104,6 +105,7 @@ pub fn message_stream(
                     seq: row.get(9)?,
                     pinned_at: row.get(10)?,
                     pinned_by: row.get(11)?,
+                    edit_count: 0,
                 })
             })
             .ok()

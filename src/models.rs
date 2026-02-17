@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn is_zero(v: &i64) -> bool {
+    *v == 0
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Room {
     pub id: String,
@@ -53,6 +57,8 @@ pub struct Message {
     pub pinned_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pinned_by: Option<String>,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub edit_count: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,6 +117,23 @@ pub struct EditMessage {
     pub content: String,
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct MessageEdit {
+    pub id: String,
+    pub message_id: String,
+    pub previous_content: String,
+    pub edited_at: String,
+    pub editor: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EditHistoryResponse {
+    pub message_id: String,
+    pub current_content: String,
+    pub edits: Vec<MessageEdit>,
+    pub edit_count: i64,
 }
 
 #[derive(Debug, Deserialize)]

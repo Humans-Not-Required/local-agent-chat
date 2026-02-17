@@ -433,6 +433,7 @@ pub fn post_via_hook(
         seq,
         pinned_at: None,
         pinned_by: None,
+        edit_count: 0,
     };
 
     // Publish event for SSE and outgoing webhooks

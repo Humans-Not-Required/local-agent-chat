@@ -270,6 +270,19 @@ impl Db {
         )
         .expect("Failed to create bookmarks table");
 
+        // Message edit history table
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS message_edits (
+                id TEXT PRIMARY KEY,
+                message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                previous_content TEXT NOT NULL,
+                edited_at TEXT NOT NULL,
+                editor TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_message_edits_message_id ON message_edits(message_id, edited_at);",
+        )
+        .expect("Failed to create message_edits table");
+
         // Add retention columns for room-level message pruning
         conn.execute_batch("ALTER TABLE rooms ADD COLUMN max_messages INTEGER;")
             .ok();

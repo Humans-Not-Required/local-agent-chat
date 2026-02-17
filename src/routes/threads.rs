@@ -126,6 +126,7 @@ fn fetch_message(
                 seq: row.get(9)?,
                 pinned_at: row.get(10)?,
                 pinned_by: row.get(11)?,
+                edit_count: 0,
             })
         },
     )
@@ -163,6 +164,7 @@ fn fetch_all_room_messages(
             seq: row.get(9)?,
             pinned_at: row.get(10)?,
             pinned_by: row.get(11)?,
+            edit_count: 0,
         })
     }) {
         Ok(rows) => rows.filter_map(|r| r.ok()).collect(),

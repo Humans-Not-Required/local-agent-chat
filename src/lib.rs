@@ -86,6 +86,7 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                 routes::delete_room,
                 routes::send_message,
                 routes::edit_message,
+                routes::get_edit_history,
                 routes::delete_message,
                 routes::get_messages,
                 routes::activity_feed,
