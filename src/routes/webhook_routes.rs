@@ -1,5 +1,6 @@
 use crate::db::Db;
 use crate::models::*;
+use rocket::form::FromForm;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, put, State};
@@ -7,16 +8,13 @@ use rusqlite::params;
 
 use super::AdminKey;
 
-#[post("/api/v1/rooms/<room_id>/webhooks", format = "json", data = "<body>")]
-pub fn create_webhook(
-    db: &State<Db>,
+/// Helper to verify room exists and admin key matches.
+fn verify_room_admin(
+    db: &Db,
     room_id: &str,
-    admin: AdminKey,
-    body: Json<CreateWebhook>,
-) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+    admin: &AdminKey,
+) -> Result<(), (Status, Json<serde_json::Value>)> {
     let conn = db.conn();
-
-    // Verify room exists and admin key matches
     let stored_key: Option<String> = conn
         .query_row(
             "SELECT admin_key FROM rooms WHERE id = ?1",
@@ -31,14 +29,23 @@ pub fn create_webhook(
         })?;
 
     match stored_key {
-        Some(ref key) if key == &admin.0 => {}
-        _ => {
-            return Err((
-                Status::Forbidden,
-                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
-            ));
-        }
+        Some(ref key) if key == &admin.0 => Ok(()),
+        _ => Err((
+            Status::Forbidden,
+            Json(serde_json::json!({"error": "Invalid admin key for this room"})),
+        )),
     }
+}
+
+#[post("/api/v1/rooms/<room_id>/webhooks", format = "json", data = "<body>")]
+pub fn create_webhook(
+    db: &State<Db>,
+    room_id: &str,
+    admin: AdminKey,
+    body: Json<CreateWebhook>,
+) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+    verify_room_admin(db, room_id, &admin)?;
+    let conn = db.conn();
 
     // Validate URL
     let url = body.url.trim().to_string();
@@ -114,31 +121,8 @@ pub fn list_webhooks(
     room_id: &str,
     admin: AdminKey,
 ) -> Result<Json<Vec<Webhook>>, (Status, Json<serde_json::Value>)> {
+    verify_room_admin(db, room_id, &admin)?;
     let conn = db.conn();
-
-    // Verify room exists and admin key matches
-    let stored_key: Option<String> = conn
-        .query_row(
-            "SELECT admin_key FROM rooms WHERE id = ?1",
-            params![room_id],
-            |r| r.get(0),
-        )
-        .map_err(|_| {
-            (
-                Status::NotFound,
-                Json(serde_json::json!({"error": "Room not found"})),
-            )
-        })?;
-
-    match stored_key {
-        Some(ref key) if key == &admin.0 => {}
-        _ => {
-            return Err((
-                Status::Forbidden,
-                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
-            ));
-        }
-    }
 
     let mut stmt = conn
         .prepare(
@@ -177,31 +161,8 @@ pub fn update_webhook(
     admin: AdminKey,
     body: Json<UpdateWebhook>,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+    verify_room_admin(db, room_id, &admin)?;
     let conn = db.conn();
-
-    // Verify room exists and admin key matches
-    let stored_key: Option<String> = conn
-        .query_row(
-            "SELECT admin_key FROM rooms WHERE id = ?1",
-            params![room_id],
-            |r| r.get(0),
-        )
-        .map_err(|_| {
-            (
-                Status::NotFound,
-                Json(serde_json::json!({"error": "Room not found"})),
-            )
-        })?;
-
-    match stored_key {
-        Some(ref key) if key == &admin.0 => {}
-        _ => {
-            return Err((
-                Status::Forbidden,
-                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
-            ));
-        }
-    }
 
     // Verify webhook exists in this room
     let exists: bool = conn
@@ -290,31 +251,8 @@ pub fn delete_webhook(
     webhook_id: &str,
     admin: AdminKey,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
+    verify_room_admin(db, room_id, &admin)?;
     let conn = db.conn();
-
-    // Verify room exists and admin key matches
-    let stored_key: Option<String> = conn
-        .query_row(
-            "SELECT admin_key FROM rooms WHERE id = ?1",
-            params![room_id],
-            |r| r.get(0),
-        )
-        .map_err(|_| {
-            (
-                Status::NotFound,
-                Json(serde_json::json!({"error": "Room not found"})),
-            )
-        })?;
-
-    match stored_key {
-        Some(ref key) if key == &admin.0 => {}
-        _ => {
-            return Err((
-                Status::Forbidden,
-                Json(serde_json::json!({"error": "Invalid admin key for this room"})),
-            ));
-        }
-    }
 
     let deleted = conn
         .execute(
@@ -333,4 +271,104 @@ pub fn delete_webhook(
     Ok(Json(
         serde_json::json!({"deleted": true, "id": webhook_id}),
     ))
+}
+
+#[derive(Debug, FromForm)]
+pub struct DeliveryQuery {
+    pub limit: Option<i64>,
+    pub after: Option<String>,
+    pub event: Option<String>,
+    pub status: Option<String>,
+}
+
+#[get("/api/v1/rooms/<room_id>/webhooks/<webhook_id>/deliveries?<query..>")]
+pub fn get_webhook_deliveries(
+    db: &State<Db>,
+    room_id: &str,
+    webhook_id: &str,
+    admin: AdminKey,
+    query: DeliveryQuery,
+) -> Result<Json<Vec<WebhookDeliveryLog>>, (Status, Json<serde_json::Value>)> {
+    verify_room_admin(db, room_id, &admin)?;
+    let conn = db.conn();
+
+    // Verify webhook exists in this room
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM webhooks WHERE id = ?1 AND room_id = ?2",
+            params![webhook_id, room_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !exists {
+        return Err((
+            Status::NotFound,
+            Json(serde_json::json!({"error": "Webhook not found"})),
+        ));
+    }
+
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+
+    let mut sql = String::from(
+        "SELECT id, delivery_group, webhook_id, event, url, attempt, status, status_code, error_message, response_time_ms, created_at FROM webhook_deliveries WHERE webhook_id = ?1",
+    );
+    let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(webhook_id.to_string())];
+    let mut idx = 2;
+
+    if let Some(ref after_cursor) = query.after {
+        sql.push_str(&format!(" AND created_at < ?{}", idx));
+        param_values.push(Box::new(after_cursor.clone()));
+        idx += 1;
+    }
+    if let Some(ref ev) = query.event {
+        sql.push_str(&format!(" AND event = ?{}", idx));
+        param_values.push(Box::new(ev.clone()));
+        idx += 1;
+    }
+    if let Some(ref st) = query.status {
+        sql.push_str(&format!(" AND status = ?{}", idx));
+        param_values.push(Box::new(st.clone()));
+        idx += 1;
+    }
+
+    sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", idx));
+    param_values.push(Box::new(limit));
+
+    let param_refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|v| v.as_ref()).collect();
+
+    let mut stmt = conn.prepare(&sql).map_err(|_| {
+        (
+            Status::InternalServerError,
+            Json(serde_json::json!({"error": "Internal server error"})),
+        )
+    })?;
+
+    let deliveries: Vec<WebhookDeliveryLog> = stmt
+        .query_map(param_refs.as_slice(), |row| {
+            Ok(WebhookDeliveryLog {
+                id: row.get(0)?,
+                delivery_group: row.get(1)?,
+                webhook_id: row.get(2)?,
+                event: row.get(3)?,
+                url: row.get(4)?,
+                attempt: row.get(5)?,
+                status: row.get(6)?,
+                status_code: row.get(7)?,
+                error_message: row.get(8)?,
+                response_time_ms: row.get(9)?,
+                created_at: row.get(10)?,
+            })
+        })
+        .map_err(|_| {
+            (
+                Status::InternalServerError,
+                Json(serde_json::json!({"error": "Internal server error"})),
+            )
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(Json(deliveries))
 }

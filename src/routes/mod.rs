@@ -45,7 +45,7 @@ pub use system::{
     spa_fallback, stats, too_many_requests,
 };
 pub use typing::notify_typing;
-pub use webhook_routes::{create_webhook, delete_webhook, list_webhooks, update_webhook};
+pub use webhook_routes::{create_webhook, delete_webhook, get_webhook_deliveries, list_webhooks, update_webhook};
 pub use incoming_hooks::{
     create_incoming_webhook, delete_incoming_webhook, list_incoming_webhooks,
     post_via_hook, update_incoming_webhook,

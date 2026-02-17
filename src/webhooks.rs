@@ -1,32 +1,45 @@
 use crate::events::ChatEvent;
-use crate::models::WebhookDelivery;
+use crate::models::WebhookPayload;
 use hmac::{Hmac, Mac};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use sha2::Sha256;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Spawns a background task that subscribes to the EventBus and delivers webhooks.
-pub fn spawn_dispatcher(
-    mut receiver: broadcast::Receiver<ChatEvent>,
-    db_path: String,
-) {
-    tokio::spawn(async move {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
-            .build()
-            .expect("Failed to create HTTP client");
+/// Maximum retry attempts for webhook delivery.
+const MAX_ATTEMPTS: u32 = 3;
 
-        // Open a separate DB connection for the webhook dispatcher
-        let conn = Arc::new(Mutex::new(
-            Connection::open(&db_path).expect("Webhook dispatcher: failed to open DB"),
-        ));
-        conn.lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
-            .ok();
+/// Backoff durations between retries (attempt 2 waits 2s, attempt 3 waits 4s).
+const RETRY_BACKOFFS_MS: [u64; 2] = [2000, 4000];
+
+/// Spawns a background task that subscribes to the EventBus and delivers webhooks.
+pub fn spawn_dispatcher(mut receiver: broadcast::Receiver<ChatEvent>, db_path: String) {
+    tokio::spawn(async move {
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("⚠️ Webhook dispatcher: failed to create HTTP client: {e}");
+                return;
+            }
+        };
+
+        let conn = Arc::new(Mutex::new(match Connection::open(&db_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("⚠️ Webhook dispatcher: failed to open DB: {e}");
+                return;
+            }
+        }));
+        {
+            let db = conn.lock().unwrap_or_else(|e| e.into_inner());
+            db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+                .ok();
+        }
 
         loop {
             match receiver.recv().await {
@@ -109,12 +122,10 @@ fn event_to_payload(event: &ChatEvent) -> Option<(String, String, serde_json::Va
             room_id.clone(),
             serde_json::json!({"sender": sender, "room_id": room_id}),
         )),
-        // Typing, read position, and profile events are ephemeral/global — skip webhook delivery
         ChatEvent::Typing { .. } => None,
         ChatEvent::ReadPositionUpdated(_) => None,
         ChatEvent::ProfileUpdated(_) => None,
         ChatEvent::ProfileDeleted { .. } => None,
-        // Room updates don't have a single room_id target in the same way
         ChatEvent::RoomUpdated(room) => Some((
             "room_updated".to_string(),
             room.id.clone(),
@@ -143,7 +154,7 @@ fn event_to_payload(event: &ChatEvent) -> Option<(String, String, serde_json::Va
     }
 }
 
-/// Look up matching webhooks and deliver the payload.
+/// Look up matching webhooks and deliver with retry + audit logging.
 async fn deliver_webhooks(
     conn: &Arc<Mutex<Connection>>,
     client: &reqwest::Client,
@@ -151,17 +162,14 @@ async fn deliver_webhooks(
     room_id: &str,
     data: serde_json::Value,
 ) {
-    // Query matching webhooks
-    let webhooks: Vec<(String, String, Option<String>)> = {
-        let db = match conn.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!("WARN: Webhook dispatcher DB mutex poisoned, recovering");
-                poisoned.into_inner()
-            }
-        };
+    // Query matching webhooks (id, url, secret, events filter)
+    let webhooks: Vec<(String, String, Option<String>, String)> = {
+        let db = conn.lock().unwrap_or_else(|e| {
+            eprintln!("WARN: Webhook dispatcher DB mutex poisoned, recovering");
+            e.into_inner()
+        });
         let mut stmt = match db.prepare(
-            "SELECT id, url, secret FROM webhooks WHERE room_id = ?1 AND active = 1",
+            "SELECT id, url, secret, events FROM webhooks WHERE room_id = ?1 AND active = 1",
         ) {
             Ok(s) => s,
             Err(e) => {
@@ -174,6 +182,7 @@ async fn deliver_webhooks(
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3)?,
             ))
         }) {
             Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
@@ -184,12 +193,9 @@ async fn deliver_webhooks(
         }
     };
 
-    // Also get room name for the payload
+    // Get room name for the payload
     let room_name: String = {
-        let db = match conn.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        let db = conn.lock().unwrap_or_else(|e| e.into_inner());
         db.query_row(
             "SELECT name FROM rooms WHERE id = ?1",
             params![room_id],
@@ -198,21 +204,8 @@ async fn deliver_webhooks(
         .unwrap_or_else(|_| "unknown".to_string())
     };
 
-    for (webhook_id, url, secret) in webhooks {
+    for (webhook_id, url, secret, events_str) in webhooks {
         // Check event filter
-        let events_str: String = {
-            let db = match conn.lock() {
-                Ok(guard) => guard,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            db.query_row(
-                "SELECT events FROM webhooks WHERE id = ?1",
-                params![webhook_id],
-                |r| r.get(0),
-            )
-            .unwrap_or_else(|_| "*".to_string())
-        };
-
         if events_str != "*" {
             let allowed: Vec<&str> = events_str.split(',').map(|s| s.trim()).collect();
             if !allowed.contains(&event_name) {
@@ -220,7 +213,7 @@ async fn deliver_webhooks(
             }
         }
 
-        let payload = WebhookDelivery {
+        let payload = WebhookPayload {
             event: event_name.to_string(),
             room_id: room_id.to_string(),
             room_name: room_name.clone(),
@@ -229,39 +222,123 @@ async fn deliver_webhooks(
         };
 
         let body = serde_json::to_string(&payload).unwrap_or_default();
+        let delivery_group = uuid::Uuid::new_v4().to_string();
 
-        let mut request = client
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .header("X-Chat-Event", event_name)
-            .header("X-Chat-Webhook-Id", &webhook_id);
+        // Retry loop with exponential backoff
+        for attempt in 1..=MAX_ATTEMPTS {
+            if attempt > 1 {
+                let backoff = RETRY_BACKOFFS_MS[(attempt - 2) as usize];
+                tokio::time::sleep(std::time::Duration::from_millis(backoff)).await;
+            }
 
-        // HMAC-SHA256 signature if secret is set
-        if let Some(ref secret) = secret
-            && let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes())
-        {
-            mac.update(body.as_bytes());
-            let signature = hex::encode(mac.finalize().into_bytes());
-            request = request.header("X-Chat-Signature", format!("sha256={}", signature));
-        }
+            let mut request = client
+                .post(&url)
+                .header("Content-Type", "application/json")
+                .header("X-Chat-Event", event_name)
+                .header("X-Chat-Webhook-Id", &webhook_id);
 
-        // Fire-and-forget: spawn a task for each delivery
-        let request = request.body(body);
-        tokio::spawn(async move {
-            match request.send().await {
+            // HMAC-SHA256 signature if secret is set
+            if let Some(ref secret) = secret
+                && let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes())
+            {
+                mac.update(body.as_bytes());
+                let signature = hex::encode(mac.finalize().into_bytes());
+                request = request.header("X-Chat-Signature", format!("sha256={}", signature));
+            }
+
+            let start = std::time::Instant::now();
+            let result = request.body(body.clone()).send().await;
+            let elapsed_ms = start.elapsed().as_millis() as i64;
+
+            match result {
                 Ok(resp) => {
-                    if !resp.status().is_success() {
-                        eprintln!(
-                            "⚠️ Webhook {} delivery failed: HTTP {}",
-                            webhook_id,
-                            resp.status()
+                    let status_code = resp.status().as_u16() as i64;
+                    if resp.status().is_success() {
+                        log_delivery(
+                            conn,
+                            &delivery_group,
+                            &webhook_id,
+                            event_name,
+                            &url,
+                            attempt,
+                            "success",
+                            Some(status_code),
+                            None,
+                            elapsed_ms,
                         );
+                        if attempt > 1 {
+                            eprintln!(
+                                "✅ Webhook {} delivered to {} after {} attempts",
+                                webhook_id, url, attempt
+                            );
+                        }
+                        break;
+                    } else {
+                        let error_msg = format!("HTTP {}", status_code);
+                        log_delivery(
+                            conn,
+                            &delivery_group,
+                            &webhook_id,
+                            event_name,
+                            &url,
+                            attempt,
+                            "failed",
+                            Some(status_code),
+                            Some(&error_msg),
+                            elapsed_ms,
+                        );
+                        if attempt == MAX_ATTEMPTS {
+                            eprintln!(
+                                "⚠️ Webhook {} delivery to {} exhausted after {} attempts (last: {})",
+                                webhook_id, url, MAX_ATTEMPTS, error_msg
+                            );
+                        }
                     }
                 }
                 Err(e) => {
-                    eprintln!("⚠️ Webhook {} delivery error: {}", webhook_id, e);
+                    let error_msg = format!("{}", e);
+                    log_delivery(
+                        conn,
+                        &delivery_group,
+                        &webhook_id,
+                        event_name,
+                        &url,
+                        attempt,
+                        "failed",
+                        None,
+                        Some(&error_msg),
+                        elapsed_ms,
+                    );
+                    if attempt == MAX_ATTEMPTS {
+                        eprintln!(
+                            "⚠️ Webhook {} delivery to {} exhausted after {} attempts (last: {})",
+                            webhook_id, url, MAX_ATTEMPTS, error_msg
+                        );
+                    }
                 }
             }
-        });
+        }
     }
+}
+
+/// Log a single webhook delivery attempt to the database.
+#[allow(clippy::too_many_arguments)]
+fn log_delivery(
+    conn: &Arc<Mutex<Connection>>,
+    delivery_group: &str,
+    webhook_id: &str,
+    event: &str,
+    url: &str,
+    attempt: u32,
+    status: &str,
+    status_code: Option<i64>,
+    error_message: Option<&str>,
+    response_time_ms: i64,
+) {
+    let db = conn.lock().unwrap_or_else(|e| e.into_inner());
+    let id = uuid::Uuid::new_v4().to_string();
+    let _ = db.execute(
+        "INSERT INTO webhook_deliveries (id, delivery_group, webhook_id, event, url, attempt, status, status_code, error_message, response_time_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![id, delivery_group, webhook_id, event, url, attempt as i32, status, status_code, error_message, response_time_ms],
+    );
 }

@@ -110,6 +110,7 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                 routes::list_webhooks,
                 routes::update_webhook,
                 routes::delete_webhook,
+                routes::get_webhook_deliveries,
                 routes::get_thread,
                 routes::update_read_position,
                 routes::get_read_positions,

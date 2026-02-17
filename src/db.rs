@@ -182,6 +182,26 @@ impl Db {
         )
         .expect("Failed to create webhooks table");
 
+        // Webhook delivery audit log (retry tracking)
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS webhook_deliveries (
+                id TEXT PRIMARY KEY,
+                delivery_group TEXT NOT NULL,
+                webhook_id TEXT NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+                event TEXT NOT NULL,
+                url TEXT NOT NULL,
+                attempt INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                status_code INTEGER,
+                error_message TEXT,
+                response_time_ms INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_group ON webhook_deliveries(delivery_group);",
+        )
+        .expect("Failed to create webhook_deliveries table");
+
         // Backfill seq for existing messages that don't have one
         let needs_seq_backfill: i64 = conn
             .query_row("SELECT COUNT(*) FROM messages WHERE seq IS NULL", [], |r| {

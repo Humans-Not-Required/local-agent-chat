@@ -422,3 +422,181 @@ fn test_webhooks_cascade_on_room_delete() {
         .dispatch();
     assert_eq!(res.status(), Status::NotFound);
 }
+
+// --- Webhook Delivery Log ---
+
+#[test]
+fn test_get_webhook_deliveries_empty() {
+    let client = test_client();
+    let (room_id, admin_key) = create_test_room(&client, "delivery-empty-room");
+
+    // Create a webhook
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/webhooks"))
+        .header(ContentType::JSON)
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .body(r#"{"url": "http://localhost:9999/hook", "created_by": "tester"}"#)
+        .dispatch();
+    let webhook_id = res.into_json::<serde_json::Value>().unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Get deliveries — should be empty
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/{webhook_id}/deliveries"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert!(body.is_empty());
+}
+
+#[test]
+fn test_get_webhook_deliveries_wrong_admin_key() {
+    let client = test_client();
+    let (room_id, _admin_key) = create_test_room(&client, "delivery-auth-room");
+
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/fake-id/deliveries"
+        ))
+        .header(Header::new("Authorization", "Bearer wrong_key"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Forbidden);
+}
+
+#[test]
+fn test_get_webhook_deliveries_nonexistent_webhook() {
+    let client = test_client();
+    let (room_id, admin_key) = create_test_room(&client, "delivery-nowebhook-room");
+
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/nonexistent-id/deliveries"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+}
+
+#[test]
+fn test_get_webhook_deliveries_with_filters() {
+    let client = test_client();
+    let (room_id, admin_key) = create_test_room(&client, "delivery-filter-room");
+
+    // Create a webhook
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/webhooks"))
+        .header(ContentType::JSON)
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .body(r#"{"url": "http://localhost:9999/hook", "created_by": "tester"}"#)
+        .dispatch();
+    let webhook_id = res.into_json::<serde_json::Value>().unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // With event filter
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/{webhook_id}/deliveries?event=message"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // With status filter
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/{webhook_id}/deliveries?status=success"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // With limit
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/{webhook_id}/deliveries?limit=5"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+}
+
+#[test]
+fn test_webhook_deliveries_cascade_on_webhook_delete() {
+    let client = test_client();
+    let (room_id, admin_key) = create_test_room(&client, "delivery-cascade-room");
+
+    // Create a webhook
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/webhooks"))
+        .header(ContentType::JSON)
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .body(r#"{"url": "http://localhost:9999/hook", "created_by": "tester"}"#)
+        .dispatch();
+    let webhook_id = res.into_json::<serde_json::Value>().unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Verify deliveries endpoint works
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/{webhook_id}/deliveries"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // Delete webhook
+    let res = client
+        .delete(format!(
+            "/api/v1/rooms/{room_id}/webhooks/{webhook_id}"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+
+    // Deliveries endpoint should return 404 (webhook gone)
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/{webhook_id}/deliveries"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::NotFound);
+}
+
+#[test]
+fn test_webhook_delivery_log_response_shape() {
+    let client = test_client();
+    let (room_id, admin_key) = create_test_room(&client, "delivery-shape-room");
+
+    // Create a webhook
+    let res = client
+        .post(format!("/api/v1/rooms/{room_id}/webhooks"))
+        .header(ContentType::JSON)
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .body(r#"{"url": "http://localhost:9999/hook", "created_by": "tester"}"#)
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let webhook = res.into_json::<serde_json::Value>().unwrap();
+    let webhook_id = webhook["id"].as_str().unwrap();
+
+    // Deliveries is an array (empty for now since no events fired)
+    let res = client
+        .get(format!(
+            "/api/v1/rooms/{room_id}/webhooks/{webhook_id}/deliveries"
+        ))
+        .header(Header::new("Authorization", format!("Bearer {admin_key}")))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: Vec<serde_json::Value> = res.into_json().unwrap();
+    // Empty is valid — delivery logs only populated by the async dispatcher
+    assert!(body.is_empty());
+}

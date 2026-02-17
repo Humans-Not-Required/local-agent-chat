@@ -282,12 +282,27 @@ pub struct UpdateWebhook {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct WebhookDelivery {
+pub struct WebhookPayload {
     pub event: String,
     pub room_id: String,
     pub room_name: String,
     pub data: serde_json::Value,
     pub timestamp: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WebhookDeliveryLog {
+    pub id: String,
+    pub delivery_group: String,
+    pub webhook_id: String,
+    pub event: String,
+    pub url: String,
+    pub attempt: i32,
+    pub status: String,
+    pub status_code: Option<i64>,
+    pub error_message: Option<String>,
+    pub response_time_ms: i64,
+    pub created_at: String,
 }
 
 // --- Read Positions ---

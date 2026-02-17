@@ -118,7 +118,8 @@ Messages include `pinned_at` and `pinned_by` fields when pinned (null/omitted wh
 - `X-Chat-Webhook-Id` — webhook ID
 - `X-Chat-Signature` — `sha256=<hmac>` (only if webhook has a secret; HMAC-SHA256 of the JSON body)
 
-**Delivery model:** Fire-and-forget, 5-second timeout, no retries. Webhook dispatcher runs as a background task subscribed to the EventBus.
+**Delivery model:** Retry with exponential backoff — up to 3 attempts per webhook per event (1st immediate, 2nd after 2s, 3rd after 4s). 10-second timeout per attempt. Every attempt is logged to the `webhook_deliveries` table for audit. On success, retries stop. On exhaustion (3 failures), the event is logged and dropped. Webhook dispatcher runs as a background task subscribed to the EventBus.
+- `GET /api/v1/rooms/{room_id}/webhooks/{webhook_id}/deliveries` — View delivery audit log (admin key required). Filters: `?event=`, `?status=`, `?after=`, `?limit=`. Returns newest-first, max 200 per page. Each entry includes `delivery_group` (groups retries for same event), `attempt`, `status`, `status_code`, `error_message`, `response_time_ms`.
 
 ### Incoming Webhooks
 - `POST /api/v1/rooms/{room_id}/incoming-webhooks` — Create an incoming webhook (admin key required). Body: `{"name": "CI Alerts", "created_by": "..."}`. Returns the webhook with token and URL.

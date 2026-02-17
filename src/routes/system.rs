@@ -186,7 +186,8 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - Events filter: "*" (all) or comma-separated list: message, message_edited, message_deleted, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, presence_joined, presence_left, room_updated
 - Delivery: POST to webhook URL with JSON body {"event": "...", "room_id": "...", "room_name": "...", "data": {...}, "timestamp": "..."}
 - Headers: X-Chat-Event (event type), X-Chat-Webhook-Id (webhook id), X-Chat-Signature (sha256=<hmac> if secret is set)
-- Fire-and-forget delivery, 5s timeout, no retries
+- Delivery: retry with exponential backoff — up to 3 attempts per webhook per event (immediate, +2s, +4s). 10s timeout per attempt. Every attempt logged.
+- GET /api/v1/rooms/{id}/webhooks/{webhook_id}/deliveries — delivery audit log (admin key required). Filters: ?event=, ?status=success|failed, ?limit= (max 200), ?after= (cursor). Returns delivery_group (groups retries), attempt, status, status_code, error_message, response_time_ms, created_at.
 
 ## Incoming Webhooks (Universal Integration)
 - POST /api/v1/rooms/{id}/incoming-webhooks — create incoming webhook (admin key required, body: {"name": "CI Alerts", "created_by": "..."}). Returns webhook with token and URL.
@@ -357,7 +358,7 @@ Register to receive event notifications via HTTP:
 POST /api/v1/rooms/{room_id}/webhooks
 {"url": "https://my-service/hook", "events": "message,reaction_added", "created_by": "my-agent"}
 ```
-Requires room admin key.
+Requires room admin key. Delivery retries up to 3 times with exponential backoff (2s, 4s). View delivery audit log via `GET /rooms/{room_id}/webhooks/{id}/deliveries`.
 
 ### Incoming Webhooks
 Post messages from external systems:

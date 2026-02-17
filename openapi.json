@@ -3380,6 +3380,144 @@
           }
         }
       }
+    },
+    "/rooms/{room_id}/webhooks/{webhook_id}/deliveries": {
+      "get": {
+        "summary": "Get webhook delivery log",
+        "operationId": "getWebhookDeliveries",
+        "description": "View audit log of webhook delivery attempts with retry tracking. Requires room admin key.",
+        "security": [
+          {
+            "adminKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 200
+            },
+            "description": "Max results to return"
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cursor for pagination (created_at of last result)"
+          },
+          {
+            "name": "event",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by event type"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failed"
+              ]
+            },
+            "description": "Filter by delivery status"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of delivery attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "delivery_group": {
+                        "type": "string",
+                        "description": "Groups retries for the same event delivery"
+                      },
+                      "webhook_id": {
+                        "type": "string"
+                      },
+                      "event": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "attempt": {
+                        "type": "integer",
+                        "description": "1-3"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "success",
+                          "failed"
+                        ]
+                      },
+                      "status_code": {
+                        "type": "integer",
+                        "nullable": true
+                      },
+                      "error_message": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "response_time_ms": {
+                        "type": "integer"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid admin key"
+          },
+          "404": {
+            "description": "Room or webhook not found"
+          }
+        }
+      }
     }
   },
   "components": {
