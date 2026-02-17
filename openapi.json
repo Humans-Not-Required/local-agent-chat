@@ -3212,7 +3212,7 @@
     "/search": {
       "get": {
         "summary": "Search messages",
-        "description": "Cross-room message search using FTS5 full-text index with porter stemming. Supports word-boundary matching and relevance ranking. Falls back to LIKE substring search on FTS query errors. Returns newest-first results with room context.",
+        "description": "Cross-room message search using FTS5 full-text index with porter stemming. Supports word-boundary matching and relevance ranking. Falls back to LIKE substring search on FTS query errors. Returns newest-first results with room context. Supports cursor pagination (after/before_seq), date range filtering (after_date/before_date), and has_more indicator for efficient paging.",
         "operationId": "searchMessages",
         "parameters": [
           {
@@ -3264,6 +3264,40 @@
               "maximum": 200
             },
             "description": "Max results to return"
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Cursor: only return results with seq > this value"
+          },
+          {
+            "name": "before_seq",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Cursor: only return results with seq < this value"
+          },
+          {
+            "name": "after_date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Only return results created after this ISO-8601 timestamp"
+          },
+          {
+            "name": "before_date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Only return results created before this ISO-8601 timestamp"
           }
         ],
         "responses": {
@@ -3322,6 +3356,22 @@
                     },
                     "query": {
                       "type": "string"
+                    },
+                    "after_date": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "Echo of after_date filter if provided"
+                    },
+                    "before_date": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "Echo of before_date filter if provided"
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "True if there are more results beyond the current limit"
                     }
                   }
                 }

@@ -113,7 +113,8 @@ pub fn activity_feed(
     })
 }
 
-#[get("/api/v1/search?<q>&<room_id>&<sender>&<sender_type>&<limit>")]
+#[get("/api/v1/search?<q>&<room_id>&<sender>&<sender_type>&<limit>&<after>&<before_seq>&<after_date>&<before_date>")]
+#[allow(clippy::too_many_arguments)]
 pub fn search_messages(
     db: &State<Db>,
     q: &str,
@@ -121,6 +122,10 @@ pub fn search_messages(
     sender: Option<&str>,
     sender_type: Option<&str>,
     limit: Option<i64>,
+    after: Option<i64>,
+    before_seq: Option<i64>,
+    after_date: Option<&str>,
+    before_date: Option<&str>,
 ) -> Result<Json<SearchResponse>, (Status, Json<serde_json::Value>)> {
     let query = q.trim();
     if query.is_empty() {
@@ -137,7 +142,9 @@ pub fn search_messages(
     }
 
     let conn = db.conn();
+    // Fetch limit+1 to detect whether there are more results
     let limit = limit.unwrap_or(50).clamp(1, 200);
+    let fetch_limit = limit + 1;
 
     // Try FTS5 first — falls back to LIKE if FTS fails (e.g. syntax error in query)
     let fts_result: Result<Vec<SearchResult>, rusqlite::Error> = (|| {
@@ -185,9 +192,29 @@ pub fn search_messages(
             param_values.push(sender_type_val.to_string());
             idx += 1;
         }
+        if let Some(after_val) = after {
+            sql.push_str(&format!(" AND m.seq > ?{idx}"));
+            param_values.push(after_val.to_string());
+            idx += 1;
+        }
+        if let Some(before_val) = before_seq {
+            sql.push_str(&format!(" AND m.seq < ?{idx}"));
+            param_values.push(before_val.to_string());
+            idx += 1;
+        }
+        if let Some(after_date_val) = after_date {
+            sql.push_str(&format!(" AND m.created_at > ?{idx}"));
+            param_values.push(after_date_val.to_string());
+            idx += 1;
+        }
+        if let Some(before_date_val) = before_date {
+            sql.push_str(&format!(" AND m.created_at < ?{idx}"));
+            param_values.push(before_date_val.to_string());
+            idx += 1;
+        }
 
         sql.push_str(&format!(" ORDER BY rank LIMIT ?{idx}"));
-        param_values.push(limit.to_string());
+        param_values.push(fetch_limit.to_string());
 
         let mut stmt = conn.prepare(&sql)?;
         let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
@@ -249,9 +276,29 @@ pub fn search_messages(
                 param_values.push(sender_type_val.to_string());
                 idx += 1;
             }
+            if let Some(after_val) = after {
+                sql.push_str(&format!(" AND m.seq > ?{idx}"));
+                param_values.push(after_val.to_string());
+                idx += 1;
+            }
+            if let Some(before_val) = before_seq {
+                sql.push_str(&format!(" AND m.seq < ?{idx}"));
+                param_values.push(before_val.to_string());
+                idx += 1;
+            }
+            if let Some(after_date_val) = after_date {
+                sql.push_str(&format!(" AND m.created_at > ?{idx}"));
+                param_values.push(after_date_val.to_string());
+                idx += 1;
+            }
+            if let Some(before_date_val) = before_date {
+                sql.push_str(&format!(" AND m.created_at < ?{idx}"));
+                param_values.push(before_date_val.to_string());
+                idx += 1;
+            }
 
             sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
-            param_values.push(limit.to_string());
+            param_values.push(fetch_limit.to_string());
 
             let mut stmt = conn.prepare(&sql).map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
             let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
@@ -279,10 +326,15 @@ pub fn search_messages(
         }
     };
 
+    let has_more = results.len() as i64 > limit;
+    let results: Vec<SearchResult> = results.into_iter().take(limit as usize).collect();
     let count = results.len();
     Ok(Json(SearchResponse {
         results,
         count,
         query: query.to_string(),
+        after_date: after_date.map(String::from),
+        before_date: before_date.map(String::from),
+        has_more,
     }))
 }

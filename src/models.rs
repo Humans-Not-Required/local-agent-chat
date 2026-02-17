@@ -220,6 +220,11 @@ pub struct SearchResponse {
     pub results: Vec<SearchResult>,
     pub count: usize,
     pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before_date: Option<String>,
+    pub has_more: bool,
 }
 
 // --- Pins ---

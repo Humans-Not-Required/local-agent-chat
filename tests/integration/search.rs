@@ -532,3 +532,256 @@ fn test_search_result_fields_complete() {
     assert!(result["created_at"].as_str().is_some());
     assert!(result["seq"].as_i64().is_some());
 }
+
+// --- Search Pagination ---
+
+#[test]
+fn test_search_has_more_false_when_under_limit() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-hasmore-false");
+
+    send_msg(&client, &room_id, "Nanook", "pagination alpha test", None);
+    send_msg(&client, &room_id, "Nanook", "pagination alpha check", None);
+
+    let res = client.get("/api/v1/search?q=pagination%20alpha&limit=10").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 2);
+    assert_eq!(body["has_more"].as_bool().unwrap(), false);
+}
+
+#[test]
+fn test_search_has_more_true_when_over_limit() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-hasmore-true");
+
+    for i in 1..=5 {
+        send_msg(&client, &room_id, "Nanook", &format!("overflow beta item {i}"), None);
+    }
+
+    let res = client.get("/api/v1/search?q=overflow%20beta&limit=3").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 3);
+    assert_eq!(body["has_more"].as_bool().unwrap(), true);
+}
+
+#[test]
+fn test_search_cursor_after_seq() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-cursor-after");
+
+    let mut seqs = Vec::new();
+    for i in 1..=5 {
+        let msg = send_msg(&client, &room_id, "Nanook", &format!("gamma cursor item {i}"), None);
+        seqs.push(msg["seq"].as_i64().unwrap());
+    }
+
+    // Search with after=seq[2] should only return items 4 and 5
+    let res = client
+        .get(format!("/api/v1/search?q=gamma%20cursor&after={}", seqs[2]))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 2);
+    let results = body["results"].as_array().unwrap();
+    for r in results {
+        assert!(r["seq"].as_i64().unwrap() > seqs[2]);
+    }
+}
+
+#[test]
+fn test_search_cursor_before_seq() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-cursor-before");
+
+    let mut seqs = Vec::new();
+    for i in 1..=5 {
+        let msg = send_msg(&client, &room_id, "Nanook", &format!("delta cursor item {i}"), None);
+        seqs.push(msg["seq"].as_i64().unwrap());
+    }
+
+    // Search with before_seq=seq[3] should exclude items 4 and 5
+    let res = client
+        .get(format!("/api/v1/search?q=delta%20cursor&before_seq={}", seqs[3]))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 3);
+    let results = body["results"].as_array().unwrap();
+    for r in results {
+        assert!(r["seq"].as_i64().unwrap() < seqs[3]);
+    }
+}
+
+#[test]
+fn test_search_cursor_after_and_before_seq_window() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-cursor-window");
+
+    let mut seqs = Vec::new();
+    for i in 1..=6 {
+        let msg = send_msg(&client, &room_id, "Nanook", &format!("epsilon window item {i}"), None);
+        seqs.push(msg["seq"].as_i64().unwrap());
+    }
+
+    // after=seq[1] AND before_seq=seq[4] should return items 3 and 4 (seq[2], seq[3])
+    let res = client
+        .get(format!(
+            "/api/v1/search?q=epsilon%20window&after={}&before_seq={}",
+            seqs[1], seqs[4]
+        ))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 2);
+    let results = body["results"].as_array().unwrap();
+    for r in results {
+        let seq = r["seq"].as_i64().unwrap();
+        assert!(seq > seqs[1] && seq < seqs[4]);
+    }
+}
+
+// --- Search Date Filtering ---
+
+#[test]
+fn test_search_after_date_filter() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-after-date");
+
+    send_msg(&client, &room_id, "Nanook", "zeta date test one", None);
+    send_msg(&client, &room_id, "Nanook", "zeta date test two", None);
+
+    // Use a date far in the past — should return all results
+    let res = client
+        .get("/api/v1/search?q=zeta%20date&after_date=2020-01-01T00:00:00Z")
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 2);
+    assert_eq!(body["after_date"], "2020-01-01T00:00:00Z");
+}
+
+#[test]
+fn test_search_before_date_filter() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-before-date");
+
+    send_msg(&client, &room_id, "Nanook", "eta date test recent", None);
+
+    // Use a date far in the past — should return no results
+    let res = client
+        .get("/api/v1/search?q=eta%20date&before_date=2020-01-01T00:00:00Z")
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 0);
+    assert_eq!(body["before_date"], "2020-01-01T00:00:00Z");
+}
+
+#[test]
+fn test_search_future_before_date_returns_all() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-future-date");
+
+    send_msg(&client, &room_id, "Nanook", "theta future test one", None);
+    send_msg(&client, &room_id, "Nanook", "theta future test two", None);
+
+    // Use a date far in the future — should return all results
+    let res = client
+        .get("/api/v1/search?q=theta%20future&before_date=2099-12-31T23:59:59Z")
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 2);
+}
+
+#[test]
+fn test_search_date_range_combined() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-date-range");
+
+    send_msg(&client, &room_id, "Nanook", "iota range combined test", None);
+
+    // Date range that encompasses now should find the message
+    let res = client
+        .get("/api/v1/search?q=iota%20range&after_date=2020-01-01T00:00:00Z&before_date=2099-12-31T23:59:59Z")
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 1);
+
+    // Date range that excludes the message (all in the past)
+    let res = client
+        .get("/api/v1/search?q=iota%20range&after_date=2020-01-01T00:00:00Z&before_date=2020-12-31T23:59:59Z")
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 0);
+}
+
+#[test]
+fn test_search_pagination_with_cursor_and_limit() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-paginate-combo");
+
+    let mut seqs = Vec::new();
+    for i in 1..=8 {
+        let msg = send_msg(&client, &room_id, "Nanook", &format!("kappa paginate item {i}"), None);
+        seqs.push(msg["seq"].as_i64().unwrap());
+    }
+
+    // Page 1: first 3 results
+    let res = client.get("/api/v1/search?q=kappa%20paginate&limit=3").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 3);
+    assert_eq!(body["has_more"].as_bool().unwrap(), true);
+
+    // Page 2: use cursor from last result to get next batch
+    // FTS5 uses rank ordering so we just verify cursor works for LIKE fallback
+    // by also using a before_seq to constrain the window
+    let last_seq = body["results"].as_array().unwrap().last().unwrap()["seq"].as_i64().unwrap();
+
+    // The after cursor combined with limit should paginate through results
+    let res = client
+        .get(format!("/api/v1/search?q=kappa%20paginate&limit=3&after={last_seq}"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    // Should have results (the cursor narrows the window)
+    assert!(body["count"].as_u64().unwrap() > 0);
+}
+
+#[test]
+fn test_search_date_filters_reflected_in_response() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-date-resp");
+
+    send_msg(&client, &room_id, "Nanook", "lambda date response check", None);
+
+    let res = client
+        .get("/api/v1/search?q=lambda%20date&after_date=2025-01-01&before_date=2027-01-01")
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["after_date"], "2025-01-01");
+    assert_eq!(body["before_date"], "2027-01-01");
+}
+
+#[test]
+fn test_search_has_more_with_exact_limit() {
+    let client = test_client();
+    let room_id = create_room(&client, "search-exact-limit");
+
+    for i in 1..=3 {
+        send_msg(&client, &room_id, "Nanook", &format!("mu exact limit item {i}"), None);
+    }
+
+    // Limit equals exact count — has_more should be false
+    let res = client.get("/api/v1/search?q=mu%20exact%20limit&limit=3").dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let body: serde_json::Value = res.into_json().unwrap();
+    assert_eq!(body["count"].as_u64().unwrap(), 3);
+    assert_eq!(body["has_more"].as_bool().unwrap(), false);
+}

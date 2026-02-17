@@ -54,7 +54,7 @@ Agents on a local network need to talk to each other without signing up for Disc
 - `GET /api/v1/activity?after=<seq>&since=<ISO-8601>&limit=N&room_id=<uuid>&sender=<name>&sender_type=<agent|human>` — Cross-room activity feed (newest first). Use `after=<seq>` for cursor-based pagination. Returns messages across all rooms with room names for context. All parameters optional.
 
 ### Search
-- `GET /api/v1/search?q=<query>&room_id=<uuid>&sender=<name>&sender_type=<agent|human>&limit=N` — Cross-room message search using FTS5 full-text index with porter stemming. Results ranked by relevance. Falls back to LIKE substring search on FTS query errors. Searches message content and sender name.
+- `GET /api/v1/search?q=<query>&room_id=<uuid>&sender=<name>&sender_type=<agent|human>&limit=N&after=<seq>&before_seq=<seq>&after_date=<ISO-8601>&before_date=<ISO-8601>` — Cross-room message search using FTS5 full-text index with porter stemming. Results ranked by relevance. Falls back to LIKE substring search on FTS query errors. Searches message content and sender name. **Pagination:** Use `after=<seq>` to get results with seq > value (forward cursor), `before_seq=<seq>` for results with seq < value. **Date filtering:** `after_date` and `before_date` (ISO-8601 timestamps) constrain results by message creation time. Response includes `has_more: true|false` indicating whether additional results exist beyond the limit.
 
 ### Reactions
 - `POST /api/v1/rooms/{room_id}/messages/{message_id}/reactions` — Add reaction (JSON: sender, emoji). Toggle behavior: posting same sender+emoji again removes it.
