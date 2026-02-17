@@ -3,6 +3,7 @@ pub mod events;
 pub mod mdns;
 pub mod models;
 pub mod rate_limit;
+pub mod retention;
 pub mod routes;
 pub mod webhooks;
 
@@ -147,6 +148,18 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                     webhooks::spawn_dispatcher(webhook_receiver, webhook_db_path);
                     println!("🔗 Webhook dispatcher started");
                 })
+            },
+        ))
+        .attach(rocket::fairing::AdHoc::on_liftoff(
+            "Message Retention",
+            {
+                let retention_db_path = db_path.to_string();
+                move |_rocket| {
+                    Box::pin(async move {
+                        retention::spawn_retention_task(retention_db_path);
+                        println!("🧹 Message retention task started");
+                    })
+                }
             },
         ))
         .attach(rocket::fairing::AdHoc::on_liftoff(

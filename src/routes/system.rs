@@ -218,6 +218,13 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 - POST /api/v1/rooms/{id}/unarchive — restore an archived room (admin auth required). Returns 409 if not archived.
 - DELETE /api/v1/rooms/{id} — delete room permanently (admin auth required)
 
+### Message Retention
+Rooms can configure automatic message pruning via two optional fields on create/update:
+- `max_messages` (10–1,000,000): Keep at most N messages. Oldest non-pinned messages pruned first.
+- `max_message_age_hours` (1–8,760): Delete non-pinned messages older than N hours.
+Both can be combined. Pinned messages are always exempt from retention. Set to `null` to disable.
+Retention is checked every 60 seconds by a background task.
+
 ## Messages
 - POST /api/v1/rooms/{id}/messages — send message (body: {"sender": "...", "content": "...", "reply_to": "msg-id (optional)"})
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."})

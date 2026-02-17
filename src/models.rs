@@ -28,6 +28,10 @@ pub struct RoomWithStats {
     pub archived_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bookmarked: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_messages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_message_age_hours: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -58,6 +62,10 @@ pub struct CreateRoom {
     pub description: String,
     #[serde(default = "default_anonymous")]
     pub created_by: String,
+    #[serde(default)]
+    pub max_messages: Option<i64>,
+    #[serde(default)]
+    pub max_message_age_hours: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,6 +74,23 @@ pub struct UpdateRoom {
     pub name: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
+    /// Set to a number to enable max message count retention. Set to null to disable.
+    #[serde(default, deserialize_with = "deserialize_optional_nullable_i64")]
+    pub max_messages: Option<Option<i64>>,
+    /// Set to a number to enable age-based retention. Set to null to disable.
+    #[serde(default, deserialize_with = "deserialize_optional_nullable_i64")]
+    pub max_message_age_hours: Option<Option<i64>>,
+}
+
+/// Deserializer for double-option fields: absent = None (skip), null = Some(None) (clear), value = Some(Some(v)).
+/// This is only called when the field is PRESENT in JSON (absent uses #[serde(default)] → None).
+fn deserialize_optional_nullable_i64<'de, D>(deserializer: D) -> Result<Option<Option<i64>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Field is present: null → Some(None), value → Some(Some(v))
+    let v: Option<i64> = Option::deserialize(deserializer)?;
+    Ok(Some(v))
 }
 
 #[derive(Debug, Deserialize)]

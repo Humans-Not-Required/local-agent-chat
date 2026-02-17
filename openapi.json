@@ -1188,6 +1188,20 @@
                   "created_by": {
                     "type": "string",
                     "default": "anonymous"
+                  },
+                  "max_messages": {
+                    "type": "integer",
+                    "description": "Maximum number of messages to keep. Oldest non-pinned messages pruned automatically. Range: 10-1000000.",
+                    "minimum": 10,
+                    "maximum": 1000000,
+                    "nullable": true
+                  },
+                  "max_message_age_hours": {
+                    "type": "integer",
+                    "description": "Maximum age of messages in hours. Non-pinned messages older than this are pruned automatically. Range: 1-8760.",
+                    "minimum": 1,
+                    "maximum": 8760,
+                    "nullable": true
                   }
                 }
               }
@@ -1296,6 +1310,20 @@
                   "description": {
                     "type": "string",
                     "description": "New room description"
+                  },
+                  "max_messages": {
+                    "type": "integer",
+                    "description": "Set message count limit. Set to null to disable.",
+                    "minimum": 10,
+                    "maximum": 1000000,
+                    "nullable": true
+                  },
+                  "max_message_age_hours": {
+                    "type": "integer",
+                    "description": "Set message age limit in hours. Set to null to disable.",
+                    "minimum": 1,
+                    "maximum": 8760,
+                    "nullable": true
                   }
                 }
               }

@@ -270,6 +270,12 @@ impl Db {
         )
         .expect("Failed to create bookmarks table");
 
+        // Add retention columns for room-level message pruning
+        conn.execute_batch("ALTER TABLE rooms ADD COLUMN max_messages INTEGER;")
+            .ok();
+        conn.execute_batch("ALTER TABLE rooms ADD COLUMN max_message_age_hours INTEGER;")
+            .ok();
+
         // Backfill admin_key for existing rooms that don't have one
         let mut stmt = conn
             .prepare("SELECT id FROM rooms WHERE admin_key IS NULL")

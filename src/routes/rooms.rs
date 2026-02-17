@@ -5,9 +5,41 @@ use crate::rate_limit::{RateLimitConfig, RateLimited, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, put, State};
-use rusqlite::params;
+use rusqlite::{params, Connection};
 
 use super::{AdminKey, ClientIp};
+
+/// Fetch a RoomWithStats from the database by room ID.
+fn fetch_room_with_stats(conn: &Connection, room_id: &str) -> Result<RoomWithStats, rusqlite::Error> {
+    conn.query_row(
+        "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
+                (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
+                (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
+                (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
+                (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
+                r.archived_at, r.max_messages, r.max_message_age_hours
+         FROM rooms r WHERE r.id = ?1",
+        params![room_id],
+        |row| {
+            Ok(RoomWithStats {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                created_by: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+                message_count: row.get(6)?,
+                last_activity: row.get(7)?,
+                last_message_sender: row.get(8)?,
+                last_message_preview: row.get(9)?,
+                archived_at: row.get(10)?,
+                bookmarked: None,
+                max_messages: row.get(11)?,
+                max_message_age_hours: row.get(12)?,
+            })
+        },
+    )
+}
 
 #[post("/api/v1/rooms", format = "json", data = "<body>")]
 pub fn create_room(
@@ -38,24 +70,47 @@ pub fn create_room(
         ));
     }
 
+    // Validate retention settings
+    if let Some(max) = body.max_messages && !(10..=1_000_000).contains(&max) {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "max_messages must be between 10 and 1000000"})),
+        ));
+    }
+    if let Some(hours) = body.max_message_age_hours && !(1..=8760).contains(&hours) {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "max_message_age_hours must be between 1 and 8760 (1 year)"})),
+        ));
+    }
+
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     let admin_key = generate_admin_key();
     let conn = db.conn();
 
     match conn.execute(
-        "INSERT INTO rooms (id, name, description, created_by, created_at, updated_at, admin_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![&id, &name, &body.description, &body.created_by, &now, &now, &admin_key],
+        "INSERT INTO rooms (id, name, description, created_by, created_at, updated_at, admin_key, max_messages, max_message_age_hours) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![&id, &name, &body.description, &body.created_by, &now, &now, &admin_key, &body.max_messages, &body.max_message_age_hours],
     ) {
-        Ok(_) => Ok(RateLimited::new(Json(serde_json::json!({
-            "id": id,
-            "name": name,
-            "description": body.description,
-            "created_by": body.created_by,
-            "admin_key": admin_key,
-            "created_at": now,
-            "updated_at": now
-        })), rl)),
+        Ok(_) => {
+            let mut response = serde_json::json!({
+                "id": id,
+                "name": name,
+                "description": body.description,
+                "created_by": body.created_by,
+                "admin_key": admin_key,
+                "created_at": now,
+                "updated_at": now
+            });
+            if let Some(max) = body.max_messages {
+                response["max_messages"] = serde_json::json!(max);
+            }
+            if let Some(hours) = body.max_message_age_hours {
+                response["max_message_age_hours"] = serde_json::json!(hours);
+            }
+            Ok(RateLimited::new(Json(response), rl))
+        }
         Err(e) if e.to_string().contains("UNIQUE") => Err((
             Status::Conflict,
             Json(serde_json::json!({"error": format!("Room '{}' already exists", name)})),
@@ -83,7 +138,8 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                         (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
                         (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
                         r.archived_at,
-                        (SELECT 1 FROM bookmarks WHERE room_id = r.id AND sender = ?1) as is_bookmarked
+                        (SELECT 1 FROM bookmarks WHERE room_id = r.id AND sender = ?1) as is_bookmarked,
+                        r.max_messages, r.max_message_age_hours
                  FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm'
                  ORDER BY is_bookmarked IS NOT NULL DESC, last_activity IS NULL, last_activity DESC, r.name"
             } else {
@@ -93,7 +149,8 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                         (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
                         (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
                         r.archived_at,
-                        (SELECT 1 FROM bookmarks WHERE room_id = r.id AND sender = ?1) as is_bookmarked
+                        (SELECT 1 FROM bookmarks WHERE room_id = r.id AND sender = ?1) as is_bookmarked,
+                        r.max_messages, r.max_message_age_hours
                  FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' AND r.archived_at IS NULL
                  ORDER BY is_bookmarked IS NOT NULL DESC, last_activity IS NULL, last_activity DESC, r.name"
             };
@@ -117,6 +174,8 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                         last_message_preview: row.get(9)?,
                         archived_at: row.get(10)?,
                         bookmarked: Some(is_bookmarked.is_some()),
+                        max_messages: row.get(12)?,
+                        max_message_age_hours: row.get(13)?,
                     })
                 }) {
                 Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
@@ -132,7 +191,7 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                 (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
                 (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
                 (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
-                r.archived_at
+                r.archived_at, r.max_messages, r.max_message_age_hours
          FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' ORDER BY last_activity IS NULL, last_activity DESC, r.name"
     } else {
         "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
@@ -140,7 +199,7 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                 (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
                 (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
                 (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
-                r.archived_at
+                r.archived_at, r.max_messages, r.max_message_age_hours
          FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' AND r.archived_at IS NULL ORDER BY last_activity IS NULL, last_activity DESC, r.name"
     };
     let mut stmt = match conn.prepare(sql) {
@@ -162,6 +221,8 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                 last_message_preview: row.get(9)?,
                 archived_at: row.get(10)?,
                 bookmarked: None,
+                max_messages: row.get(11)?,
+                max_message_age_hours: row.get(12)?,
             })
         }) {
         Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
@@ -176,32 +237,7 @@ pub fn get_room(
     room_id: &str,
 ) -> Result<Json<RoomWithStats>, (Status, Json<serde_json::Value>)> {
     let conn = db.conn();
-    conn.query_row(
-        "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
-                (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
-                (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
-                (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
-                (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
-                r.archived_at
-         FROM rooms r WHERE r.id = ?1",
-        params![room_id],
-        |row| {
-            Ok(RoomWithStats {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                created_by: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
-                message_count: row.get(6)?,
-                last_activity: row.get(7)?,
-                last_message_sender: row.get(8)?,
-                last_message_preview: row.get(9)?,
-                archived_at: row.get(10)?,
-                bookmarked: None,
-            })
-        },
-    )
+    fetch_room_with_stats(&conn, room_id)
     .map(Json)
     .map_err(|_| {
         (
@@ -256,6 +292,20 @@ pub fn update_room(
         }
     }
 
+    // Validate retention settings if provided
+    if let Some(Some(max)) = body.max_messages && !(10..=1_000_000).contains(&max) {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "max_messages must be between 10 and 1000000"})),
+        ));
+    }
+    if let Some(Some(hours)) = body.max_message_age_hours && !(1..=8760).contains(&hours) {
+        return Err((
+            Status::BadRequest,
+            Json(serde_json::json!({"error": "max_message_age_hours must be between 1 and 8760 (1 year)"})),
+        ));
+    }
+
     // Build dynamic UPDATE
     let now = chrono::Utc::now().to_rfc3339();
     let mut updates: Vec<String> = vec!["updated_at = ?1".to_string()];
@@ -267,6 +317,15 @@ pub fn update_room(
     }
     if body.description.is_some() {
         updates.push(format!("description = ?{}", param_idx));
+        param_idx += 1;
+    }
+    if body.max_messages.is_some() {
+        updates.push(format!("max_messages = ?{}", param_idx));
+        param_idx += 1;
+    }
+    if body.max_message_age_hours.is_some() {
+        updates.push(format!("max_message_age_hours = ?{}", param_idx));
+        let _ = param_idx; // suppress unused warning
     }
 
     // Build params dynamically
@@ -276,6 +335,13 @@ pub fn update_room(
     }
     if let Some(ref desc) = body.description {
         param_values.push(Box::new(desc.clone()));
+    }
+    if let Some(ref max_msgs) = body.max_messages {
+        // Some(Some(val)) = set to val, Some(None) = clear to NULL
+        param_values.push(Box::new(*max_msgs));
+    }
+    if let Some(ref max_age) = body.max_message_age_hours {
+        param_values.push(Box::new(*max_age));
     }
     param_values.push(Box::new(room_id.to_string()));
 
@@ -311,33 +377,7 @@ pub fn update_room(
     }
 
     // Fetch updated room with stats
-    let room = conn
-        .query_row(
-            "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
-                    (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
-                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
-                    (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
-                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
-                    r.archived_at
-             FROM rooms r WHERE r.id = ?1",
-            params![room_id],
-            |row| {
-                Ok(RoomWithStats {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    description: row.get(2)?,
-                    created_by: row.get(3)?,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    message_count: row.get(6)?,
-                    last_activity: row.get(7)?,
-                    last_message_sender: row.get(8)?,
-                    last_message_preview: row.get(9)?,
-                    archived_at: row.get(10)?,
-                    bookmarked: None,
-                })
-            },
-        )
+    let room = fetch_room_with_stats(&conn, room_id)
         .map_err(|_| {
             (
                 Status::InternalServerError,
@@ -405,33 +445,7 @@ pub fn archive_room(
     })?;
 
     // Fetch updated room
-    let room = conn
-        .query_row(
-            "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
-                    (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
-                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
-                    (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
-                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
-                    r.archived_at
-             FROM rooms r WHERE r.id = ?1",
-            params![room_id],
-            |row| {
-                Ok(RoomWithStats {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    description: row.get(2)?,
-                    created_by: row.get(3)?,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    message_count: row.get(6)?,
-                    last_activity: row.get(7)?,
-                    last_message_sender: row.get(8)?,
-                    last_message_preview: row.get(9)?,
-                    archived_at: row.get(10)?,
-                    bookmarked: None,
-                })
-            },
-        )
+    let room = fetch_room_with_stats(&conn, room_id)
         .map_err(|_| {
             (
                 Status::InternalServerError,
@@ -498,33 +512,7 @@ pub fn unarchive_room(
     })?;
 
     // Fetch updated room
-    let room = conn
-        .query_row(
-            "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
-                    (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
-                    (SELECT MAX(created_at) FROM messages WHERE room_id = r.id) as last_activity,
-                    (SELECT sender FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_sender,
-                    (SELECT SUBSTR(content, 1, 100) FROM messages WHERE room_id = r.id ORDER BY seq DESC LIMIT 1) as last_preview,
-                    r.archived_at
-             FROM rooms r WHERE r.id = ?1",
-            params![room_id],
-            |row| {
-                Ok(RoomWithStats {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    description: row.get(2)?,
-                    created_by: row.get(3)?,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    message_count: row.get(6)?,
-                    last_activity: row.get(7)?,
-                    last_message_sender: row.get(8)?,
-                    last_message_preview: row.get(9)?,
-                    archived_at: row.get(10)?,
-                    bookmarked: None,
-                })
-            },
-        )
+    let room = fetch_room_with_stats(&conn, room_id)
         .map_err(|_| {
             (
                 Status::InternalServerError,
