@@ -49,10 +49,10 @@ pub fn room_participants(
              GROUP BY m.sender
              ORDER BY last_seen DESC",
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?;
 
@@ -70,10 +70,10 @@ pub fn room_participants(
                 status_text: row.get(8)?,
             })
         })
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?
         .filter_map(|r| r.ok())

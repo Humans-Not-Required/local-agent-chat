@@ -63,10 +63,10 @@ pub fn create_incoming_webhook(
         "INSERT INTO incoming_webhooks (id, room_id, name, token, created_by, created_at, active) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)",
         params![&id, room_id, &name, &token, &body.created_by, &now],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 
@@ -119,7 +119,7 @@ pub fn list_incoming_webhooks(
         .prepare(
             "SELECT id, room_id, name, token, created_by, created_at, active FROM incoming_webhooks WHERE room_id = ?1 ORDER BY created_at DESC",
         )
-        .unwrap();
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
 
     let hooks: Vec<IncomingWebhook> = stmt
         .query_map(params![room_id], |row| {
@@ -135,7 +135,7 @@ pub fn list_incoming_webhooks(
                 url: Some(format!("/api/v1/hook/{}", token)),
             })
         })
-        .unwrap()
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -237,10 +237,10 @@ pub fn update_incoming_webhook(
     values.push(Box::new(room_id.to_string()));
 
     let param_refs: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
-    conn.execute(&sql, param_refs.as_slice()).map_err(|e| {
+    conn.execute(&sql, param_refs.as_slice()).map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 
@@ -403,10 +403,10 @@ pub fn post_via_hook(
         "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, sender_type, seq) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![&id, &room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &sender_type, seq],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 

@@ -60,9 +60,9 @@ pub fn create_room(
             Status::Conflict,
             Json(serde_json::json!({"error": format!("Room '{}' already exists", name)})),
         )),
-        Err(e) => Err((
+        Err(_e) => Err((
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )),
     }
 }
@@ -97,8 +97,11 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                  FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' AND r.archived_at IS NULL
                  ORDER BY is_bookmarked IS NOT NULL DESC, last_activity IS NULL, last_activity DESC, r.name"
             };
-            let mut stmt = conn.prepare(sql).unwrap();
-            let rooms = stmt
+            let mut stmt = match conn.prepare(sql) {
+                Ok(s) => s,
+                Err(_) => return Json(Vec::new()),
+            };
+            let rooms = match stmt
                 .query_map(params![sender_val], |row| {
                     let is_bookmarked: Option<i64> = row.get(11)?;
                     Ok(RoomWithStats {
@@ -115,10 +118,10 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                         archived_at: row.get(10)?,
                         bookmarked: Some(is_bookmarked.is_some()),
                     })
-                })
-                .unwrap()
-                .filter_map(|r| r.ok())
-                .collect();
+                }) {
+                Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                Err(_) => Vec::new(),
+            };
             return Json(rooms);
         }
     }
@@ -140,8 +143,11 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                 r.archived_at
          FROM rooms r WHERE COALESCE(r.room_type, 'room') != 'dm' AND r.archived_at IS NULL ORDER BY last_activity IS NULL, last_activity DESC, r.name"
     };
-    let mut stmt = conn.prepare(sql).unwrap();
-    let rooms = stmt
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(_) => return Json(Vec::new()),
+    };
+    let rooms = match stmt
         .query_map([], |row| {
             Ok(RoomWithStats {
                 id: row.get(0)?,
@@ -157,10 +163,10 @@ pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option
                 archived_at: row.get(10)?,
                 bookmarked: None,
             })
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+        }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    };
     Json(rooms)
 }
 
@@ -296,10 +302,10 @@ pub fn update_room(
                 Json(serde_json::json!({"error": "A room with that name already exists"})),
             ));
         }
-        Err(e) => {
+        Err(_e) => {
             return Err((
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             ));
         }
     }
@@ -391,10 +397,10 @@ pub fn archive_room(
         "UPDATE rooms SET archived_at = ?1, updated_at = ?1 WHERE id = ?2",
         params![&now, room_id],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 
@@ -484,10 +490,10 @@ pub fn unarchive_room(
         "UPDATE rooms SET archived_at = NULL, updated_at = ?1 WHERE id = ?2",
         params![&now, room_id],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 

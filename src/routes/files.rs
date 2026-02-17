@@ -105,10 +105,10 @@ pub fn upload_file(
         "INSERT INTO files (id, room_id, sender, filename, content_type, size, data, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![&id, room_id, &sender, &filename, &body.content_type, size, &decoded, &now],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 
@@ -214,7 +214,7 @@ pub fn list_files(
 
     let mut stmt = conn
         .prepare("SELECT id, room_id, sender, filename, content_type, size, created_at FROM files WHERE room_id = ?1 ORDER BY created_at DESC")
-        .unwrap();
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
 
     let files = stmt
         .query_map(params![room_id], |row| {
@@ -230,7 +230,7 @@ pub fn list_files(
                 created_at: row.get(6)?,
             })
         })
-        .unwrap()
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -299,10 +299,10 @@ pub fn delete_file(
         "DELETE FROM files WHERE id = ?1 AND room_id = ?2",
         params![file_id, room_id],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 

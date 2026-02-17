@@ -142,11 +142,14 @@ fn fetch_all_room_messages(
     conn: &std::sync::MutexGuard<rusqlite::Connection>,
     room_id: &str,
 ) -> Vec<Message> {
-    let mut stmt = conn
+    let mut stmt = match conn
         .prepare("SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1 ORDER BY seq ASC")
-        .unwrap();
+    {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
 
-    stmt.query_map(params![room_id], |row| {
+    match stmt.query_map(params![room_id], |row| {
         Ok(Message {
             id: row.get(0)?,
             room_id: row.get(1)?,
@@ -161,8 +164,8 @@ fn fetch_all_room_messages(
             pinned_at: row.get(10)?,
             pinned_by: row.get(11)?,
         })
-    })
-    .unwrap()
-    .filter_map(|r| r.ok())
-    .collect()
+    }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    }
 }

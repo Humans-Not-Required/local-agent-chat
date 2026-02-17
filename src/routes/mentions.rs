@@ -64,7 +64,7 @@ pub fn get_mentions(
     sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
     param_values.push(limit.to_string());
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| (Status::InternalServerError, Json(serde_json::json!({"error": e.to_string()}))))?;
+    let mut stmt = conn.prepare(&sql).map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
         .iter()
         .map(|v| v as &dyn rusqlite::types::ToSql)
@@ -85,7 +85,7 @@ pub fn get_mentions(
                 seq: row.get(9)?,
             })
         })
-        .unwrap()
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -131,7 +131,7 @@ pub fn get_unread_mentions(
                GROUP BY m.room_id \
                ORDER BY newest_seq DESC";
 
-    let mut stmt = conn.prepare(sql).map_err(|e| (Status::InternalServerError, Json(serde_json::json!({"error": e.to_string()}))))?;
+    let mut stmt = conn.prepare(sql).map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
     let rooms: Vec<UnreadMentionRoom> = stmt
         .query_map(
             rusqlite::params![mention_pattern, target],
@@ -145,7 +145,7 @@ pub fn get_unread_mentions(
                 })
             },
         )
-        .unwrap()
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 

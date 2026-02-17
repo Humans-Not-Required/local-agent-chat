@@ -95,10 +95,10 @@ pub fn add_reaction(
         "INSERT INTO message_reactions (id, message_id, sender, emoji, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![&id, message_id, sender, emoji, &now],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": format!("Failed to add reaction: {e}")})),
+            Json(serde_json::json!({"error": String::from("Internal server error")})),
         )
     })?;
 
@@ -219,7 +219,7 @@ pub fn get_reactions(
              FROM message_reactions WHERE message_id = ?1 \
              GROUP BY emoji ORDER BY MIN(created_at) ASC",
         )
-        .unwrap();
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
 
     let reactions: Vec<ReactionSummary> = stmt
         .query_map(params![message_id], |row| {
@@ -233,7 +233,7 @@ pub fn get_reactions(
                 senders,
             })
         })
-        .unwrap()
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -277,7 +277,7 @@ pub fn get_room_reactions(
              GROUP BY mr.message_id, mr.emoji \
              ORDER BY mr.message_id, MIN(mr.created_at) ASC",
         )
-        .unwrap();
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
 
     let rows: Vec<(String, String, String, i64)> = stmt
         .query_map(params![room_id], |row| {
@@ -288,7 +288,7 @@ pub fn get_room_reactions(
                 row.get::<_, i64>(3)?,
             ))
         })
-        .unwrap()
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 

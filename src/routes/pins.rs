@@ -81,10 +81,10 @@ pub fn pin_message(
         "UPDATE messages SET pinned_at = ?1, pinned_by = ?2 WHERE id = ?3",
         params![&now, "admin", message_id],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": format!("Failed to pin message: {e}")})),
+            Json(serde_json::json!({"error": String::from("Internal server error")})),
         )
     })?;
 
@@ -184,10 +184,10 @@ pub fn unpin_message(
         "UPDATE messages SET pinned_at = NULL, pinned_by = NULL WHERE id = ?1",
         params![message_id],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": format!("Failed to unpin message: {e}")})),
+            Json(serde_json::json!({"error": String::from("Internal server error")})),
         )
     })?;
 
@@ -230,10 +230,10 @@ pub fn list_pins(
         .prepare(
             "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1 AND pinned_at IS NOT NULL ORDER BY pinned_at DESC",
         )
-        .map_err(|e| {
+        .map_err(|_| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": format!("Query error: {e}")})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?;
 
@@ -255,10 +255,10 @@ pub fn list_pins(
                 pinned_by: row.get::<_, String>(11)?,
             })
         })
-        .map_err(|e| {
+        .map_err(|_| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": format!("Query error: {e}")})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?
         .filter_map(|r| r.ok())

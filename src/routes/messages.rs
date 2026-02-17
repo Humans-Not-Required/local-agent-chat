@@ -114,10 +114,10 @@ pub fn send_message(
         "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, reply_to, sender_type, seq) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &reply_to, &sender_type, seq],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 
@@ -218,10 +218,10 @@ pub fn edit_message(
                 message_id
             ],
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?;
     } else {
@@ -229,10 +229,10 @@ pub fn edit_message(
             "UPDATE messages SET content = ?1, edited_at = ?2 WHERE id = ?3",
             params![&content, &now, message_id],
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?;
     }
@@ -260,10 +260,10 @@ pub fn edit_message(
                 })
             },
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?;
 
@@ -340,10 +340,10 @@ pub fn delete_message(
         "DELETE FROM messages WHERE id = ?1 AND room_id = ?2",
         params![message_id, room_id],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 
@@ -459,10 +459,10 @@ pub fn get_messages(
     }
     param_values.push(limit.to_string());
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| {
+    let mut stmt = conn.prepare(&sql).map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 
@@ -489,10 +489,10 @@ pub fn get_messages(
                 pinned_by: row.get(11)?,
             })
         })
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?
         .filter_map(|r| r.ok())

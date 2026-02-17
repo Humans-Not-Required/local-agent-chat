@@ -76,13 +76,16 @@ pub fn activity_feed(
     sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
     param_values.push(limit.to_string());
 
-    let mut stmt = conn.prepare(&sql).unwrap();
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(_) => return Json(ActivityResponse { events: Vec::new(), count: 0, since: since.map(String::from) }),
+    };
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
         .iter()
         .map(|v| v as &dyn rusqlite::types::ToSql)
         .collect();
 
-    let events: Vec<ActivityEvent> = stmt
+    let events: Vec<ActivityEvent> = match stmt
         .query_map(params_refs.as_slice(), |row| {
             Ok(ActivityEvent {
                 event_type: "message".to_string(),
@@ -97,10 +100,10 @@ pub fn activity_feed(
                 reply_to: row.get(8)?,
                 seq: row.get(9)?,
             })
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+        }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    };
 
     let count = events.len();
     Json(ActivityResponse {
@@ -250,7 +253,7 @@ pub fn search_messages(
             sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
             param_values.push(limit.to_string());
 
-            let mut stmt = conn.prepare(&sql).map_err(|e| (Status::InternalServerError, Json(serde_json::json!({"error": e.to_string()}))))?;
+            let mut stmt = conn.prepare(&sql).map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
             let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
                 .iter()
                 .map(|v| v as &dyn rusqlite::types::ToSql)
@@ -270,7 +273,7 @@ pub fn search_messages(
                     seq: row.get(9)?,
                 })
             })
-            .unwrap()
+            .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?
             .filter_map(|r| r.ok())
             .collect()
         }

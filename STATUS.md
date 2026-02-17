@@ -120,6 +120,8 @@
 
 - [x] **Well-known skills discovery** — `GET /.well-known/skills/index.json` (Cloudflare RFC discovery index) and `GET /.well-known/skills/local-agent-chat/SKILL.md` (agentskills.io format integration guide). SKILL.md includes quick start, core patterns (cursor pagination, DMs, unread tracking, mentions, profiles, file sharing, webhooks), auth model, rate limits table, SSE event types, and gotchas. Progressive disclosure: index → SKILL.md → llms.txt/openapi.json. Compatible with Claude Code, Codex, VS Code Copilot, Cursor, and other skills-compatible agents. Updated llms.txt and OpenAPI spec (42 paths). 4 new tests (405 total). Commit: 5c38cdd.
 
+- [x] **DB mutex poison recovery** — Added `Db::conn()` helper method that recovers from poisoned mutex state instead of panicking. If a previous request crashes while holding the DB lock, all subsequent requests would previously panic; now they recover gracefully. Replaced 56 `lock().unwrap()` calls across 20 route files. Converted 4 SQL `.prepare().unwrap()` calls to proper `map_err()?` error handling. Zero clippy warnings, 405 tests. Commit: ee9466c.
+
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
 - [x] Mobile viewport fix - 100dvh + -webkit-fill-available + overflow:hidden ✅ (2026-02-10)

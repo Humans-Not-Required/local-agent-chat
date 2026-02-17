@@ -220,9 +220,12 @@ pub fn list_profiles(
         )
     };
 
-    let mut stmt = conn.prepare(sql).unwrap();
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(_) => return Json(Vec::new()),
+    };
     let params: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
-    let profiles = stmt
+    let profiles = match stmt
         .query_map(params.as_slice(), |row| {
             let metadata_str: String = row.get(6)?;
             Ok(Profile {
@@ -236,10 +239,10 @@ pub fn list_profiles(
                 created_at: row.get(7)?,
                 updated_at: row.get(8)?,
             })
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+        }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(_) => Vec::new(),
+    };
 
     Json(profiles)
 }

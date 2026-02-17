@@ -49,10 +49,10 @@ pub fn add_bookmark(
             "INSERT OR IGNORE INTO bookmarks (room_id, sender, created_at) VALUES (?1, ?2, ?3)",
             params![room_id, sender, &now],
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": format!("Database error: {e}")})),
+                Json(serde_json::json!({"error": String::from("Internal server error")})),
             )
         })?;
 
@@ -96,10 +96,10 @@ pub fn remove_bookmark(
             "DELETE FROM bookmarks WHERE room_id = ?1 AND sender = ?2",
             params![room_id, sender],
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": format!("Database error: {e}")})),
+                Json(serde_json::json!({"error": String::from("Internal server error")})),
             )
         })?;
 
@@ -145,10 +145,10 @@ pub fn list_bookmarks(
              WHERE b.sender = ?1
              ORDER BY b.created_at DESC",
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": format!("Database error: {e}")})),
+                Json(serde_json::json!({"error": String::from("Internal server error")})),
             )
         })?;
 
@@ -164,10 +164,10 @@ pub fn list_bookmarks(
                 last_activity: row.get(6)?,
             })
         })
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": format!("Database error: {e}")})),
+                Json(serde_json::json!({"error": String::from("Internal server error")})),
             )
         })?
         .filter_map(|r| r.ok())

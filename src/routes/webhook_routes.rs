@@ -89,10 +89,10 @@ pub fn create_webhook(
         "INSERT INTO webhooks (id, room_id, url, events, secret, created_by, created_at, active) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1)",
         params![&id, room_id, &url, &events, &body.secret, &body.created_by, &now],
     )
-    .map_err(|e| {
+    .map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 
@@ -144,7 +144,7 @@ pub fn list_webhooks(
         .prepare(
             "SELECT id, room_id, url, events, created_by, created_at, active FROM webhooks WHERE room_id = ?1 ORDER BY created_at DESC",
         )
-        .unwrap();
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?;
 
     let webhooks: Vec<Webhook> = stmt
         .query_map(params![room_id], |row| {
@@ -158,7 +158,7 @@ pub fn list_webhooks(
                 active: row.get::<_, i32>(6)? != 0,
             })
         })
-        .unwrap()
+        .map_err(|_| (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"}))))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -271,10 +271,10 @@ pub fn update_webhook(
     values.push(Box::new(room_id.to_string()));
 
     let param_refs: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
-    conn.execute(&sql, param_refs.as_slice()).map_err(|e| {
+    conn.execute(&sql, param_refs.as_slice()).map_err(|_e| {
         (
             Status::InternalServerError,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(serde_json::json!({"error": "Internal server error"})),
         )
     })?;
 

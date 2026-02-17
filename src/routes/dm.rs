@@ -107,8 +107,8 @@ pub fn send_dm(
             conn.execute(
                 "INSERT INTO rooms (id, name, description, created_by, created_at, updated_at, admin_key, room_type) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'dm')",
                 params![&id, &room_name, format!("DM between {} and {}", sender, recipient), &sender, &now, &now, &admin_key],
-            ).map_err(|e| {
-                (Status::InternalServerError, Json(serde_json::json!({"error": e.to_string()})))
+            ).map_err(|_e| {
+                (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"})))
             })?;
             (id, true)
         }
@@ -132,8 +132,8 @@ pub fn send_dm(
     conn.execute(
         "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, sender_type, seq) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![&msg_id, &room_id, &sender, &content, &metadata.to_string(), &now, &body.sender_type, next_seq],
-    ).map_err(|e| {
-        (Status::InternalServerError, Json(serde_json::json!({"error": e.to_string()})))
+    ).map_err(|_e| {
+        (Status::InternalServerError, Json(serde_json::json!({"error": "Internal server error"})))
     })?;
 
     // Update FTS index
@@ -199,10 +199,10 @@ pub fn list_dm_conversations(
              WHERE r.room_type = 'dm' AND (r.name LIKE ?1 OR r.name LIKE ?2)
              ORDER BY last_at IS NULL, last_at DESC",
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?;
 
@@ -230,10 +230,10 @@ pub fn list_dm_conversations(
                 created_at,
             })
         })
-        .map_err(|e| {
+        .map_err(|_e| {
             (
                 Status::InternalServerError,
-                Json(serde_json::json!({"error": e.to_string()})),
+                Json(serde_json::json!({"error": "Internal server error"})),
             )
         })?
         .filter_map(|r| r.ok())
