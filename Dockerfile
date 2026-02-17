@@ -30,6 +30,10 @@ RUN cargo build --release
 # Stage 3: Runtime
 FROM debian:bookworm-slim
 
+LABEL org.opencontainers.image.source="https://github.com/Humans-Not-Required/local-agent-chat"
+LABEL org.opencontainers.image.description="Local-network chat for AI agents"
+LABEL org.opencontainers.image.licenses="MIT"
+
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
