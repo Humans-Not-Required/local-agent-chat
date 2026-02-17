@@ -198,7 +198,7 @@ impl RateLimiter {
 
     /// Check rate limit and return detailed info for response headers.
     pub fn check_with_info(&self, key: &str, max: usize, window_secs: u64) -> RateLimitInfo {
-        let mut limits = self.limits.lock().unwrap();
+        let mut limits = self.limits.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
         let window = std::time::Duration::from_secs(window_secs);
 
@@ -209,7 +209,10 @@ impl RateLimiter {
 
         if entries.len() >= max {
             // Calculate when the oldest entry will expire
-            let oldest = entries.iter().min().unwrap();
+            let oldest = match entries.iter().min() {
+                Some(t) => t,
+                None => return RateLimitInfo { allowed: false, remaining: 0, limit: max, retry_after_secs: 1 },
+            };
             let elapsed = now.duration_since(*oldest);
             let retry_after = if elapsed < window {
                 (window - elapsed).as_secs() + 1 // +1 to ensure the slot is actually open

@@ -47,11 +47,11 @@ pub fn notify_typing(
     let key = format!("{}:{}", room_id, sender);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs();
 
     {
-        let mut tracker = typing_tracker.last_typing.lock().unwrap();
+        let mut tracker = typing_tracker.last_typing.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(&last) = tracker.get(&key)
             && now - last < 2
         {

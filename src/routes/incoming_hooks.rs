@@ -401,7 +401,7 @@ pub fn post_via_hook(
 
     conn.execute(
         "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, sender_type, seq) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![&id, &room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &sender_type, seq],
+        params![&id, &room_id, &sender, &content, serde_json::to_string(&metadata).unwrap_or_default(), &now, &sender_type, seq],
     )
     .map_err(|_e| {
         (

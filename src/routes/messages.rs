@@ -112,7 +112,7 @@ pub fn send_message(
 
     conn.execute(
         "INSERT INTO messages (id, room_id, sender, content, metadata, created_at, reply_to, sender_type, seq) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap(), &now, &reply_to, &sender_type, seq],
+        params![&id, room_id, &sender, &content, serde_json::to_string(&metadata).unwrap_or_default(), &now, &reply_to, &sender_type, seq],
     )
     .map_err(|_e| {
         (
@@ -213,7 +213,7 @@ pub fn edit_message(
             "UPDATE messages SET content = ?1, metadata = ?2, edited_at = ?3 WHERE id = ?4",
             params![
                 &content,
-                serde_json::to_string(meta).unwrap(),
+                serde_json::to_string(meta).unwrap_or_default(),
                 &now,
                 message_id
             ],

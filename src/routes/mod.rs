@@ -137,7 +137,7 @@ impl Default for PresenceTracker {
 impl PresenceTracker {
     /// Register a sender as present in a room. Returns true if this is their first connection (new presence).
     pub fn join(&self, room_id: &str, sender: &str, sender_type: Option<&str>) -> bool {
-        let mut map = self.inner.write().unwrap();
+        let mut map = self.inner.write().unwrap_or_else(|e| e.into_inner());
         let room = map.entry(room_id.to_string()).or_default();
         let is_new = !room.contains_key(sender);
         let entry = room
@@ -158,7 +158,7 @@ impl PresenceTracker {
 
     /// Remove a sender's connection from a room. Returns true if fully disconnected (last connection).
     pub fn leave(&self, room_id: &str, sender: &str) -> bool {
-        let mut map = self.inner.write().unwrap();
+        let mut map = self.inner.write().unwrap_or_else(|e| e.into_inner());
         if let Some(room) = map.get_mut(room_id)
             && let Some(entry) = room.get_mut(sender)
         {
@@ -176,7 +176,7 @@ impl PresenceTracker {
 
     /// Get all online users in a room.
     pub fn get_room(&self, room_id: &str) -> Vec<crate::models::PresenceEntry> {
-        let map = self.inner.read().unwrap();
+        let map = self.inner.read().unwrap_or_else(|e| e.into_inner());
         map.get(room_id)
             .map(|room| {
                 room.values()
@@ -192,7 +192,7 @@ impl PresenceTracker {
 
     /// Get all online users across all rooms.
     pub fn get_all(&self) -> HashMap<String, Vec<crate::models::PresenceEntry>> {
-        let map = self.inner.read().unwrap();
+        let map = self.inner.read().unwrap_or_else(|e| e.into_inner());
         map.iter()
             .map(|(k, v)| {
                 (

@@ -24,7 +24,7 @@ pub fn spawn_dispatcher(
             Connection::open(&db_path).expect("Webhook dispatcher: failed to open DB"),
         ));
         conn.lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
             .ok();
 
@@ -153,27 +153,43 @@ async fn deliver_webhooks(
 ) {
     // Query matching webhooks
     let webhooks: Vec<(String, String, Option<String>)> = {
-        let db = conn.lock().unwrap();
-        let mut stmt = db
-            .prepare(
-                "SELECT id, url, secret FROM webhooks WHERE room_id = ?1 AND active = 1",
-            )
-            .unwrap();
-        stmt.query_map(params![room_id], |row| {
+        let db = match conn.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("WARN: Webhook dispatcher DB mutex poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+        let mut stmt = match db.prepare(
+            "SELECT id, url, secret FROM webhooks WHERE room_id = ?1 AND active = 1",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("⚠️ Webhook dispatcher: failed to prepare query: {e}");
+                return;
+            }
+        };
+        match stmt.query_map(params![room_id], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, Option<String>>(2)?,
             ))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect()
+        }) {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(e) => {
+                eprintln!("⚠️ Webhook dispatcher: query failed: {e}");
+                return;
+            }
+        }
     };
 
     // Also get room name for the payload
     let room_name: String = {
-        let db = conn.lock().unwrap();
+        let db = match conn.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         db.query_row(
             "SELECT name FROM rooms WHERE id = ?1",
             params![room_id],
@@ -185,7 +201,10 @@ async fn deliver_webhooks(
     for (webhook_id, url, secret) in webhooks {
         // Check event filter
         let events_str: String = {
-            let db = conn.lock().unwrap();
+            let db = match conn.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
             db.query_row(
                 "SELECT events FROM webhooks WHERE id = ?1",
                 params![webhook_id],
