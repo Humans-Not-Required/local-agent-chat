@@ -4,6 +4,7 @@
 mod bookmarks;
 mod discover;
 mod dm;
+mod export;
 mod files;
 mod incoming_hooks;
 mod mentions;
@@ -26,6 +27,7 @@ mod webhook_routes;
 
 pub use bookmarks::{add_bookmark, remove_bookmark, list_bookmarks};
 pub use discover::discover as service_discover;
+pub use export::export_room;
 pub use dm::{send_dm, list_dm_conversations, get_dm_conversation};
 pub use mentions::{get_mentions, get_unread_mentions};
 pub use files::{delete_file, download_file, file_info, list_files, upload_file};

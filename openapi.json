@@ -3598,6 +3598,88 @@
           }
         }
       }
+    },
+    "/rooms/{room_id}/export": {
+      "get": {
+        "summary": "Export room messages",
+        "description": "Export room messages in JSON, Markdown, or CSV format. Returns messages in chronological order with Content-Disposition header for file download.",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown",
+                "csv"
+              ],
+              "default": "json"
+            },
+            "description": "Export format"
+          },
+          {
+            "name": "sender",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by sender"
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Only messages after this ISO-8601 timestamp"
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Only messages before this ISO-8601 timestamp"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 10000
+            },
+            "description": "Max messages (default: all, max 10000)"
+          },
+          {
+            "name": "include_metadata",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Include message metadata (default: false)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exported messages (format depends on format parameter)"
+          },
+          "400": {
+            "description": "Invalid format parameter"
+          },
+          "404": {
+            "description": "Room not found"
+          }
+        }
+      }
     }
   },
   "components": {
