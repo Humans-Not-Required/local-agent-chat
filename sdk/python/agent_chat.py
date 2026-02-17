@@ -900,6 +900,38 @@ class AgentChat:
             timeout=self.timeout,
         )
 
+    def update_webhook(
+        self,
+        room: str,
+        webhook_id: str,
+        admin_key: str,
+        url: Optional[str] = None,
+        events: Optional[str] = None,
+        active: Optional[bool] = None,
+    ) -> dict:
+        """Update an outgoing webhook."""
+        room_id = self._resolve_room(room)
+        body: Dict[str, Any] = {}
+        if url is not None:
+            body["url"] = url
+        if events is not None:
+            body["events"] = events
+        if active is not None:
+            body["active"] = active
+        return self._put(
+            f"/api/v1/rooms/{room_id}/webhooks/{webhook_id}",
+            data=body,
+            headers=self._auth_headers(admin_key),
+        )
+
+    def delete_webhook(self, room: str, webhook_id: str, admin_key: str) -> None:
+        """Delete an outgoing webhook."""
+        room_id = self._resolve_room(room)
+        self._delete(
+            f"/api/v1/rooms/{room_id}/webhooks/{webhook_id}",
+            headers=self._auth_headers(admin_key),
+        )
+
     def get_webhook_deliveries(
         self,
         room: str,
@@ -945,6 +977,35 @@ class AgentChat:
             self._url(f"/api/v1/rooms/{room_id}/incoming-webhooks"),
             headers=self._auth_headers(admin_key),
             timeout=self.timeout,
+        )
+
+    def update_incoming_webhook(
+        self,
+        room: str,
+        webhook_id: str,
+        admin_key: str,
+        name: Optional[str] = None,
+        active: Optional[bool] = None,
+    ) -> dict:
+        """Update an incoming webhook."""
+        room_id = self._resolve_room(room)
+        body: Dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if active is not None:
+            body["active"] = active
+        return self._put(
+            f"/api/v1/rooms/{room_id}/incoming-webhooks/{webhook_id}",
+            data=body,
+            headers=self._auth_headers(admin_key),
+        )
+
+    def delete_incoming_webhook(self, room: str, webhook_id: str, admin_key: str) -> None:
+        """Delete an incoming webhook."""
+        room_id = self._resolve_room(room)
+        self._delete(
+            f"/api/v1/rooms/{room_id}/incoming-webhooks/{webhook_id}",
+            headers=self._auth_headers(admin_key),
         )
 
     def post_via_webhook(

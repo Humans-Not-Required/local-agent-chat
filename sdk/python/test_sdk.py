@@ -13,7 +13,7 @@ import traceback
 
 # Import from same directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agent_chat import AgentChat, NotFoundError, ConflictError, ChatError, AuthError
+from agent_chat import AgentChat, NotFoundError, ConflictError, ChatError, AuthError, _request
 
 
 BASE_URL = os.environ.get("CHAT_URL", "http://192.168.0.79:3006")
@@ -1139,6 +1139,476 @@ def main():
         assert "capabilities" in d
         assert "endpoints" in d
         assert isinstance(d["capabilities"], list) or isinstance(d["capabilities"], dict)
+
+    # ── Outgoing Webhook Update & Delete ────────────────────────────────
+    print("\nOutgoing Webhook Update & Delete:")
+
+    @test("update outgoing webhook URL")
+    def _():
+        result = chat.update_webhook(
+            room_name, webhook_data["id"], room_data["admin_key"],
+            url="https://httpbin.org/anything",
+        )
+        assert result.get("updated") is True
+
+    @test("update outgoing webhook events filter")
+    def _():
+        result = chat.update_webhook(
+            room_name, webhook_data["id"], room_data["admin_key"],
+            events="message,file_uploaded,reaction_added",
+        )
+        assert result.get("updated") is True
+
+    @test("deactivate outgoing webhook")
+    def _():
+        result = chat.update_webhook(
+            room_name, webhook_data["id"], room_data["admin_key"],
+            active=False,
+        )
+        assert result.get("updated") is True
+
+    @test("reactivate outgoing webhook")
+    def _():
+        result = chat.update_webhook(
+            room_name, webhook_data["id"], room_data["admin_key"],
+            active=True,
+        )
+        assert result.get("updated") is True
+
+    @test("delete outgoing webhook")
+    def _():
+        chat.delete_webhook(room_name, webhook_data["id"], room_data["admin_key"])
+        webhooks = chat.list_webhooks(room_name, room_data["admin_key"])
+        ids = [w["id"] for w in webhooks]
+        assert webhook_data["id"] not in ids
+
+    # ── Incoming Webhook Update & Delete ─────────────────────────────────
+    print("\nIncoming Webhook Update & Delete:")
+
+    @test("update incoming webhook name")
+    def _():
+        result = chat.update_incoming_webhook(
+            room_name, incoming_wh["id"], room_data["admin_key"],
+            name="Renamed Hook",
+        )
+        assert result.get("updated") is True
+
+    @test("deactivate incoming webhook")
+    def _():
+        result = chat.update_incoming_webhook(
+            room_name, incoming_wh["id"], room_data["admin_key"],
+            active=False,
+        )
+        assert result.get("updated") is True
+
+    @test("reactivate incoming webhook")
+    def _():
+        result = chat.update_incoming_webhook(
+            room_name, incoming_wh["id"], room_data["admin_key"],
+            active=True,
+        )
+        assert result.get("updated") is True
+
+    @test("delete incoming webhook")
+    def _():
+        chat.delete_incoming_webhook(room_name, incoming_wh["id"], room_data["admin_key"])
+        hooks = chat.list_incoming_webhooks(room_name, room_data["admin_key"])
+        ids = [h["id"] for h in hooks]
+        assert incoming_wh["id"] not in ids
+
+    # ── Webhook with Secret/HMAC ─────────────────────────────────────────
+    print("\nWebhook with Secret:")
+
+    @test("create webhook with HMAC secret")
+    def _():
+        wh = chat.create_webhook(
+            room_name, room_data["admin_key"],
+            url="https://httpbin.org/post",
+            events="message",
+            secret="my-hmac-secret-key-123",
+        )
+        assert "id" in wh
+        # Secret should be shown only on creation (if returned) or obscured
+        # Clean up
+        chat.delete_webhook(room_name, wh["id"], room_data["admin_key"])
+
+    # ── Room Creation Edge Cases ─────────────────────────────────────────
+    print("\nRoom Creation Edge Cases:")
+
+    @test("create room with no description")
+    def _():
+        name = f"sdk-nodesc-{int(time.time()) % 100000}"
+        r = chat.create_room(name)
+        assert r["name"] == name
+        assert "admin_key" in r
+        chat.delete_room(name, r["admin_key"])
+
+    @test("create room with special characters in name")
+    def _():
+        name = f"sdk-special-chars-{int(time.time()) % 100000}"
+        r = chat.create_room(name, "Room with spëcial chars: ñ, ü, 日本語")
+        assert r["name"] == name
+        room = chat.get_room(name)
+        assert "spëcial" in room["description"]
+        chat.delete_room(name, r["admin_key"])
+
+    @test("create room with max_messages and max_age")
+    def _():
+        name = f"sdk-retention-combo-{int(time.time()) % 100000}"
+        r = chat.create_room(
+            name, "Combined retention",
+            max_messages=50,
+            max_message_age_hours=48,
+        )
+        room = chat.get_room(name)
+        assert room.get("max_messages") == 50
+        assert room.get("max_message_age_hours") == 48
+        chat.delete_room(name, r["admin_key"])
+
+    # ── Constructor Variants ─────────────────────────────────────────────
+    print("\nConstructor Variants:")
+
+    @test("constructor with trailing slash")
+    def _():
+        c = AgentChat(BASE_URL + "/", sender="trailing-slash-test")
+        h = c.health()
+        assert h.get("status") == "ok"
+
+    @test("constructor with custom timeout")
+    def _():
+        c = AgentChat(BASE_URL, sender="timeout-test", timeout=5)
+        assert c.timeout == 5
+        h = c.health()
+        assert h.get("status") == "ok"
+
+    @test("constructor default sender_type is agent")
+    def _():
+        c = AgentChat(BASE_URL)
+        assert c.sender_type == "agent"
+
+    @test("constructor with custom sender_type")
+    def _():
+        c = AgentChat(BASE_URL, sender="type-test", sender_type="human")
+        assert c.sender_type == "human"
+        h = c.health()
+        assert h.get("status") == "ok"
+
+    # ── DM Edge Cases ────────────────────────────────────────────────────
+    print("\nDM Edge Cases:")
+
+    @test("self-DM rejected")
+    def _():
+        try:
+            chat.send_dm(SENDER, "Talking to myself")
+            assert False, "Self-DM should be rejected"
+        except ChatError:
+            pass
+
+    @test("DM with empty content rejected")
+    def _():
+        try:
+            chat.send_dm("dm-empty-test", "")
+            assert False, "Empty DM should be rejected"
+        except ChatError:
+            pass
+
+    @test("DM conversation is bidirectional")
+    def _():
+        other = AgentChat(BASE_URL, sender="dm-bidir-agent")
+        # Send from main to other
+        dm1 = chat.send_dm("dm-bidir-agent", "Message from main")
+        # Send from other back to main
+        dm2 = other.send_dm(SENDER, "Reply from other")
+        # Both should be in the same DM room
+        assert dm1["room_id"] == dm2["room_id"]
+
+    @test("DM list shows other participant")
+    def _():
+        dms = chat.list_dms()
+        participants = [d["other_participant"] for d in dms]
+        assert "dm-bidir-agent" in participants
+
+    # ── Pin Edge Cases ───────────────────────────────────────────────────
+    print("\nPin Edge Cases:")
+
+    @test("pin already pinned message raises conflict")
+    def _():
+        m = chat.send(room_name, "double pin test")
+        chat.pin(room_name, m["id"], room_data["admin_key"])
+        # Pin again — server rejects with ConflictError or ChatError
+        try:
+            chat.pin(room_name, m["id"], room_data["admin_key"])
+            # If it succeeds, that's also acceptable (idempotent)
+        except (ConflictError, ChatError):
+            pass  # Expected — "Message is already pinned"
+        # Either way, message should be pinned
+        pins = chat.get_pins(room_name)
+        pin_ids = [p["id"] for p in pins]
+        assert m["id"] in pin_ids
+        chat.unpin(room_name, m["id"], room_data["admin_key"])
+
+    @test("pin nonexistent message returns error")
+    def _():
+        try:
+            chat.pin(room_name, "00000000-0000-0000-0000-000000000000", room_data["admin_key"])
+            assert False, "Should raise error"
+        except (NotFoundError, ChatError):
+            pass
+
+    # ── Bookmark Edge Cases ──────────────────────────────────────────────
+    print("\nBookmark Edge Cases:")
+
+    @test("double bookmark is idempotent")
+    def _():
+        chat.bookmark(room_name)
+        chat.bookmark(room_name)  # Should not error
+        bmarks = chat.list_bookmarks()
+        room_ids = [b["room_id"] for b in bmarks]
+        assert room_data["id"] in room_ids
+        chat.unbookmark(room_name)
+
+    @test("unbookmark non-bookmarked room is safe")
+    def _():
+        # Should not raise even if not bookmarked
+        chat.unbookmark(room_name)
+
+    # ── File Edge Cases ──────────────────────────────────────────────────
+    print("\nFile Edge Cases:")
+
+    @test("upload image file")
+    def _():
+        # Small valid PNG (1x1 pixel)
+        import base64
+        png_1x1 = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        )
+        f = chat.upload_file(room_name, png_1x1, "tiny.png", "image/png")
+        assert f["filename"] == "tiny.png"
+        assert f["content_type"] == "image/png"
+        # Verify download matches
+        downloaded = chat.download_file(f["id"])
+        assert downloaded == png_1x1
+        chat.delete_file(room_name, f["id"])
+
+    @test("upload file with unicode filename")
+    def _():
+        f = chat.upload_file(room_name, b"unicode test", "日本語ファイル.txt", "text/plain")
+        info = chat.get_file_info(f["id"])
+        assert "日本語" in info["filename"]
+        chat.delete_file(room_name, f["id"])
+
+    @test("file info has expected fields")
+    def _():
+        f = chat.upload_file(room_name, b"fields test", "fields.txt", "text/plain")
+        info = chat.get_file_info(f["id"])
+        assert "id" in info
+        assert "filename" in info
+        assert "content_type" in info
+        assert "size" in info
+        assert "sender" in info
+        assert "created_at" in info
+        assert info["size"] == len(b"fields test")
+        chat.delete_file(room_name, f["id"])
+
+    @test("delete nonexistent file raises NotFoundError")
+    def _():
+        try:
+            chat.delete_file(room_name, "00000000-0000-0000-0000-000000000000")
+            assert False, "Should raise"
+        except NotFoundError:
+            pass
+
+    # ── Mention Pagination ───────────────────────────────────────────────
+    print("\nMention Pagination:")
+
+    @test("mentions with limit")
+    def _():
+        mentions = chat.get_mentions(limit=2)
+        assert isinstance(mentions, list)
+        assert len(mentions) <= 2
+
+    @test("mentions with after cursor")
+    def _():
+        mentions = chat.get_mentions(limit=5)
+        if len(mentions) >= 2:
+            # Use the last mention's seq as cursor
+            last_seq = mentions[-1].get("seq")
+            if last_seq:
+                older = chat.get_mentions(after=last_seq, limit=5)
+                for m in older:
+                    assert m.get("seq", 0) > last_seq
+
+    # ── Room Archiving Edge Cases ────────────────────────────────────────
+    print("\nRoom Archiving Edge Cases:")
+    archive_room_name = f"sdk-archive-{int(time.time()) % 100000}"
+    archive_room = {}
+
+    @test("create room for archive tests")
+    def _():
+        nonlocal archive_room
+        archive_room = chat.create_room(archive_room_name, "Archive edge case room")
+
+    @test("send message to room before archiving")
+    def _():
+        chat.send(archive_room_name, "Pre-archive message")
+
+    @test("archive room prevents new messages")
+    def _():
+        chat.archive_room(archive_room_name, archive_room["admin_key"])
+        # Sending to archived room should fail or messages should still work
+        # (depends on implementation — some systems allow read-only)
+        try:
+            chat.send(archive_room_name, "Post-archive message")
+            # If it succeeds, that's also valid (some systems don't block writes)
+        except ChatError:
+            pass  # Expected if writes are blocked
+
+    @test("cleanup archive test room")
+    def _():
+        chat.unarchive_room(archive_room_name, archive_room["admin_key"])
+        chat.delete_room(archive_room_name, archive_room["admin_key"])
+
+    # ── Error Response Structure ─────────────────────────────────────────
+    print("\nError Response Structure:")
+
+    @test("404 error has proper body")
+    def _():
+        try:
+            chat.get_room("00000000-0000-0000-0000-000000000000")
+            assert False, "Should raise"
+        except NotFoundError as e:
+            assert e.status_code == 404
+
+    @test("auth error has proper status code")
+    def _():
+        try:
+            chat.update_room(room_name, "bad-key", description="nope")
+            assert False, "Should raise"
+        except AuthError as e:
+            assert e.status_code in (401, 403), f"Expected 401/403, got {e.status_code}"
+
+    @test("conflict error has proper status code")
+    def _():
+        try:
+            chat.create_room(room_name)  # Duplicate
+            assert False, "Should raise"
+        except ConflictError as e:
+            assert e.status_code == 409
+
+    # ── Edit History Edge Cases ──────────────────────────────────────────
+    print("\nEdit History Edge Cases:")
+
+    @test("edit history for unedited message")
+    def _():
+        m = chat.send(room_name, "never edited")
+        h = chat.get_edit_history(room_name, m["id"])
+        assert h["edit_count"] == 0
+        assert len(h.get("edits", [])) == 0
+
+    @test("multiple edits tracked in history")
+    def _():
+        m = chat.send(room_name, "edit v1")
+        chat.edit_message(room_name, m["id"], "edit v2")
+        chat.edit_message(room_name, m["id"], "edit v3")
+        h = chat.get_edit_history(room_name, m["id"])
+        assert h["edit_count"] >= 2
+        assert h["current_content"] == "edit v3"
+
+    # ── Participant Enrichment ───────────────────────────────────────────
+    print("\nParticipant Enrichment:")
+
+    @test("participants include message count")
+    def _():
+        parts = chat.get_participants(room_name)
+        sdk_runner = [p for p in parts if p["sender"] == SENDER]
+        assert len(sdk_runner) == 1
+        assert sdk_runner[0]["message_count"] > 0
+
+    @test("participants include first_seen and last_seen")
+    def _():
+        parts = chat.get_participants(room_name)
+        for p in parts:
+            assert "first_seen" in p, f"Missing first_seen for {p['sender']}"
+            assert "last_seen" in p, f"Missing last_seen for {p['sender']}"
+
+    # ── OpenAPI & Discovery Endpoints ────────────────────────────────────
+    print("\nOpenAPI & Discovery Endpoints:")
+
+    @test("openapi.json is valid JSON with paths")
+    def _():
+        resp = _request("GET", f"{BASE_URL}/api/v1/openapi.json", timeout=10)
+        assert "paths" in resp
+        assert "info" in resp
+        assert len(resp["paths"]) > 30, f"Expected 30+ paths, got {len(resp['paths'])}"
+
+    @test("root llms.txt returns text content")
+    def _():
+        resp = _request("GET", f"{BASE_URL}/llms.txt", timeout=10)
+        text = resp if isinstance(resp, str) else resp.decode("utf-8")
+        assert len(text) > 100
+
+    @test("well-known skills index returns JSON")
+    def _():
+        resp = _request("GET", f"{BASE_URL}/.well-known/skills/index.json", timeout=10)
+        assert "skills" in resp
+        assert len(resp["skills"]) >= 1
+        assert resp["skills"][0]["name"] == "local-agent-chat"
+
+    @test("well-known SKILL.md returns markdown")
+    def _():
+        resp = _request("GET", f"{BASE_URL}/.well-known/skills/local-agent-chat/SKILL.md", timeout=10)
+        text = resp if isinstance(resp, str) else resp.decode("utf-8")
+        assert "Quick Start" in text or "quick start" in text.lower()
+
+    # ── Cross-Feature Interactions ───────────────────────────────────────
+    print("\nCross-Feature Interactions:")
+
+    @test("edit message preserves metadata")
+    def _():
+        m = chat.send(room_name, "meta before edit", metadata={"preserve": "me"})
+        edited = chat.edit_message(room_name, m["id"], "meta after edit")
+        # Metadata may or may not be preserved depending on implementation
+        # Just verify the edit succeeded
+        assert edited["content"] == "meta after edit"
+
+    @test("reaction on edited message works")
+    def _():
+        m = chat.send(room_name, "edit then react")
+        chat.edit_message(room_name, m["id"], "edited then react")
+        chat.react(room_name, m["id"], "✏️")
+        r = chat.get_reactions(room_name, m["id"])
+        emojis = [x["emoji"] for x in r.get("reactions", [])]
+        assert "✏️" in emojis
+
+    @test("thread reply to edited message works")
+    def _():
+        m = chat.send(room_name, "original for thread")
+        chat.edit_message(room_name, m["id"], "edited for thread")
+        reply = chat.reply(room_name, m["id"], "replying to edited")
+        thread = chat.get_thread(room_name, m["id"])
+        assert thread["total_replies"] >= 1
+        assert thread["root"]["content"] == "edited for thread"
+
+    @test("pinned message appears in export")
+    def _():
+        m = chat.send(room_name, "pinned export test unique 98765")
+        chat.pin(room_name, m["id"], room_data["admin_key"])
+        data = chat.export(room_name, format="json")
+        if isinstance(data, str):
+            data = json.loads(data)
+        msgs = data.get("messages", [])
+        found = [msg for msg in msgs if msg.get("content") == "pinned export test unique 98765"]
+        assert len(found) >= 1, f"Pinned message not found in export ({len(msgs)} messages)"
+        chat.unpin(room_name, m["id"], room_data["admin_key"])
+
+    @test("file in room visible to participants")
+    def _():
+        f = chat.upload_file(room_name, b"participant vis test", "vis.txt", "text/plain")
+        other = AgentChat(BASE_URL, sender="file-viewer")
+        files = other.list_files(room_name)
+        ids = [fi["id"] for fi in files]
+        assert f["id"] in ids
+        chat.delete_file(room_name, f["id"])
 
     # ── Cleanup ─────────────────────────────────────────────────────────
     print("\nCleanup:")

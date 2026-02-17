@@ -31,6 +31,8 @@ jobs:
       - name: Build server
         run: cargo build --release
       - name: Start server
+        env:
+          RATE_LIMIT_ROOMS: 1000
         run: |
           ./target/release/local-agent-chat &
           echo "SERVER_PID=$!" >> $GITHUB_ENV
