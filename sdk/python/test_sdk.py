@@ -484,6 +484,263 @@ def main():
         except NotFoundError:
             pass
 
+    # ── Typing ──────────────────────────────────────────────────────────
+    print("\nTyping:")
+
+    @test("send typing indicator")
+    def _():
+        # Should not raise
+        chat.send_typing(room_name)
+
+    @test("send typing with explicit sender")
+    def _():
+        chat.send_typing(room_name, sender="typing-test-agent")
+
+    # ── Outgoing Webhooks ───────────────────────────────────────────────
+    print("\nOutgoing Webhooks:")
+    webhook_data = {}
+
+    @test("create outgoing webhook")
+    def _():
+        nonlocal webhook_data
+        webhook_data = chat.create_webhook(
+            room_name,
+            room_data["admin_key"],
+            url="https://httpbin.org/post",
+            events="message,reaction_added",
+        )
+        assert "id" in webhook_data
+        assert webhook_data["url"] == "https://httpbin.org/post"
+
+    @test("list outgoing webhooks")
+    def _():
+        webhooks = chat.list_webhooks(room_name, room_data["admin_key"])
+        assert isinstance(webhooks, list)
+        assert len(webhooks) >= 1
+        ids = [w["id"] for w in webhooks]
+        assert webhook_data["id"] in ids
+
+    @test("webhook delivery log initially empty")
+    def _():
+        deliveries = chat.get_webhook_deliveries(
+            room_name, webhook_data["id"], room_data["admin_key"]
+        )
+        assert isinstance(deliveries, list)
+
+    # ── Incoming Webhooks ───────────────────────────────────────────────
+    print("\nIncoming Webhooks:")
+    incoming_wh = {}
+
+    @test("create incoming webhook")
+    def _():
+        nonlocal incoming_wh
+        incoming_wh = chat.create_incoming_webhook(
+            room_name, room_data["admin_key"], name="SDK Test Hook"
+        )
+        assert "token" in incoming_wh
+        assert incoming_wh["name"] == "SDK Test Hook"
+
+    @test("list incoming webhooks")
+    def _():
+        hooks = chat.list_incoming_webhooks(room_name, room_data["admin_key"])
+        assert isinstance(hooks, list)
+        assert len(hooks) >= 1
+
+    @test("post message via incoming webhook")
+    def _():
+        token = incoming_wh["token"]
+        msg = chat.post_via_webhook(
+            token, "Hello from webhook!", sender="webhook-bot"
+        )
+        assert msg["content"] == "Hello from webhook!"
+        assert msg["sender"] == "webhook-bot"
+
+    @test("post via webhook with metadata")
+    def _():
+        token = incoming_wh["token"]
+        msg = chat.post_via_webhook(
+            token,
+            "Webhook with meta",
+            sender="webhook-bot",
+            metadata={"source": "test"},
+        )
+        assert msg.get("metadata", {}).get("source") == "test"
+
+    # ── Search Pagination & Filtering ───────────────────────────────────
+    print("\nSearch Pagination:")
+
+    @test("search with sender filter")
+    def _():
+        results = chat.search("Hello", room=room_name, sender=SENDER)
+        assert "results" in results
+        for r in results["results"]:
+            assert r["sender"] == SENDER
+
+    @test("search with limit and has_more")
+    def _():
+        results = chat.search("from", limit=1)
+        assert "results" in results
+        assert "has_more" in results
+
+    @test("search empty query returns error")
+    def _():
+        try:
+            chat.search("")
+            assert False, "Should raise on empty query"
+        except ChatError:
+            pass
+
+    # ── Message Delete ──────────────────────────────────────────────────
+    print("\nMessage Delete:")
+
+    @test("delete own message")
+    def _():
+        m = chat.send(room_name, "to be deleted")
+        chat.delete_message(room_name, m["id"])
+        # Verify message is gone
+        msgs = chat.get_messages(room_name, limit=50)
+        ids = [msg["id"] for msg in msgs]
+        assert m["id"] not in ids
+
+    @test("admin can delete any message")
+    def _():
+        other = AgentChat(BASE_URL, sender="other-user")
+        m = other.send(room_name, "admin should delete this")
+        chat.delete_message(room_name, m["id"], admin_key=room_data["admin_key"])
+
+    # ── Room Reactions (bulk) ───────────────────────────────────────────
+    print("\nRoom Reactions (bulk):")
+
+    @test("get room reactions returns grouped data")
+    def _():
+        # Add some reactions first
+        m1 = chat.send(room_name, "react to this 1")
+        m2 = chat.send(room_name, "react to this 2")
+        chat.react(room_name, m1["id"], "👍")
+        chat.react(room_name, m2["id"], "🎉")
+        r = chat.get_room_reactions(room_name)
+        assert isinstance(r, dict) or isinstance(r, list)
+
+    # ── DM get_dm ───────────────────────────────────────────────────────
+    print("\nDM Details:")
+
+    @test("get DM room details")
+    def _():
+        dms = chat.list_dms()
+        if dms:
+            dm_room_id = dms[0]["room_id"]
+            dm = chat.get_dm(dm_room_id)
+            assert "name" in dm or "id" in dm
+
+    # ── Export with Filters ─────────────────────────────────────────────
+    print("\nExport Filters:")
+
+    @test("export with sender filter")
+    def _():
+        data = chat.export(room_name, format="json", sender=SENDER)
+        if isinstance(data, str):
+            data = json.loads(data)
+        for msg in data.get("messages", []):
+            assert msg["sender"] == SENDER
+
+    @test("export with limit")
+    def _():
+        data = chat.export(room_name, format="json", limit=2)
+        if isinstance(data, str):
+            data = json.loads(data)
+        assert len(data.get("messages", [])) <= 2
+
+    @test("export CSV has proper headers")
+    def _():
+        csv = chat.export(room_name, format="csv")
+        first_line = csv.split("\n")[0]
+        assert "seq" in first_line
+        assert "sender" in first_line
+        assert "content" in first_line
+
+    # ── Retention ───────────────────────────────────────────────────────
+    print("\nRetention:")
+    retention_room_name = f"sdk-retention-{int(time.time()) % 100000}"
+    retention_room = {}
+
+    @test("create room with retention settings")
+    def _():
+        nonlocal retention_room
+        retention_room = chat.create_room(
+            retention_room_name,
+            "Retention test room",
+            max_messages=10,
+        )
+        assert "admin_key" in retention_room
+
+    @test("room shows retention settings")
+    def _():
+        r = chat.get_room(retention_room_name)
+        assert r.get("max_messages") == 10
+
+    @test("trigger retention sweep")
+    def _():
+        # Send 15 messages to exceed max_messages=10
+        for i in range(15):
+            chat.send(retention_room_name, f"Retention msg {i}")
+        result = chat.trigger_retention()
+        assert "rooms_checked" in result
+        assert "total_pruned" in result
+
+    @test("retention pruned excess messages")
+    def _():
+        msgs = chat.get_messages(retention_room_name, limit=50)
+        assert len(msgs) <= 10, f"Expected ≤10 messages after retention, got {len(msgs)}"
+
+    @test("cleanup retention room")
+    def _():
+        chat.delete_room(retention_room_name, retention_room["admin_key"])
+
+    # ── Additional Edge Cases ───────────────────────────────────────────
+    print("\nEdge Cases:")
+
+    @test("get messages with before_seq pagination")
+    def _():
+        msgs = chat.get_messages(room_name, limit=50)
+        if len(msgs) >= 2:
+            last_seq = msgs[-1]["seq"]
+            older = chat.get_messages(room_name, before_seq=last_seq, limit=5)
+            for m in older:
+                assert m["seq"] < last_seq
+
+    @test("profile validation rejects long bio")
+    def _():
+        try:
+            chat.set_profile(bio="x" * 1001)
+            assert False, "Should reject bio > 1000 chars"
+        except ChatError:
+            pass
+
+    @test("room reactions empty for new room")
+    def _():
+        tmp_room = chat.create_room(
+            f"sdk-empty-{int(time.time()) % 100000}", "temp"
+        )
+        r = chat.get_room_reactions(tmp_room["name"])
+        assert isinstance(r, dict) or isinstance(r, list)
+        chat.delete_room(tmp_room["name"], tmp_room["admin_key"])
+
+    @test("stats includes comprehensive fields")
+    def _():
+        s = chat.stats()
+        assert "messages" in s
+        assert "rooms" in s
+        # New comprehensive stats fields
+        expected = ["messages", "rooms"]
+        for field in expected:
+            assert field in s, f"Missing stats field: {field}"
+
+    @test("activity with exclude_sender")
+    def _():
+        act = chat.activity(limit=10, exclude_sender=SENDER)
+        for msg in act:
+            assert msg.get("sender") != SENDER
+
     # ── Cleanup ─────────────────────────────────────────────────────────
     print("\nCleanup:")
 

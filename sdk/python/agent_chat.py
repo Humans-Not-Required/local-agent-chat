@@ -487,9 +487,13 @@ class AgentChat:
         room: Optional[str] = None,
         sender: Optional[str] = None,
         sender_type: Optional[str] = None,
+        exclude_sender: Optional[str] = None,
         limit: int = 50,
     ) -> List[dict]:
-        """Cross-room activity feed (newest first)."""
+        """Cross-room activity feed (newest first).
+
+        exclude_sender: Comma-separated senders to exclude (e.g. "Bot1,Bot2").
+        """
         room_id = self._resolve_room(room) if room else None
         resp = self._get(
             "/api/v1/activity",
@@ -497,6 +501,7 @@ class AgentChat:
             room_id=room_id,
             sender=sender,
             sender_type=sender_type,
+            exclude_sender=exclude_sender,
             limit=limit,
         )
         if isinstance(resp, dict) and "events" in resp:
