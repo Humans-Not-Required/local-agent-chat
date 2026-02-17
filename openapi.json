@@ -3308,11 +3308,11 @@
     },
     "/stats": {
       "get": {
-        "summary": "Global stats",
+        "summary": "Comprehensive operational stats",
         "operationId": "stats",
         "responses": {
           "200": {
-            "description": "Stats object with rooms, messages, active_senders_1h, by_sender_type breakdown, active_by_type_1h"
+            "description": "Stats object with rooms (active + archived), messages, sender type breakdown, active senders (1h), DMs (conversations + messages), files (count + bytes), profiles, reactions, pins, threads, bookmarks, webhooks (outgoing/incoming/active + 24h delivery metrics)"
           }
         }
       }

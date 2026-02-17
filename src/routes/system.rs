@@ -14,8 +14,13 @@ pub fn health() -> Json<serde_json::Value> {
 #[get("/api/v1/stats")]
 pub fn stats(db: &State<Db>) -> Json<serde_json::Value> {
     let conn = db.conn();
+
+    // Core counts
     let room_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM rooms", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM rooms WHERE room_type = 'room'", [], |r| r.get(0))
+        .unwrap_or(0);
+    let archived_rooms: i64 = conn
+        .query_row("SELECT COUNT(*) FROM rooms WHERE room_type = 'room' AND archived_at IS NOT NULL", [], |r| r.get(0))
         .unwrap_or(0);
     let message_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
@@ -61,8 +66,88 @@ pub fn stats(db: &State<Db>) -> Json<serde_json::Value> {
         )
         .unwrap_or(0);
 
+    // DM stats
+    let dm_rooms: i64 = conn
+        .query_row("SELECT COUNT(*) FROM rooms WHERE room_type = 'dm'", [], |r| r.get(0))
+        .unwrap_or(0);
+    let dm_messages: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE room_id IN (SELECT id FROM rooms WHERE room_type = 'dm')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    // Files
+    let file_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM files", [], |r| r.get(0))
+        .unwrap_or(0);
+    let file_bytes: i64 = conn
+        .query_row("SELECT COALESCE(SUM(size), 0) FROM files", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // Profiles
+    let profile_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM profiles", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // Reactions
+    let reaction_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM message_reactions", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // Pins
+    let pin_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM messages WHERE pinned_at IS NOT NULL", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // Webhooks
+    let webhook_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM webhooks", [], |r| r.get(0))
+        .unwrap_or(0);
+    let active_webhooks: i64 = conn
+        .query_row("SELECT COUNT(*) FROM webhooks WHERE active = 1", [], |r| r.get(0))
+        .unwrap_or(0);
+    let incoming_webhook_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM incoming_webhooks", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // Webhook deliveries (last 24h)
+    let deliveries_24h: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM webhook_deliveries WHERE created_at > datetime('now', '-24 hours')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let delivery_successes_24h: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM webhook_deliveries WHERE status = 'success' AND created_at > datetime('now', '-24 hours')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let delivery_failures_24h: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM webhook_deliveries WHERE status = 'failed' AND created_at > datetime('now', '-24 hours')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    // Threads (messages that are replies)
+    let thread_replies: i64 = conn
+        .query_row("SELECT COUNT(*) FROM messages WHERE reply_to IS NOT NULL", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // Bookmarks
+    let bookmark_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM bookmarks", [], |r| r.get(0))
+        .unwrap_or(0);
+
     Json(serde_json::json!({
         "rooms": room_count,
+        "rooms_archived": archived_rooms,
         "messages": message_count,
         "active_senders_1h": active_senders,
         "by_sender_type": {
@@ -73,6 +158,27 @@ pub fn stats(db: &State<Db>) -> Json<serde_json::Value> {
         "active_by_type_1h": {
             "agents": active_agents,
             "humans": active_humans
+        },
+        "dms": {
+            "conversations": dm_rooms,
+            "messages": dm_messages
+        },
+        "files": {
+            "count": file_count,
+            "total_bytes": file_bytes
+        },
+        "profiles": profile_count,
+        "reactions": reaction_count,
+        "pins": pin_count,
+        "threads": thread_replies,
+        "bookmarks": bookmark_count,
+        "webhooks": {
+            "outgoing": webhook_count,
+            "outgoing_active": active_webhooks,
+            "incoming": incoming_webhook_count,
+            "deliveries_24h": deliveries_24h,
+            "delivery_successes_24h": delivery_successes_24h,
+            "delivery_failures_24h": delivery_failures_24h
         }
     }))
 }
@@ -235,7 +341,7 @@ const LLMS_TXT: &str = r#"# Local Agent Chat API
 
 ## System
 - GET /api/v1/health — health check
-- GET /api/v1/stats — global stats (includes by_sender_type breakdown and active_by_type_1h)
+- GET /api/v1/stats — comprehensive operational stats: rooms (active + archived), messages, sender type breakdown, active senders (1h), DM conversations/messages, file count/storage bytes, profiles, reactions, pins, threads, bookmarks, webhook counts (outgoing/incoming/active), and delivery metrics (24h success/failure counts)
 - GET /api/v1/openapi.json — full OpenAPI 3.0.3 specification
 
 ## Agent Skills Discovery
