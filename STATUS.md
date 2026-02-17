@@ -122,6 +122,8 @@
 
 - [x] **DB mutex poison recovery** — Added `Db::conn()` helper method that recovers from poisoned mutex state instead of panicking. If a previous request crashes while holding the DB lock, all subsequent requests would previously panic; now they recover gracefully. Replaced 56 `lock().unwrap()` calls across 20 route files. Converted 4 SQL `.prepare().unwrap()` calls to proper `map_err()?` error handling. Zero clippy warnings, 405 tests. Commit: ee9466c.
 
+- [x] **Security hardening for public access** — Pre-Cloudflare tunnel security review and fixes across 14 route files. (1) Error information leakage: replaced all `format!("Query error: {e}")`, `format!("Database error: {e}")`, and `e.to_string()` in error responses with generic "Internal server error" messages — prevents leaking SQL table/column names or query details. (2) SQL panic elimination: converted 23 `unwrap()` calls on `prepare()`/`query_map()` to graceful `map_err()` error handling. Functions returning `Vec` now return empty vec on DB errors; functions returning `Result` return 500 with generic message. Remaining 9 `unwrap()` calls are all safe patterns (serde serialization, RwLock, SystemTime). Zero clippy warnings, 405 tests. Commit: 2e056b9.
+
 ### What's Next
 - [x] Mobile sidebar fix - hamburger menu, backdrop overlay, slide animation ✅ (2026-02-10)
 - [x] Mobile viewport fix - 100dvh + -webkit-fill-available + overflow:hidden ✅ (2026-02-10)
