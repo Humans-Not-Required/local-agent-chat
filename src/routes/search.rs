@@ -15,7 +15,7 @@ pub fn activity_feed(
     after: Option<i64>,
     exclude_sender: Option<&str>,
 ) -> Json<ActivityResponse> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     let limit = limit.unwrap_or(50).clamp(1, 500);
 
     let mut sql = String::from(
@@ -133,7 +133,7 @@ pub fn search_messages(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     let limit = limit.unwrap_or(50).clamp(1, 200);
 
     // Try FTS5 first — falls back to LIKE if FTS fails (e.g. syntax error in query)
@@ -250,7 +250,7 @@ pub fn search_messages(
             sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
             param_values.push(limit.to_string());
 
-            let mut stmt = conn.prepare(&sql).unwrap();
+            let mut stmt = conn.prepare(&sql).map_err(|e| (Status::InternalServerError, Json(serde_json::json!({"error": e.to_string()}))))?;
             let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
                 .iter()
                 .map(|v| v as &dyn rusqlite::types::ToSql)

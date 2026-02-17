@@ -48,7 +48,7 @@ pub fn send_message(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn
@@ -180,7 +180,7 @@ pub fn edit_message(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Fetch existing message
     let existing_sender: String = conn
@@ -284,7 +284,7 @@ pub fn delete_message(
     sender: Option<&str>,
     admin: Option<AdminKey>,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Fetch existing message
     let existing_sender: String = conn
@@ -371,7 +371,7 @@ pub fn get_messages(
     exclude_sender: Option<&str>,
     before_seq: Option<i64>,
 ) -> Result<Json<Vec<Message>>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn

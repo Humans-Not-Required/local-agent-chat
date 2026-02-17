@@ -22,7 +22,7 @@ pub fn add_bookmark(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn
@@ -89,7 +89,7 @@ pub fn remove_bookmark(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     let rows = conn
         .execute(
@@ -132,7 +132,7 @@ pub fn list_bookmarks(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     let mut stmt = conn
         .prepare(

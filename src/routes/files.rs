@@ -78,7 +78,7 @@ pub fn upload_file(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn
@@ -133,7 +133,7 @@ pub fn download_file(
     db: &State<Db>,
     file_id: &str,
 ) -> Result<(rocket::http::ContentType, Vec<u8>), (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     conn.query_row(
         "SELECT content_type, data FROM files WHERE id = ?1",
         params![file_id],
@@ -161,7 +161,7 @@ pub fn file_info(
     db: &State<Db>,
     file_id: &str,
 ) -> Result<Json<FileInfo>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     conn.query_row(
         "SELECT id, room_id, sender, filename, content_type, size, created_at FROM files WHERE id = ?1",
         params![file_id],
@@ -193,7 +193,7 @@ pub fn list_files(
     db: &State<Db>,
     room_id: &str,
 ) -> Result<Json<Vec<FileInfo>>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn
@@ -246,7 +246,7 @@ pub fn delete_file(
     sender: Option<&str>,
     admin: Option<AdminKey>,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Fetch existing file
     let existing_sender: String = conn

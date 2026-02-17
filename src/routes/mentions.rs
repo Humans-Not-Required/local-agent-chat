@@ -29,7 +29,7 @@ pub fn get_mentions(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     let limit = limit.unwrap_or(50).clamp(1, 200);
 
     // Build LIKE pattern for @mention detection
@@ -64,7 +64,7 @@ pub fn get_mentions(
     sql.push_str(&format!(" ORDER BY m.seq DESC LIMIT ?{idx}"));
     param_values.push(limit.to_string());
 
-    let mut stmt = conn.prepare(&sql).unwrap();
+    let mut stmt = conn.prepare(&sql).map_err(|e| (Status::InternalServerError, Json(serde_json::json!({"error": e.to_string()}))))?;
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
         .iter()
         .map(|v| v as &dyn rusqlite::types::ToSql)
@@ -113,7 +113,7 @@ pub fn get_unread_mentions(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     let mention_pattern = format!(
         "%@{}%",
@@ -131,7 +131,7 @@ pub fn get_unread_mentions(
                GROUP BY m.room_id \
                ORDER BY newest_seq DESC";
 
-    let mut stmt = conn.prepare(sql).unwrap();
+    let mut stmt = conn.prepare(sql).map_err(|e| (Status::InternalServerError, Json(serde_json::json!({"error": e.to_string()}))))?;
     let rooms: Vec<UnreadMentionRoom> = stmt
         .query_map(
             rusqlite::params![mention_pattern, target],

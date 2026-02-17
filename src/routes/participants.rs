@@ -9,7 +9,7 @@ pub fn room_participants(
     db: &State<Db>,
     room_id: &str,
 ) -> Result<Json<Vec<crate::models::EnrichedParticipant>>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn

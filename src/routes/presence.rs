@@ -13,7 +13,7 @@ pub fn room_presence(
     room_id: &str,
 ) -> Result<Json<crate::models::RoomPresenceResponse>, (Status, Json<serde_json::Value>)> {
     // Verify room exists
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     let room_exists: bool = conn
         .query_row(
             "SELECT COUNT(*) FROM rooms WHERE id = ?1",

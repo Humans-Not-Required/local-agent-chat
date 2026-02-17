@@ -16,7 +16,7 @@ pub fn update_read_position(
     db: &State<Db>,
     events: &State<EventBus>,
 ) -> Result<Json<ReadPosition>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn
@@ -82,7 +82,7 @@ pub fn update_read_position(
 /// GET /api/v1/rooms/<room_id>/read — Get all read positions for a room.
 #[get("/api/v1/rooms/<room_id>/read")]
 pub fn get_read_positions(room_id: &str, db: &State<Db>) -> Result<Json<Vec<ReadPosition>>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn
@@ -128,7 +128,7 @@ pub fn get_unread(sender: &str, db: &State<Db>) -> Result<Json<UnreadResponse>, 
         return Err((Status::BadRequest, Json(serde_json::json!({"error": "Sender parameter is required"}))));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Get all rooms with their latest seq, unread count, and the sender's read position.
     // Uses COUNT to compute unread (seq is global, not per-room, so arithmetic won't work).

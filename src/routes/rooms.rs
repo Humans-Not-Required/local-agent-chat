@@ -41,7 +41,7 @@ pub fn create_room(
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     let admin_key = generate_admin_key();
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     match conn.execute(
         "INSERT INTO rooms (id, name, description, created_by, created_at, updated_at, admin_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -69,7 +69,7 @@ pub fn create_room(
 
 #[get("/api/v1/rooms?<include_archived>&<sender>")]
 pub fn list_rooms(db: &State<Db>, include_archived: Option<bool>, sender: Option<&str>) -> Json<Vec<RoomWithStats>> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     let include = include_archived.unwrap_or(false);
 
     // When sender is provided, include bookmark status and sort bookmarked rooms first
@@ -169,7 +169,7 @@ pub fn get_room(
     db: &State<Db>,
     room_id: &str,
 ) -> Result<Json<RoomWithStats>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     conn.query_row(
         "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,
                 (SELECT COUNT(*) FROM messages WHERE room_id = r.id) as message_count,
@@ -213,7 +213,7 @@ pub fn update_room(
     admin: AdminKey,
     body: Json<UpdateRoom>,
 ) -> Result<Json<RoomWithStats>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let stored_key: Option<String> = conn
@@ -352,7 +352,7 @@ pub fn archive_room(
     room_id: &str,
     admin: AdminKey,
 ) -> Result<Json<RoomWithStats>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let row: (Option<String>, Option<String>) = conn
@@ -445,7 +445,7 @@ pub fn unarchive_room(
     room_id: &str,
     admin: AdminKey,
 ) -> Result<Json<RoomWithStats>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let row: (Option<String>, Option<String>) = conn
@@ -537,7 +537,7 @@ pub fn delete_room(
     room_id: &str,
     admin: AdminKey,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Fetch the room's admin key
     let stored_key: Option<String> = conn

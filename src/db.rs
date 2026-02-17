@@ -1,8 +1,23 @@
 use rusqlite::{Connection, params};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 pub struct Db {
     pub conn: Mutex<Connection>,
+}
+
+impl Db {
+    /// Acquire a database connection, recovering from mutex poison if needed.
+    ///
+    /// If a previous thread panicked while holding the lock, the mutex becomes
+    /// "poisoned." This method recovers by extracting the inner connection —
+    /// safe because SQLite auto-rolls back uncommitted transactions on panic,
+    /// and WAL mode ensures crash consistency.
+    pub fn conn(&self) -> MutexGuard<'_, Connection> {
+        self.conn.lock().unwrap_or_else(|poisoned| {
+            eprintln!("WARN: DB mutex was poisoned (a previous request panicked while holding the lock). Recovering.");
+            poisoned.into_inner()
+        })
+    }
 }
 
 /// Generate a room admin key: `chat_<32 hex chars>`
@@ -28,7 +43,7 @@ impl Db {
     }
 
     fn migrate(&self) {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS rooms (
                 id TEXT PRIMARY KEY,

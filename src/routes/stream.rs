@@ -48,7 +48,7 @@ pub fn message_stream(
     // Replay missed messages if `after` or `since` provided
     let replay: Vec<Message> = if let Some(after_val) = after {
         // Preferred: cursor-based replay using monotonic seq
-        let conn = db.conn.lock().unwrap();
+        let conn = db.conn();
         let mut stmt = conn
             .prepare(
                 "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1 AND seq > ?2 ORDER BY seq ASC LIMIT 100",
@@ -81,7 +81,7 @@ pub fn message_stream(
         }
     } else if let Some(since_val) = since {
         // Backward compat: timestamp-based replay
-        let conn = db.conn.lock().unwrap();
+        let conn = db.conn();
         let mut stmt = conn
             .prepare(
                 "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by FROM messages WHERE room_id = ?1 AND created_at > ?2 ORDER BY seq ASC LIMIT 100",

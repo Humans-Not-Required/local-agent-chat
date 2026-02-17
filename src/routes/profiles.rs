@@ -74,7 +74,7 @@ pub fn upsert_profile(
         }
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     let now = chrono::Utc::now().to_rfc3339();
 
     // Check if profile already exists
@@ -175,7 +175,7 @@ pub fn upsert_profile(
 /// GET /api/v1/profiles/<sender> — Get a single profile
 #[get("/api/v1/profiles/<sender>")]
 pub fn get_profile(sender: &str, db: &State<Db>) -> Result<Json<Profile>, rocket::http::Status> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     let profile = conn
         .query_row(
             "SELECT sender, display_name, sender_type, avatar_url, bio, status_text, metadata, created_at, updated_at FROM profiles WHERE sender = ?1",
@@ -206,7 +206,7 @@ pub fn list_profiles(
     sender_type: Option<&str>,
     db: &State<Db>,
 ) -> Json<Vec<Profile>> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     let (sql, param_values): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(st) = sender_type {
         (
@@ -251,7 +251,7 @@ pub fn delete_profile(
     db: &State<Db>,
     events: &State<EventBus>,
 ) -> rocket::http::Status {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     let affected = conn
         .execute("DELETE FROM profiles WHERE sender = ?1", params![sender])

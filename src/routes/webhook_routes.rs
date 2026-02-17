@@ -14,7 +14,7 @@ pub fn create_webhook(
     admin: AdminKey,
     body: Json<CreateWebhook>,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let stored_key: Option<String> = conn
@@ -114,7 +114,7 @@ pub fn list_webhooks(
     room_id: &str,
     admin: AdminKey,
 ) -> Result<Json<Vec<Webhook>>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let stored_key: Option<String> = conn
@@ -177,7 +177,7 @@ pub fn update_webhook(
     admin: AdminKey,
     body: Json<UpdateWebhook>,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let stored_key: Option<String> = conn
@@ -290,7 +290,7 @@ pub fn delete_webhook(
     webhook_id: &str,
     admin: AdminKey,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let stored_key: Option<String> = conn

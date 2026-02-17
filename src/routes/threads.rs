@@ -30,7 +30,7 @@ pub fn get_thread(
     room_id: &str,
     message_id: &str,
 ) -> Result<Json<ThreadResponse>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn

@@ -16,7 +16,7 @@ pub fn pin_message(
     message_id: &str,
     admin: AdminKey,
 ) -> Result<Json<PinnedMessage>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let stored_key: Option<String> = conn
@@ -131,7 +131,7 @@ pub fn unpin_message(
     message_id: &str,
     admin: AdminKey,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists and admin key matches
     let stored_key: Option<String> = conn
@@ -208,7 +208,7 @@ pub fn list_pins(
     db: &State<Db>,
     room_id: &str,
 ) -> Result<Json<Vec<PinnedMessage>>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn

@@ -40,7 +40,7 @@ pub fn add_reaction(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify message exists and belongs to this room
     let msg_exists: bool = conn
@@ -134,7 +134,7 @@ pub fn remove_reaction(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify message exists in this room
     let msg_exists: bool = conn
@@ -194,7 +194,7 @@ pub fn get_reactions(
     room_id: &str,
     message_id: &str,
 ) -> Result<Json<ReactionsResponse>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify message exists in this room
     let msg_exists: bool = conn
@@ -249,7 +249,7 @@ pub fn get_room_reactions(
     db: &State<Db>,
     room_id: &str,
 ) -> Result<Json<RoomReactionsResponse>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Verify room exists
     let room_exists: bool = conn

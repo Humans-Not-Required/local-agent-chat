@@ -86,7 +86,7 @@ pub fn send_dm(
     }
 
     let room_name = dm_room_name(&sender, &recipient);
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Check if DM room already exists
     let existing_room: Option<String> = conn
@@ -181,7 +181,7 @@ pub fn list_dm_conversations(
         ));
     }
 
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     // Find all DM rooms where this sender is a participant
     // DM room names are: dm:{sorted_a}:{sorted_b}
@@ -272,7 +272,7 @@ pub fn get_dm_conversation(
     db: &State<Db>,
     room_id: &str,
 ) -> Result<Json<serde_json::Value>, (Status, Json<serde_json::Value>)> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
 
     let result = conn.query_row(
         "SELECT r.id, r.name, r.description, r.created_by, r.created_at, r.updated_at,

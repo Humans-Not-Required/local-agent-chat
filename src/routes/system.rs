@@ -13,7 +13,7 @@ pub fn health() -> Json<serde_json::Value> {
 
 #[get("/api/v1/stats")]
 pub fn stats(db: &State<Db>) -> Json<serde_json::Value> {
-    let conn = db.conn.lock().unwrap();
+    let conn = db.conn();
     let room_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM rooms", [], |r| r.get(0))
         .unwrap_or(0);
