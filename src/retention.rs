@@ -4,6 +4,22 @@ use std::sync::{Arc, Mutex};
 /// Interval between retention sweeps (seconds).
 const RETENTION_INTERVAL_SECS: u64 = 60;
 
+/// Result of a single room's retention sweep.
+#[derive(Debug, Clone)]
+pub struct RoomRetentionDetail {
+    pub room_id: String,
+    pub pruned_by_count: i64,
+    pub pruned_by_age: i64,
+}
+
+/// Result of a full retention sweep across all rooms.
+#[derive(Debug, Clone)]
+pub struct RetentionResult {
+    pub rooms_checked: usize,
+    pub total_pruned: i64,
+    pub details: Vec<RoomRetentionDetail>,
+}
+
 /// Spawns a background task that periodically prunes messages based on room retention settings.
 ///
 /// Rooms can configure:
@@ -44,7 +60,14 @@ pub fn spawn_retention_task(db_path: String) {
 }
 
 /// Execute one retention sweep across all rooms with retention settings.
-fn run_retention(conn: &Connection) {
+/// Returns structured results for inspection/logging.
+pub fn run_retention(conn: &Connection) -> RetentionResult {
+    let mut result = RetentionResult {
+        rooms_checked: 0,
+        total_pruned: 0,
+        details: Vec::new(),
+    };
+
     // Find rooms with any retention settings
     let rooms: Vec<(String, Option<i64>, Option<i64>)> = {
         let mut stmt = match conn.prepare(
@@ -52,36 +75,46 @@ fn run_retention(conn: &Connection) {
              WHERE max_messages IS NOT NULL OR max_message_age_hours IS NOT NULL",
         ) {
             Ok(s) => s,
-            Err(_) => return,
+            Err(_) => return result,
         };
         match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))) {
             Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-            Err(_) => return,
+            Err(_) => return result,
         }
     };
 
+    result.rooms_checked = rooms.len();
+
     for (room_id, max_messages, max_age_hours) in rooms {
-        let mut total_pruned = 0i64;
+        let mut detail = RoomRetentionDetail {
+            room_id: room_id.clone(),
+            pruned_by_count: 0,
+            pruned_by_age: 0,
+        };
 
         // Prune by max_messages (keep newest N, pinned messages exempt)
         if let Some(max) = max_messages {
-            let pruned = prune_by_count(conn, &room_id, max);
-            total_pruned += pruned;
+            detail.pruned_by_count = prune_by_count(conn, &room_id, max);
         }
 
         // Prune by max_message_age_hours (pinned messages exempt)
         if let Some(hours) = max_age_hours {
-            let pruned = prune_by_age(conn, &room_id, hours);
-            total_pruned += pruned;
+            detail.pruned_by_age = prune_by_age(conn, &room_id, hours);
         }
 
-        if total_pruned > 0 {
+        let room_total = detail.pruned_by_count + detail.pruned_by_age;
+        if room_total > 0 {
             eprintln!(
                 "🧹 Retention: pruned {} messages from room {}",
-                total_pruned, room_id
+                room_total, room_id
             );
         }
+
+        result.total_pruned += room_total;
+        result.details.push(detail);
     }
+
+    result
 }
 
 /// Delete oldest non-pinned messages beyond the count limit. Returns number pruned.

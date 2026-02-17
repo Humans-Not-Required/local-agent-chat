@@ -3546,6 +3546,58 @@
           }
         }
       }
+    },
+    "admin/retention/run": {
+      "post": {
+        "summary": "Trigger retention sweep",
+        "description": "Manually trigger a message retention sweep across all rooms with retention settings. Returns details of rooms checked and messages pruned.",
+        "operationId": "runRetention",
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Retention sweep completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rooms_checked": {
+                      "type": "integer",
+                      "description": "Number of rooms with retention settings"
+                    },
+                    "total_pruned": {
+                      "type": "integer",
+                      "description": "Total messages pruned across all rooms"
+                    },
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "room_id": {
+                            "type": "string"
+                          },
+                          "pruned_by_count": {
+                            "type": "integer"
+                          },
+                          "pruned_by_age": {
+                            "type": "integer"
+                          },
+                          "total": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

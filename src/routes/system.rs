@@ -1,6 +1,7 @@
 use crate::db::Db;
+use crate::retention;
 use rocket::serde::json::Json;
-use rocket::{get, State};
+use rocket::{get, post, State};
 
 #[get("/api/v1/health")]
 pub fn health() -> Json<serde_json::Value> {
@@ -183,6 +184,33 @@ pub fn stats(db: &State<Db>) -> Json<serde_json::Value> {
     }))
 }
 
+/// Manually trigger a retention sweep. Returns details of what was pruned.
+/// Useful for testing and operational management.
+#[post("/api/v1/admin/retention/run")]
+pub fn run_retention_now(db: &State<Db>) -> Json<serde_json::Value> {
+    let conn = db.conn();
+    let result = retention::run_retention(&conn);
+
+    let details: Vec<serde_json::Value> = result
+        .details
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "room_id": d.room_id,
+                "pruned_by_count": d.pruned_by_count,
+                "pruned_by_age": d.pruned_by_age,
+                "total": d.pruned_by_count + d.pruned_by_age
+            })
+        })
+        .collect();
+
+    Json(serde_json::json!({
+        "rooms_checked": result.rooms_checked,
+        "total_pruned": result.total_pruned,
+        "details": details
+    }))
+}
+
 #[get("/llms.txt")]
 pub fn llms_txt_root() -> (rocket::http::ContentType, &'static str) {
     (rocket::http::ContentType::Plain, LLMS_TXT)
@@ -349,6 +377,7 @@ Retention is checked every 60 seconds by a background task.
 ## System
 - GET /api/v1/health — health check
 - GET /api/v1/stats — comprehensive operational stats: rooms (active + archived), messages, sender type breakdown, active senders (1h), DM conversations/messages, file count/storage bytes, profiles, reactions, pins, threads, bookmarks, webhook counts (outgoing/incoming/active), and delivery metrics (24h success/failure counts)
+- POST /api/v1/admin/retention/run — manually trigger a retention sweep. Returns {"rooms_checked": N, "total_pruned": N, "details": [{"room_id": "...", "pruned_by_count": N, "pruned_by_age": N, "total": N}]}. Useful for testing and operational management.
 - GET /api/v1/openapi.json — full OpenAPI 3.0.3 specification
 
 ## Agent Skills Discovery
