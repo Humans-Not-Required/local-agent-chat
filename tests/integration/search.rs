@@ -547,7 +547,7 @@ fn test_search_has_more_false_when_under_limit() {
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
     assert_eq!(body["count"].as_u64().unwrap(), 2);
-    assert_eq!(body["has_more"].as_bool().unwrap(), false);
+    assert!(!body["has_more"].as_bool().unwrap());
 }
 
 #[test]
@@ -563,7 +563,7 @@ fn test_search_has_more_true_when_over_limit() {
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
     assert_eq!(body["count"].as_u64().unwrap(), 3);
-    assert_eq!(body["has_more"].as_bool().unwrap(), true);
+    assert!(body["has_more"].as_bool().unwrap());
 }
 
 #[test]
@@ -736,7 +736,7 @@ fn test_search_pagination_with_cursor_and_limit() {
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
     assert_eq!(body["count"].as_u64().unwrap(), 3);
-    assert_eq!(body["has_more"].as_bool().unwrap(), true);
+    assert!(body["has_more"].as_bool().unwrap());
 
     // Page 2: use cursor from last result to get next batch
     // FTS5 uses rank ordering so we just verify cursor works for LIKE fallback
@@ -783,5 +783,5 @@ fn test_search_has_more_with_exact_limit() {
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
     assert_eq!(body["count"].as_u64().unwrap(), 3);
-    assert_eq!(body["has_more"].as_bool().unwrap(), false);
+    assert!(!body["has_more"].as_bool().unwrap());
 }

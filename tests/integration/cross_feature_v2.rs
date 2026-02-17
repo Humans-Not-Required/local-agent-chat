@@ -363,10 +363,8 @@ fn test_incoming_webhook_with_metadata() {
     let msg: serde_json::Value = res.into_json().unwrap();
     assert_eq!(msg["content"], "with meta");
     // Metadata should be preserved
-    if let Some(meta) = msg.get("metadata") {
-        if !meta.is_null() {
-            assert_eq!(meta["build_id"], 42);
-        }
+    if let Some(meta) = msg.get("metadata").filter(|m| !m.is_null()) {
+        assert_eq!(meta["build_id"], 42);
     }
 }
 
