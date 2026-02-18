@@ -140,6 +140,7 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                 routes::openapi_json,
                 routes::skills_index,
                 routes::skills_skill_md,
+                routes::api_skills_skill_md,
                 routes::run_retention_now,
                 routes::export_room,
             ],

@@ -44,7 +44,7 @@ pub use stream::message_stream;
 pub use threads::get_thread;
 pub use system::{
     health, llms_txt_api, llms_txt_root, not_found, openapi_json, run_retention_now, skills_index,
-    skills_skill_md, spa_fallback, stats, too_many_requests,
+    skills_skill_md, api_skills_skill_md, spa_fallback, stats, too_many_requests,
 };
 pub use typing::notify_typing;
 pub use webhook_routes::{create_webhook, delete_webhook, get_webhook_deliveries, list_webhooks, update_webhook};
