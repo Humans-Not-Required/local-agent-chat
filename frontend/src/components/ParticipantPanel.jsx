@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { styles } from '../styles';
-import { API, senderColor, timeAgo, formatFullTimestamp } from '../utils';
+import { API, senderColor, timeAgo, formatFullTimestamp, avatarFallbackUrl } from '../utils';
 
 export default function ParticipantPanel({ roomId, onClose, onlineUsers }) {
   const [participants, setParticipants] = useState([]);
@@ -75,7 +75,8 @@ export default function ParticipantPanel({ roomId, onClose, onlineUsers }) {
           const color = senderColor(p.sender);
           const typeIcon = p.sender_type === 'human' ? '👤' : p.sender_type === 'agent' ? '🤖' : '❓';
           const isOnline = onlineSet.has(p.sender);
-          const hasProfile = p.display_name || p.avatar_url || p.bio || p.status_text;
+          const effectiveAvatarUrl = p.avatar_url || avatarFallbackUrl(p.sender, 56);
+          const hasProfile = p.display_name || effectiveAvatarUrl || p.bio || p.status_text;
           const isExpanded = expandedSender === p.sender;
           const displayName = p.display_name || p.sender;
 
@@ -92,10 +93,10 @@ export default function ParticipantPanel({ roomId, onClose, onlineUsers }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                 {/* Avatar or online dot */}
-                {p.avatar_url ? (
+                {effectiveAvatarUrl ? (
                   <div style={{ position: 'relative', flexShrink: 0 }}>
                     <img
-                      src={p.avatar_url}
+                      src={effectiveAvatarUrl}
                       alt={displayName}
                       style={{
                         width: 28, height: 28, borderRadius: '50%',
@@ -153,7 +154,7 @@ export default function ParticipantPanel({ roomId, onClose, onlineUsers }) {
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2, paddingLeft: p.avatar_url ? 38 : 26 }}>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2, paddingLeft: effectiveAvatarUrl ? 38 : 26 }}>
                 {p.message_count > 0 ? (
                   <>
                     {p.message_count} msg{p.message_count !== 1 ? 's' : ''} · <span title={formatFullTimestamp(p.last_seen)}>{timeAgo(p.last_seen)}</span>
@@ -167,7 +168,7 @@ export default function ParticipantPanel({ roomId, onClose, onlineUsers }) {
               {/* Expanded profile card */}
               {isExpanded && hasProfile && (
                 <div style={{
-                  marginTop: 8, paddingLeft: p.avatar_url ? 38 : 26,
+                  marginTop: 8, paddingLeft: effectiveAvatarUrl ? 38 : 26,
                   borderTop: '1px solid rgba(148, 163, 184, 0.15)',
                   paddingTop: 8,
                 }}>

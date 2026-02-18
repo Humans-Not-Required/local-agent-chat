@@ -1,5 +1,5 @@
 import React from 'react';
-import { senderColor } from '../utils';
+import { senderColor, avatarFallbackUrl } from '../utils';
 import MessageBubble from './MessageBubble';
 
 export default function MessageGroup({ messages, isOwn, onEdit, onDelete, onReply, onReact, onPin, onUnpin, hasAdminKey, reactions, sender, allMessages, onOpenThread, profile }) {
@@ -8,7 +8,7 @@ export default function MessageGroup({ messages, isOwn, onEdit, onDelete, onRepl
   const msgType = messages[0].sender_type || messages[0].metadata?.sender_type;
   const typeIcon = msgType === 'human' ? '👤' : msgType === 'agent' ? '🤖' : '';
   const displayName = profile?.display_name || msgSender;
-  const avatarUrl = profile?.avatar_url;
+  const avatarUrl = profile?.avatar_url || avatarFallbackUrl(msgSender, 64);
   const initial = msgSender.charAt(0).toUpperCase();
 
   return (

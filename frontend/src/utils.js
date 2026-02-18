@@ -309,6 +309,17 @@ export function playNotificationSound() {
 export const API = '/api/v1';
 
 /**
+ * Generate a fallback avatar URL from the avatar service.
+ * Set VITE_AVATAR_URL to the avatar service base URL (e.g. http://host:3010).
+ * Returns null if avatar service is not configured.
+ */
+const AVATAR_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_AVATAR_URL) || '';
+export function avatarFallbackUrl(seed, size = 64, style = 'robot') {
+  if (!AVATAR_BASE || !seed) return null;
+  return `${AVATAR_BASE}/api/v1/avatar/${encodeURIComponent(seed)}?style=${style}&size=${size}`;
+}
+
+/**
  * Groups a timeline of messages and files into renderable groups:
  * date separators, file cards, and consecutive message groups by sender.
  */

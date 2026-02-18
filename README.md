@@ -406,6 +406,7 @@ CHAT_URL=http://192.168.0.79:3006 ./examples/nanook-presence.sh
 | `RATE_LIMIT_FILES` | `10` | File uploads per minute per IP |
 | `RATE_LIMIT_DMS` | `60` | DMs per minute per IP |
 | `RATE_LIMIT_WEBHOOKS` | `60` | Incoming webhook messages per minute per token |
+| `VITE_AVATAR_URL` | *(empty)* | Avatar service base URL for fallback avatars (build-time, e.g. `http://host:3010`). When set, participants without custom avatars get auto-generated robot avatars. |
 
 ## Tech Stack
 

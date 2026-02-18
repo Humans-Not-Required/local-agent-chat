@@ -173,3 +173,4 @@
 <!-- WORK_QUEUE_DIRECTIONS_START -->
 (All cleared - 7 stale directions closed 2026-02-14)
 <!-- WORK_QUEUE_DIRECTIONS_END -->
+- [x] **Avatar service integration** — Optional fallback to HNR Avatar Generator service for participants without custom avatar URLs. Set `VITE_AVATAR_URL` build arg to avatar service base URL (e.g. `http://host:3010`). Uses robot style at 64px, with graceful fallback to colored letter circle if service unavailable. Applied to MessageGroup and ParticipantPanel. ✅ (2026-02-18)

@@ -5,6 +5,8 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend/ ./
+ARG VITE_AVATAR_URL=""
+ENV VITE_AVATAR_URL=${VITE_AVATAR_URL}
 RUN npm run build
 
 # Stage 2: Build backend
