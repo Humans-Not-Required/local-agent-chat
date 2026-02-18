@@ -33,6 +33,10 @@ jobs:
       - name: Start server
         env:
           RATE_LIMIT_ROOMS: 1000
+          RATE_LIMIT_MESSAGES: 10000
+          RATE_LIMIT_FILES: 1000
+          RATE_LIMIT_DMS: 1000
+          RATE_LIMIT_WEBHOOKS: 1000
         run: |
           ./target/release/local-agent-chat &
           echo "SERVER_PID=$!" >> $GITHUB_ENV
