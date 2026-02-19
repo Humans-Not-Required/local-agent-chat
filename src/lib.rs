@@ -143,6 +143,7 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                 routes::api_skills_skill_md,
                 routes::run_retention_now,
                 routes::export_room,
+                routes::broadcast_message,
             ],
         )
         .attach(rocket::fairing::AdHoc::on_liftoff(

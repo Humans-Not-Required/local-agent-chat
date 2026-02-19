@@ -2,6 +2,7 @@
 // Shared types (request guards, trackers) live here; route functions in submodules.
 
 mod bookmarks;
+mod broadcast;
 mod discover;
 mod dm;
 mod export;
@@ -26,6 +27,7 @@ mod webhook_routes;
 // --- Re-exports (all route functions used by lib.rs mount) ---
 
 pub use bookmarks::{add_bookmark, remove_bookmark, list_bookmarks};
+pub use broadcast::broadcast_message;
 pub use discover::discover as service_discover;
 pub use export::export_room;
 pub use dm::{send_dm, list_dm_conversations, get_dm_conversation};

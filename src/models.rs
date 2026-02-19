@@ -627,3 +627,34 @@ pub struct EnrichedParticipant {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_text: Option<String>,
 }
+
+// --- Broadcast ---
+
+#[derive(Debug, Deserialize)]
+pub struct BroadcastMessage {
+    /// List of room IDs to broadcast to (max 20)
+    pub room_ids: Vec<String>,
+    pub sender: String,
+    pub content: String,
+    #[serde(default)]
+    pub sender_type: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BroadcastDelivery {
+    pub room_id: String,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BroadcastResponse {
+    pub sent: usize,
+    pub failed: usize,
+    pub results: Vec<BroadcastDelivery>,
+}
