@@ -822,6 +822,28 @@ def main():
             assert mid["seq"] not in older_seqs
             assert mid["seq"] not in newer_seqs
 
+    @test("latest=N returns N most recent messages in chronological order")
+    def _():
+        # Send a bunch of messages and check that latest=3 gives the last 3
+        sentinel_1 = chat.send(room_name, "latest-sentinel-alpha")
+        sentinel_2 = chat.send(room_name, "latest-sentinel-beta")
+        sentinel_3 = chat.send(room_name, "latest-sentinel-gamma")
+        msgs = chat.get_messages(room_name, latest=3)
+        # Must be chronological (ascending seq)
+        for i in range(len(msgs) - 1):
+            assert msgs[i]["seq"] < msgs[i + 1]["seq"], "latest= must return chronological order"
+        contents = [m["content"] for m in msgs]
+        assert "latest-sentinel-gamma" in contents, "last message must be in latest=3 results"
+        assert "latest-sentinel-alpha" in contents, "third-to-last must be in latest=3"
+
+    @test("latest=1 returns only the most recent message")
+    def _():
+        newest = chat.send(room_name, "latest-newest-only")
+        msgs = chat.get_messages(room_name, latest=1)
+        assert len(msgs) == 1
+        assert msgs[0]["content"] == "latest-newest-only"
+        assert msgs[0]["id"] == newest["id"]
+
     # ── Room Name Update ────────────────────────────────────────────────
     print("\nRoom Name Update:")
 

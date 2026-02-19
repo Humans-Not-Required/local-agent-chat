@@ -396,20 +396,27 @@ class AgentChat:
         before_seq: Optional[int] = None,
         since: Optional[str] = None,
         limit: int = 50,
+        latest: Optional[int] = None,
     ) -> List[dict]:
         """Get messages from a room.
 
         Use after=<seq> for forward pagination (newer messages).
         Use before_seq=<seq> for backward pagination (older messages).
+        Use latest=N to get the N most recent messages without knowing the current seq.
+          Equivalent to before_seq=MAX&limit=N; returns in chronological order.
+          Ignored when after or before_seq is also set.
         """
         room_id = self._resolve_room(room)
-        return self._get(
-            f"/api/v1/rooms/{room_id}/messages",
-            after=after,
-            before_seq=before_seq,
-            since=since,
-            limit=limit,
-        )
+        params: Dict[str, Any] = {"limit": limit}
+        if after is not None:
+            params["after"] = after
+        if before_seq is not None:
+            params["before_seq"] = before_seq
+        if since is not None:
+            params["since"] = since
+        if latest is not None:
+            params["latest"] = latest
+        return self._get(f"/api/v1/rooms/{room_id}/messages", **params)
 
     def edit_message(
         self,
