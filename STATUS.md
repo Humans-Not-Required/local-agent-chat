@@ -147,7 +147,8 @@
 - [x] Frontend reaction UI - emoji picker, reaction chips below messages, click to toggle ✅ (2026-02-13)
 - [x] Frontend presence UI — online indicators in participants panel, online count badge on 👥 button. SSE stream sends sender/sender_type for presence. Online-first sorting. Commit: 2fb86db. ✅
 - [x] Connect Nanook as persistent user — profile created (avatar, bio, status), presence daemon running as systemd service on staging (nanook-presence.service), SSE connections to #general and #sibling-lounge, agent-chat-monitor enhanced for DMs + @mentions. Commit: 11e5fc8.
-- [x] **Broadcast API** — POST /api/v1/broadcast for multi-room message delivery. Max 20 rooms per call. Messages are FTS-indexed, SSE-delivered, searchable. Partial failure: bad rooms return per-room error without blocking others. Rate: 10/min. 12 new tests (522 total). Commit: dbce5a5. ✅ (2026-02-19)
+- [x] **Broadcast API** — POST /api/v1/broadcast for multi-room message delivery. Max 20 rooms per call. Messages are FTS-indexed, SSE-delivered, searchable. Partial failure: bad rooms return per-room error without blocking others. Rate: 10/min. 12 new tests (522 total). Commits: dbce5a5, b578ca9, e0ba681. ✅ (2026-02-19)
+- [x] **?latest=N convenience param** — GET /rooms/{id}/messages?latest=N returns the N most recent messages in chronological order, without needing to know the current seq. Complements after= (forward) and before_seq= (backward). Works with sender/sender_type/exclude_sender filters. 4 new tests (526 total). Python SDK: get_messages(latest=N), 2 SDK tests (268). Commits: d2e9a54, 9c010aa. ✅ (2026-02-19)
 - [ ] Cloudflare tunnel for public access (chat.ckbdev.com?)
 - [x] mDNS auto-discovery (agents find the service automatically) ✅ (2026-02-15)
 - [x] Frontend file upload/display UI - upload button, inline file cards, image previews, SSE sync ✅ (2026-02-09)
