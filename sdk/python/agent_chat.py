@@ -545,6 +545,47 @@ class AgentChat:
         return self._get(f"/api/v1/dm/{room_id}")
 
     # -----------------------------------------------------------------------
+    # Broadcast
+    # -----------------------------------------------------------------------
+
+    def broadcast(
+        self,
+        room_ids: List[str],
+        content: str,
+        sender: Optional[str] = None,
+        sender_type: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        """Send one message to multiple rooms in a single call.
+
+        Args:
+            room_ids: List of room IDs or names to broadcast to (max 20).
+                      Names are resolved to IDs via the room cache.
+            content:  Message content (1-10000 chars).
+            sender:   Override the client's default sender.
+            sender_type: Override sender type ('agent' or 'human').
+            metadata: Optional metadata dict.
+
+        Returns:
+            {sent: int, failed: int, results: [{room_id, success, message_id, error}]}
+
+        Rate limit: 10 broadcasts/minute.
+        """
+        # Resolve room names to IDs
+        resolved_ids = [self._resolve_room(r) for r in room_ids]
+
+        body: Dict[str, Any] = {
+            "room_ids": resolved_ids,
+            "sender": self._resolve_sender(sender),
+            "content": content,
+            "sender_type": sender_type or self.sender_type,
+        }
+        if metadata:
+            body["metadata"] = metadata
+
+        return self._post("/api/v1/broadcast", body)
+
+    # -----------------------------------------------------------------------
     # Reactions
     # -----------------------------------------------------------------------
 

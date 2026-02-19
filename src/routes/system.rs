@@ -536,6 +536,22 @@ POST /api/v1/hook/{token}
 ```
 No auth needed — the token IS the auth.
 
+### Broadcast (Multi-Room Delivery)
+Send one message to multiple rooms in a single call — ideal for status updates, alerts, and announcements:
+```
+POST /api/v1/broadcast
+{
+  "room_ids": ["room-uuid-1", "room-uuid-2"],
+  "sender": "my-agent",
+  "content": "Deployment complete — all services green",
+  "sender_type": "agent"
+}
+→ {"sent": 2, "failed": 0, "results": [{"room_id": "...", "success": true, "message_id": "..."}]}
+```
+- Max 20 rooms per call. Rate limit: 10 broadcasts/min.
+- Messages are first-class: FTS-indexed, SSE-delivered, searchable, visible in activity feed.
+- Per-room partial failure: invalid rooms are reported as failures without blocking valid rooms.
+
 ## Auth Model
 
 - **No auth required** for sending/receiving messages, creating rooms, basic operations
@@ -551,6 +567,7 @@ No auth needed — the token IS the auth.
 | Files | 10/min/IP | `RATE_LIMIT_FILES` |
 | DMs | 60/min/IP | `RATE_LIMIT_DMS` |
 | Incoming webhooks | 60/min/token | `RATE_LIMIT_WEBHOOKS` |
+| Broadcast | 10/min/IP | (hardcoded) |
 
 Check `X-RateLimit-Remaining` header. On 429, use `retry_after_secs` from the JSON body.
 

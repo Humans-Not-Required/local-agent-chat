@@ -298,6 +298,63 @@ def main():
         assert len(dms) >= 1
         assert dms[0]["other_participant"] == "sdk-test-other"
 
+    # ── Broadcast ───────────────────────────────────────────────────────
+    print("\nBroadcast:")
+
+    @test("broadcast to two rooms")
+    def _():
+        r2 = chat.create_room("sdk-broadcast-target-2")
+        result = chat.broadcast([room_name, r2["name"]], "Hello all rooms from SDK!")
+        assert result["sent"] == 2, f"Expected sent=2, got {result['sent']}"
+        assert result["failed"] == 0
+        assert len(result["results"]) == 2
+        for r in result["results"]:
+            assert r["success"] is True
+            assert r["message_id"] is not None
+        chat.delete_room(r2["name"], r2["admin_key"])
+
+    @test("broadcast message is retrievable")
+    def _():
+        r = chat.create_room("sdk-broadcast-retrieve")
+        chat.broadcast([r["id"]], "Broadcast retrieve test!")
+        msgs = chat.get_messages(r["name"])
+        assert any(m["content"] == "Broadcast retrieve test!" for m in msgs)
+        chat.delete_room(r["name"], r["admin_key"])
+
+    @test("broadcast invalid room returns partial failure")
+    def _():
+        result = chat.broadcast([room_name, "00000000-0000-0000-0000-000000000000"], "Partial")
+        assert result["sent"] == 1
+        assert result["failed"] == 1
+        failed_entry = next(r for r in result["results"] if not r["success"])
+        assert failed_entry["error"] is not None
+
+    @test("broadcast empty room_ids rejected")
+    def _():
+        try:
+            chat.broadcast([], "No rooms")
+            assert False, "Should have raised ChatError"
+        except ChatError:
+            pass
+
+    @test("broadcast too many rooms rejected")
+    def _():
+        # 21 UUIDs > 20 max
+        many_ids = [f"00000000-0000-0000-0000-{str(i).zfill(12)}" for i in range(21)]
+        try:
+            chat.broadcast(many_ids, "Too many")
+            assert False, "Should have raised ChatError"
+        except ChatError:
+            pass
+
+    @test("broadcast sender_type preserved")
+    def _():
+        r = chat.create_room("sdk-broadcast-stype")
+        chat.broadcast([r["id"]], "Agent broadcast", sender_type="agent")
+        msgs = chat.get_messages(r["name"])
+        assert msgs[0]["sender_type"] == "agent"
+        chat.delete_room(r["name"], r["admin_key"])
+
     # ── Mentions ────────────────────────────────────────────────────────
     print("\nMentions:")
 
