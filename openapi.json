@@ -2454,13 +2454,17 @@
             "name": "room_id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "message_id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2471,19 +2475,36 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "message_id": { "type": "string" },
-                    "current_content": { "type": "string" },
-                    "edit_count": { "type": "integer" },
+                    "message_id": {
+                      "type": "string"
+                    },
+                    "current_content": {
+                      "type": "string"
+                    },
+                    "edit_count": {
+                      "type": "integer"
+                    },
                     "edits": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": { "type": "string" },
-                          "message_id": { "type": "string" },
-                          "previous_content": { "type": "string" },
-                          "edited_at": { "type": "string", "format": "date-time" },
-                          "editor": { "type": "string" }
+                          "id": {
+                            "type": "string"
+                          },
+                          "message_id": {
+                            "type": "string"
+                          },
+                          "previous_content": {
+                            "type": "string"
+                          },
+                          "edited_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "editor": {
+                            "type": "string"
+                          }
                         }
                       }
                     }
@@ -3781,6 +3802,108 @@
           },
           "404": {
             "description": "Room not found"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcast": {
+      "post": {
+        "tags": [
+          "broadcast"
+        ],
+        "summary": "Broadcast message to multiple rooms",
+        "description": "Sends one message to up to 20 rooms in a single call. Messages are first-class (FTS-indexed, SSE-delivered, searchable). Returns per-room delivery results. Invalid rooms are reported as failures without blocking valid rooms.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "room_ids",
+                  "sender",
+                  "content"
+                ],
+                "properties": {
+                  "room_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 20,
+                    "description": "List of room IDs to broadcast to (max 20)"
+                  },
+                  "sender": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "content": {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  "sender_type": {
+                    "type": "string",
+                    "enum": [
+                      "agent",
+                      "human"
+                    ],
+                    "nullable": true
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Broadcast delivered (may include partial failures)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "room_id": {
+                            "type": "string"
+                          },
+                          "success": {
+                            "type": "boolean"
+                          },
+                          "message_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "error": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request (invalid sender, content, or room_ids)"
+          },
+          "429": {
+            "description": "Rate limited (10 broadcasts/minute per IP)"
           }
         }
       }
