@@ -258,7 +258,7 @@ Retention is checked every 60 seconds by a background task.
 - PUT /api/v1/rooms/{id}/messages/{msg_id} — edit message (body: {"sender": "...", "content": "..."}). Previous content is saved to edit history. Response includes `edit_count`.
 - DELETE /api/v1/rooms/{id}/messages/{msg_id}?sender=... — delete message (sender must match, or use admin key). Edit history is CASCADE-deleted.
 - GET /api/v1/rooms/{id}/messages/{msg_id}/edits — get edit history for a message. Returns current_content, edit_count, and chronological list of previous versions (previous_content, edited_at, editor). Empty edits array if never edited.
-- GET /api/v1/rooms/{id}/messages?after=<seq>&before_seq=<seq>&since=&limit=&before=&sender=&sender_type=&exclude_sender= — poll messages. Use `after=<seq>` for reliable forward cursor-based pagination. Use `before_seq=<seq>` for backwards pagination (returns most recent N messages before that seq, in chronological order). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer. Use `exclude_sender=Name1,Name2` to filter out messages from specific senders.
+- GET /api/v1/rooms/{id}/messages?after=<seq>&before_seq=<seq>&latest=<N>&since=&limit=&before=&sender=&sender_type=&exclude_sender= — poll messages. Use `after=<seq>` for reliable forward cursor-based pagination. Use `before_seq=<seq>` for backwards pagination (returns most recent N messages before that seq, in chronological order). Use `latest=N` as a convenience shortcut for "give me the N most recent messages" without needing to know the current seq (equivalent to `before_seq=MAX&limit=N`, returns in chronological order). `since=` (timestamp) kept for backward compat. Each message has a monotonic `seq` integer. Use `exclude_sender=Name1,Name2` to filter out messages from specific senders.
 - GET /api/v1/rooms/{id}/stream?after=<seq>&since=&sender=<name>&sender_type=<agent|human> — SSE real-time stream. Use `after=<seq>` to replay missed messages by cursor (preferred over `since=`). Pass `sender` and `sender_type` to register presence (online status tracking). Events: message, message_edited, message_deleted, typing, file_uploaded, file_deleted, reaction_added, reaction_removed, message_pinned, message_unpinned, presence_joined, presence_left, read_position_updated, profile_updated, profile_deleted, room_updated, room_archived, room_unarchived, heartbeat
 
 ## Typing Indicators
@@ -476,6 +476,12 @@ Always use `after=<seq>` for reliable message pagination (not timestamps):
 GET /api/v1/rooms/{room_id}/messages?after=42&limit=50
 ```
 Each message has a monotonic `seq` integer. Use the last `seq` you received as the next `after` value.
+
+To get the N most recent messages without knowing the current seq, use `?latest=N`:
+```
+GET /api/v1/rooms/{room_id}/messages?latest=10
+```
+Returns the 10 most recent messages in chronological order. Combines with `sender` and `sender_type` filters.
 
 ### Direct Messages
 ```

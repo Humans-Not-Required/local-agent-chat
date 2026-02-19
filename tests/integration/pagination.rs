@@ -479,3 +479,145 @@ fn test_before_seq_nonexistent_room() {
         .dispatch();
     assert_eq!(res.status(), Status::NotFound);
 }
+
+// --- ?latest=N convenience parameter tests ---
+
+#[test]
+fn test_latest_returns_most_recent_messages() {
+    use rocket::http::{ContentType, Status};
+    let client = test_client();
+
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "latest-test-1"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send 10 messages
+    for i in 1..=10 {
+        client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "msg {i}"}}"#))
+            .dispatch();
+    }
+
+    // ?latest=3 should return the last 3 messages (msg 8, 9, 10) in chronological order
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?latest=3"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 3);
+    // Must be chronological (ascending seq)
+    assert!(msgs[0]["seq"].as_i64().unwrap() < msgs[1]["seq"].as_i64().unwrap());
+    assert!(msgs[1]["seq"].as_i64().unwrap() < msgs[2]["seq"].as_i64().unwrap());
+    // Last message should be msg 10
+    assert_eq!(msgs[2]["content"], "msg 10");
+}
+
+#[test]
+fn test_latest_returns_all_when_fewer_than_n() {
+    use rocket::http::{ContentType, Status};
+    let client = test_client();
+
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "latest-test-2"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    // Send only 3 messages, request latest=10
+    for i in 1..=3 {
+        client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "msg {i}"}}"#))
+            .dispatch();
+    }
+
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?latest=10"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 3); // Only 3 exist
+    assert_eq!(msgs[2]["content"], "msg 3");
+}
+
+#[test]
+fn test_latest_one_message() {
+    use rocket::http::{ContentType, Status};
+    let client = test_client();
+
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "latest-test-3"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    for i in 1..=5 {
+        client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "msg {i}"}}"#))
+            .dispatch();
+    }
+
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?latest=1"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0]["content"], "msg 5");
+}
+
+#[test]
+fn test_latest_ignored_when_after_also_set() {
+    // When ?after= is also set, ?latest is ignored — explicit after wins
+    use rocket::http::{ContentType, Status};
+    let client = test_client();
+
+    let room: serde_json::Value = client
+        .post("/api/v1/rooms")
+        .header(ContentType::JSON)
+        .body(r#"{"name": "latest-test-4"}"#)
+        .dispatch()
+        .into_json()
+        .unwrap();
+    let room_id = room["id"].as_str().unwrap();
+
+    let mut first_seq = 0i64;
+    for i in 1..=5 {
+        let msg: serde_json::Value = client
+            .post(format!("/api/v1/rooms/{room_id}/messages"))
+            .header(ContentType::JSON)
+            .body(format!(r#"{{"sender": "bot", "content": "msg {i}"}}"#))
+            .dispatch()
+            .into_json()
+            .unwrap();
+        if i == 1 {
+            first_seq = msg["seq"].as_i64().unwrap();
+        }
+    }
+
+    // after=first_seq means "messages after first one"; latest=1 is ignored
+    let res = client
+        .get(format!("/api/v1/rooms/{room_id}/messages?after={first_seq}&latest=1"))
+        .dispatch();
+    assert_eq!(res.status(), Status::Ok);
+    let msgs: Vec<serde_json::Value> = res.into_json().unwrap();
+    // Should return msgs 2-5 (after first), not just 1
+    assert_eq!(msgs.len(), 4);
+    assert_eq!(msgs[0]["content"], "msg 2");
+}

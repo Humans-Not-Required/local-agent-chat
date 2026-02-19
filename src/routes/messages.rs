@@ -375,7 +375,7 @@ pub fn delete_message(
 }
 
 #[get(
-    "/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>&<exclude_sender>&<before_seq>"
+    "/api/v1/rooms/<room_id>/messages?<since>&<limit>&<before>&<sender>&<sender_type>&<after>&<exclude_sender>&<before_seq>&<latest>"
 )]
 #[allow(clippy::too_many_arguments)]
 pub fn get_messages(
@@ -389,7 +389,18 @@ pub fn get_messages(
     after: Option<i64>,
     exclude_sender: Option<&str>,
     before_seq: Option<i64>,
+    latest: Option<i64>,
 ) -> Result<Json<Vec<Message>>, (Status, Json<serde_json::Value>)> {
+    // ?latest=N is a convenience param: returns the N most recent messages in
+    // chronological order. Equivalent to before_seq=i64::MAX&limit=N.
+    // If before_seq or after is also set, ?latest is ignored (explicit wins).
+    let (before_seq, limit) = if latest.is_some() && before_seq.is_none() && after.is_none() {
+        let n = latest.unwrap().clamp(1, 500);
+        (Some(i64::MAX), Some(n))
+    } else {
+        (before_seq, limit)
+    };
+
     let conn = db.conn();
 
     // Verify room exists
