@@ -394,11 +394,9 @@ pub fn get_messages(
     // ?latest=N is a convenience param: returns the N most recent messages in
     // chronological order. Equivalent to before_seq=i64::MAX&limit=N.
     // If before_seq or after is also set, ?latest is ignored (explicit wins).
-    let (before_seq, limit) = if latest.is_some() && before_seq.is_none() && after.is_none() {
-        let n = latest.unwrap().clamp(1, 500);
-        (Some(i64::MAX), Some(n))
-    } else {
-        (before_seq, limit)
+    let (before_seq, limit) = match (latest, before_seq, after) {
+        (Some(n), None, None) => (Some(i64::MAX), Some(n.clamp(1, 500))),
+        _ => (before_seq, limit),
     };
 
     let conn = db.conn();
