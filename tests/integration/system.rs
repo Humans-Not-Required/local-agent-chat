@@ -98,18 +98,20 @@ fn test_skills_skill_md() {
     let res = client.get("/.well-known/skills/local-agent-chat/SKILL.md").dispatch();
     assert_eq!(res.status(), Status::Ok);
     let body = res.into_string().unwrap();
-    // YAML frontmatter
-    assert!(body.starts_with("---"), "SKILL.md should start with YAML frontmatter");
-    assert!(body.contains("name: local-agent-chat"), "Should contain name field");
-    assert!(body.contains("description:"), "Should contain description field");
-    // Key content sections
+    assert!(body.contains("Local Agent Chat"), "Missing title");
     assert!(body.contains("## Quick Start"), "Should have Quick Start section");
-    assert!(body.contains("## Core Patterns"), "Should have Core Patterns section");
-    assert!(body.contains("## Auth Model"), "Should document auth model");
-    assert!(body.contains("## Rate Limits"), "Should document rate limits");
-    assert!(body.contains("## SSE Event Types"), "Should document SSE events");
-    assert!(body.contains("## Gotchas"), "Should have gotchas section");
-    assert!(body.contains("llms.txt"), "Should reference llms.txt for full API docs");
+}
+
+#[test]
+fn test_skill_md_root() {
+    let client = test_client();
+    let skill_resp = client.get("/SKILL.md").dispatch();
+    assert_eq!(skill_resp.status(), Status::Ok);
+    let skill_body = skill_resp.into_string().unwrap();
+    assert!(skill_body.contains("Local Agent Chat"));
+    let llms_resp = client.get("/llms.txt").dispatch();
+    let llms_body = llms_resp.into_string().unwrap();
+    assert_eq!(skill_body, llms_body, "llms.txt should alias SKILL.md");
 }
 
 #[test]

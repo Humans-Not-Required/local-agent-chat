@@ -135,6 +135,7 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
                 routes::remove_bookmark,
                 routes::list_bookmarks,
                 routes::service_discover,
+                routes::skill_md,
                 routes::llms_txt_root,
                 routes::llms_txt_api,
                 routes::openapi_json,

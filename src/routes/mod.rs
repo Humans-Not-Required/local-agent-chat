@@ -45,7 +45,7 @@ pub use search::{activity_feed, search_messages};
 pub use stream::message_stream;
 pub use threads::get_thread;
 pub use system::{
-    health, llms_txt_api, llms_txt_root, not_found, openapi_json, run_retention_now, skills_index,
+    health, skill_md, llms_txt_api, llms_txt_root, not_found, openapi_json, run_retention_now, skills_index,
     skills_skill_md, api_skills_skill_md, spa_fallback, stats, too_many_requests,
 };
 pub use typing::notify_typing;
