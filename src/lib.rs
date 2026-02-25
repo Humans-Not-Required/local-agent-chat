@@ -53,7 +53,16 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
 
     // Increase JSON data limit to 10MB to accommodate base64-encoded file uploads
     // (5MB file = ~6.7MB base64 + JSON wrapper)
-    let figment = rocket::Config::figment().merge(("limits.json", 10 * 1024 * 1024)); // 10MB
+    let addr = std::env::var("ROCKET_ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port: u16 = std::env::var("ROCKET_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8001);
+
+    let figment = rocket::Config::figment()
+        .merge(("address", addr))
+        .merge(("port", port))
+        .merge(("limits.json", 10 * 1024 * 1024)); // 10MB
 
     // Frontend static files directory
     let static_dir: PathBuf = env::var("STATIC_DIR")
