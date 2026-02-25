@@ -57,7 +57,7 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
     let port: u16 = std::env::var("ROCKET_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
-        .unwrap_or(8001);
+        .unwrap_or(8000);
 
     let figment = rocket::Config::figment()
         .merge(("address", addr))
