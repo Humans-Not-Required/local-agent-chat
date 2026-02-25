@@ -24,6 +24,7 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && \
 # Copy real source and rebuild
 COPY src/ src/
 COPY openapi.json .
+COPY SKILL.md .
 
 # Touch source files to force rebuild
 RUN find src -name '*.rs' -exec touch {} +
