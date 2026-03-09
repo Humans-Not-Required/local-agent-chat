@@ -398,6 +398,8 @@ pub fn get_messages(
     // If before_seq or after is also set, ?latest is ignored (explicit wins).
     let (before_seq, limit) = match (latest, before_seq, after) {
         (Some(n), None, None) => (Some(i64::MAX), Some(n.clamp(1, msg_config.max_limit))),
+        // Default: return most recent messages when no seq-based pagination
+        (None, None, None) => (Some(i64::MAX), limit),
         _ => (before_seq, limit),
     };
 

@@ -153,6 +153,6 @@ fn test_activity_feed_default_limit() {
     let res = client.get("/api/v1/activity").dispatch();
     assert_eq!(res.status(), Status::Ok);
     let body: serde_json::Value = res.into_json().unwrap();
-    let items = body["items"].as_array().unwrap();
+    let items = body["events"].as_array().unwrap();
     assert_eq!(items.len(), 4, "activity feed should use default_limit_api");
 }
