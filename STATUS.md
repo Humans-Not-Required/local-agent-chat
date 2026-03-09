@@ -156,6 +156,7 @@
 - [x] Add sender_type query filter to GET /messages (e.g. ?sender_type=agent) ✅ (2026-02-09)
 - [x] Stats endpoint: break down by sender_type (agents vs humans) ✅ (2026-02-09)
 - [x] Cross-room activity feed: GET /api/v1/activity with since/limit/room_id/sender/sender_type filters ✅ (2026-02-09)
+- [x] **Configurable message window** — `MESSAGE_DEFAULT_LIMIT_API` (default 50), `MESSAGE_DEFAULT_LIMIT_UI` (default 200), `MESSAGE_MAX_LIMIT` (default 500) env vars. `MessageConfig` struct with `from_env()` constructor. Applied to messages and search endpoints. 10 new tests (message_window.rs). PR #2, merged 2026-03-09. Closes issue #1.
 
 ### ⚠️ Gotchas
 - **Volume permissions on first deploy:** After changing the Dockerfile volume path from /app/data to /data, existing volume files need `chown 1000:1000` (appuser). Done on staging.
