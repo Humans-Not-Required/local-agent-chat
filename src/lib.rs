@@ -2,6 +2,7 @@ pub mod db;
 pub mod events;
 pub mod mdns;
 pub mod models;
+pub mod message_config;
 pub mod rate_limit;
 pub mod retention;
 pub mod routes;
@@ -9,6 +10,7 @@ pub mod webhooks;
 
 use db::Db;
 use events::EventBus;
+use message_config::MessageConfig;
 use rate_limit::{RateLimitConfig, RateLimiter};
 use rocket::fs::{FileServer, Options};
 use rocket_cors::CorsOptions;
@@ -22,15 +24,22 @@ pub fn rocket() -> rocket::Rocket<rocket::Build> {
 }
 
 pub fn rocket_with_db_and_config(db_path: &str, rate_config: RateLimitConfig) -> rocket::Rocket<rocket::Build> {
-    build_rocket(db_path, rate_config)
+    let message_config = MessageConfig::default();
+    build_rocket(db_path, rate_config, message_config)
+}
+
+pub fn rocket_with_db_and_message_config(db_path: &str, message_config: MessageConfig) -> rocket::Rocket<rocket::Build> {
+    let rate_config = RateLimitConfig::default();
+    build_rocket(db_path, rate_config, message_config)
 }
 
 pub fn rocket_with_db(db_path: &str) -> rocket::Rocket<rocket::Build> {
     let rate_limit_config = RateLimitConfig::from_env();
-    build_rocket(db_path, rate_limit_config)
+    let message_config = MessageConfig::from_env();
+    build_rocket(db_path, rate_limit_config, message_config)
 }
 
-fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Rocket<rocket::Build> {
+fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig, message_config: MessageConfig) -> rocket::Rocket<rocket::Build> {
     // Ensure data directory exists
     if let Some(parent) = std::path::Path::new(db_path).parent() {
         std::fs::create_dir_all(parent).ok();
@@ -73,6 +82,7 @@ fn build_rocket(db_path: &str, rate_limit_config: RateLimitConfig) -> rocket::Ro
         .manage(db)
         .manage(events)
         .manage(rate_limit_config)
+        .manage(message_config)
         .manage(rate_limiter)
         .manage(typing_tracker)
         .manage(presence_tracker)

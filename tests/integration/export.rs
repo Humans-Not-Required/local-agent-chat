@@ -495,7 +495,8 @@ fn test_export_markdown_date_headers() {
     let body = res.into_string().unwrap();
 
     // Should have a date header (## YYYY-MM-DD)
-    assert!(body.contains("## 2026-02-"));
+    let today = chrono::Utc::now().format("## %Y-%m-").to_string();
+    assert!(body.contains(&today), "expected date header like {today}, got: {body}");
     // Should have timestamps [HH:MM:SS]
     assert!(body.contains("["));
     assert!(body.contains("]"));

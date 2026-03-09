@@ -1,3 +1,4 @@
+use crate::message_config::MessageConfig;
 use crate::db::Db;
 use crate::models::*;
 use rocket::http::Status;
@@ -7,6 +8,7 @@ use rocket::{get, State};
 #[allow(clippy::too_many_arguments)]
 pub fn activity_feed(
     db: &State<Db>,
+    msg_config: &State<MessageConfig>,
     since: Option<&str>,
     limit: Option<i64>,
     room_id: Option<&str>,
@@ -16,7 +18,7 @@ pub fn activity_feed(
     exclude_sender: Option<&str>,
 ) -> Json<ActivityResponse> {
     let conn = db.conn();
-    let limit = limit.unwrap_or(50).clamp(1, 500);
+    let limit = msg_config.resolve(limit);
 
     let mut sql = String::from(
         "SELECT m.id, m.room_id, r.name, m.sender, m.sender_type, m.content, m.created_at, m.edited_at, m.reply_to, m.seq \
@@ -117,6 +119,7 @@ pub fn activity_feed(
 #[allow(clippy::too_many_arguments)]
 pub fn search_messages(
     db: &State<Db>,
+    msg_config: &State<MessageConfig>,
     q: &str,
     room_id: Option<&str>,
     sender: Option<&str>,
@@ -143,7 +146,7 @@ pub fn search_messages(
 
     let conn = db.conn();
     // Fetch limit+1 to detect whether there are more results
-    let limit = limit.unwrap_or(50).clamp(1, 200);
+    let limit = msg_config.resolve(limit).min(200);
     let fetch_limit = limit + 1;
 
     // Try FTS5 first — falls back to LIKE if FTS fails (e.g. syntax error in query)

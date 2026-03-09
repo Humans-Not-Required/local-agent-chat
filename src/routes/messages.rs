@@ -1,6 +1,7 @@
 use crate::db::Db;
 use crate::events::{ChatEvent, EventBus};
 use crate::models::*;
+use crate::message_config::MessageConfig;
 use crate::rate_limit::{RateLimitConfig, RateLimiter};
 use rocket::http::Status;
 use rocket::serde::json::Json;
@@ -380,6 +381,7 @@ pub fn delete_message(
 #[allow(clippy::too_many_arguments)]
 pub fn get_messages(
     db: &State<Db>,
+    msg_config: &State<MessageConfig>,
     room_id: &str,
     since: Option<&str>,
     limit: Option<i64>,
@@ -395,7 +397,9 @@ pub fn get_messages(
     // chronological order. Equivalent to before_seq=i64::MAX&limit=N.
     // If before_seq or after is also set, ?latest is ignored (explicit wins).
     let (before_seq, limit) = match (latest, before_seq, after) {
-        (Some(n), None, None) => (Some(i64::MAX), Some(n.clamp(1, 500))),
+        (Some(n), None, None) => (Some(i64::MAX), Some(n.clamp(1, msg_config.max_limit))),
+        // Default: return most recent messages when no seq-based pagination
+        (None, None, None) => (Some(i64::MAX), limit),
         _ => (before_seq, limit),
     };
 
@@ -418,7 +422,7 @@ pub fn get_messages(
         ));
     }
 
-    let limit = limit.unwrap_or(50).clamp(1, 500);
+    let limit = msg_config.resolve(limit);
 
     let mut sql = String::from(
         "SELECT id, room_id, sender, content, metadata, created_at, edited_at, reply_to, sender_type, seq, pinned_at, pinned_by, \

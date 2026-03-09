@@ -39,3 +39,4 @@ mod export;
 mod edit_history;
 mod cross_feature_v2;
 mod broadcast;
+mod message_window;

@@ -65,3 +65,15 @@ pub fn create_test_room(client: &Client, name: &str) -> (String, String) {
         body["admin_key"].as_str().unwrap().to_string(),
     )
 }
+
+/// Create a test client with custom message window configuration.
+pub fn test_client_with_message_config(config: local_agent_chat::message_config::MessageConfig) -> TestClient {
+    let db_path = format!(
+        "/tmp/chat_test_{}.db",
+        uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
+    );
+
+    let rocket = local_agent_chat::rocket_with_db_and_message_config(&db_path, config);
+    let client = Client::tracked(rocket).expect("valid rocket instance");
+    TestClient { client: Some(client), db_path }
+}
